@@ -1,0 +1,82 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Assets_Editor.SearchWindow"
+        Title="Search Window" Width="600" Height="860">
+    <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Results List -->
+        <Border Grid.Column="0" BorderThickness="1" BorderBrush="Gray" Margin="0,5,0,10">
+            <ListBox x:Name="ItemListView" Width="207" Margin="0,10,0,0" SelectionChanged="ItemListView_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Id}" Width="60" VerticalAlignment="Center"/>
+                            <Image Source="{Binding Image}" Width="64" Height="64"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- Right: Search Flags -->
+        <StackPanel Grid.Column="1" Width="320" Margin="20,5,0,10">
+            <Border BorderThickness="1" BorderBrush="Gray" Padding="10">
+                <StackPanel>
+                    <TextBlock Text="AppearanceFlags" FontWeight="Bold" Margin="0,0,0,10"/>
+                    <WrapPanel>
+                        <CheckBox x:Name="A_FlagGround" Content="Ground" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagClip" Content="Clip" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagBottom" Content="Bottom" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagTop" Content="Top" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagContainer" Content="Container" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagCumulative" Content="Cumulative" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagUsable" Content="Usable" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagForceuse" Content="Forceuse" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagMultiuse" Content="Multiuse" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagWrite" Content="Write" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagWriteOnce" Content="Write Once" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagLiquidpool" Content="Liquid Pool" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagUnpass" Content="Unpass" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagUnmove" Content="Unmove" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagUnsight" Content="Unsight" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagAvoid" Content="Avoid" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagNoMoveAnimation" Content="No Move Anim" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagTake" Content="Take" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagLiquidcontainer" Content="Liquid Cont." Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagHang" Content="Hang" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagHookSouth" Content="Hook South" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagHookEast" Content="Hook East" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagRotate" Content="Rotate" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagLight" Content="Light" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagDontHide" Content="Dont Hide" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagTranslucent" Content="Translucent" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagShift" Content="Shift" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagHeight" Content="Height" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagLyingObject" Content="Lying Object" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagAutomap" Content="Auto Map" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagLenshelp" Content="Lens help" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagFullGround" Content="Full Ground" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagIgnoreLook" Content="Ignore Look" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagClothes" Content="Clothes" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagDefaultAction" Content="Default Action" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagMarket" Content="Market" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagWrap" Content="Wrap" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagUnwrap" Content="Unwrap" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagTopeffect" Content="Top Effect" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagAnimated" Content="Animated" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagWearout" Content="Show Charges" Margin="0,5,0,0" Width="140"/>
+                        <CheckBox x:Name="A_FlagWingsOffset" Content="Wings Offset" Margin="0,5,0,0" Width="140"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+            <Button Content="Search" Width="100" HorizontalAlignment="Center" Margin="0,20,0,0" Click="SearchItem_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

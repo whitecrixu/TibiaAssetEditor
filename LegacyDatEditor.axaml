@@ -1,0 +1,312 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Assets_Editor"
+        mc:Ignorable="d"
+        x:Class="Assets_Editor.LegacyDatEditor"
+        Title="LegacyDatEditor" Width="1220" Height="880">
+    <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left Column: Object List -->
+        <Border Grid.Column="0" BorderThickness="1" BorderBrush="Gray" Margin="10,5,0,10" Width="240">
+            <Grid RowDefinitions="45,*,40,75">
+                <ComboBox Grid.Row="0" x:Name="ObjectMenu" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="ObjectMenuChanged">
+                    <ComboBoxItem Content="Outfits"/>
+                    <ComboBoxItem Content="Items"/>
+                    <ComboBoxItem Content="Effects"/>
+                    <ComboBoxItem Content="Missiles"/>
+                </ComboBox>
+                <ListBox Grid.Row="1" x:Name="ObjListView" SelectionChanged="ObjListView_SelectionChanged" Margin="0,5,0,0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Id}" Width="60" VerticalAlignment="Center"/>
+                                <Image Source="{Binding Image}" Width="64" Height="64"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <NumericUpDown Grid.Row="2" x:Name="ObjListViewSelectedIndex" Minimum="0" FormatString="0" Margin="0,5,0,0" ValueChanged="ObjListViewSelectedIndex_Changed"/>
+                <Border Grid.Row="3" BorderThickness="1" BorderBrush="Gray" Margin="0,5,0,0">
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Content="💾" Width="35" Height="35" ToolTip.Tip="Save" Click="ObjectSave_Click"/>
+                            <Button Content="📋" Width="35" Height="35" ToolTip.Tip="Duplicate" Click="ObjectClone_Click"/>
+                            <Button Content="📄" Width="35" Height="35" ToolTip.Tip="Copy Flags" Click="CopyFlags_Click"/>
+                            <Button Content="📥" Width="35" Height="35" ToolTip.Tip="Paste Flags" Click="PasteFlags_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Content="📤" Width="35" Height="35" ToolTip.Tip="Export" Click="ExportObject_Click"/>
+                            <Button Content="➕" Width="35" Height="35" ToolTip.Tip="New" Click="NewObject_Click"/>
+                            <Button Content="🗑" Width="35" Height="35" ToolTip.Tip="Delete" Click="DeleteObject_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Middle Column: Properties/Texture/Other tabs -->
+        <Grid Grid.Column="1" RowDefinitions="30,*,60" Margin="10,5,0,10">
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <Menu>
+                    <MenuItem Header="_File">
+                        <MenuItem Header="Exit" Click="Exit_Click"/>
+                        <MenuItem Header="Compile" Click="Compile_Click"/>
+                        <MenuItem Header="OTB Editor" Click="OTBEditor_Click"/>
+                        <MenuItem Header="Import" Click="Import_Click"/>
+                        <MenuItem Header="Search Item" Click="SearchItem_Click"/>
+                        <MenuItem Header="Logger" Click="ShowLogger"/>
+                    </MenuItem>
+                    <MenuItem Header="_Tools">
+                        <MenuItem Header="Lua Script Editor" Click="OpenLuaWindow_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="_About">
+                        <MenuItem Header="About" Click="About_Click"/>
+                    </MenuItem>
+                </Menu>
+                <TextBlock Text="Light" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                <ToggleSwitch x:Name="DarkModeToggle" IsCheckedChanged="DarkModeToggle_Changed" Margin="0,0,5,0" OffContent="" OnContent=""/>
+                <TextBlock Text="Dark" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <TabControl Grid.Row="1">
+                <TabItem Header="Properties">
+                    <ScrollViewer>
+                        <WrapPanel Orientation="Horizontal">
+                            <StackPanel Margin="5,0,5,10" Width="320">
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagGround" Content="Ground" Width="130"/>
+                                    <TextBlock Text="Speed:" VerticalAlignment="Center" Width="50" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagGroundSpeed" Width="80" Minimum="0" Maximum="1000" FormatString="0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagClip" Content="Clip" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagBottom" Content="Bottom" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagTop" Content="Top" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagContainer" Content="Container" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagCumulative" Content="Cumulative" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagUsable" Content="Usable" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagForceuse" Content="Forceuse" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagMultiuse" Content="Multiuse" Margin="0,5,0,0"/>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagWrite" Content="Write" Width="130"/>
+                                    <TextBlock Text="Max Text:" VerticalAlignment="Center" Width="60" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagMaxTextLength" Width="80" Minimum="0" Maximum="1024" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagWriteOnce" Content="Write Once" Width="130"/>
+                                    <TextBlock Text="Max Text:" VerticalAlignment="Center" Width="60" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagMaxTextLengthOnce" Width="80" Minimum="0" Maximum="1024" FormatString="0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagLiquidpool" Content="Liquid Pool" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagUnpass" Content="Unpass" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagUnmove" Content="Unmove" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagUnsight" Content="Unsight" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagAvoid" Content="Avoid" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagNoMoveAnimation" Content="No Move Animation" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagTake" Content="Take" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagLiquidcontainer" Content="Liquid Container" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagHang" Content="Hang" Margin="0,5,0,0"/>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagHookSouth" Content="Hook South" Width="130"/>
+                                    <CheckBox x:Name="A_FlagHookEast" Content="Hook East" Width="130"/>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagRotate" Content="Rotate" Margin="0,5,0,0"/>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagLight" Content="Light" Width="60"/>
+                                    <TextBlock Text="Brightness:" VerticalAlignment="Center" Width="60" Margin="5,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagLightBrightness" Width="50" Minimum="0" Maximum="10" FormatString="0"/>
+                                    <TextBlock Text="Color:" VerticalAlignment="Center" Width="35" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagLightColor" Width="50" Minimum="0" Maximum="215" FormatString="0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagDontHide" Content="Dont Hide" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagTranslucent" Content="Translucent" Margin="0,5,0,5"/>
+                            </StackPanel>
+                            <StackPanel Margin="5,0,5,0" Width="320">
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagShift" Content="Shift" Width="130"/>
+                                    <TextBlock Text="X:" VerticalAlignment="Center" Width="15" Margin="5,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagShiftX" Width="50" Minimum="0" Maximum="32" FormatString="0"/>
+                                    <TextBlock Text="Y:" VerticalAlignment="Center" Width="15" Margin="5,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagShiftY" Width="50" Minimum="0" Maximum="32" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagHeight" Content="Height" Width="130"/>
+                                    <TextBlock Text="Elevation:" VerticalAlignment="Center" Width="60" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagElevation" Width="60" Minimum="0" Maximum="32" FormatString="0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagLyingObject" Content="Lying Object" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagAnimateAlways" Content="Animate Always" Margin="0,5,0,0"/>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagAutomap" Content="Auto Map" Width="130"/>
+                                    <TextBlock Text="Color:" VerticalAlignment="Center" Width="40" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_FlagAutomapColor" Width="60" Minimum="0" Maximum="215" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagLenshelp" Content="Lens help" Width="130"/>
+                                    <TextBlock Text="Type:" VerticalAlignment="Center" Width="40" Margin="10,0,0,0"/>
+                                    <ComboBox x:Name="A_FlagLenshelpId" Width="110" SelectedIndex="-1">
+                                        <ComboBoxItem Content="Ladders"/>
+                                        <ComboBoxItem Content="Sewer Grates"/>
+                                        <ComboBoxItem Content="Dungeon Floor"/>
+                                        <ComboBoxItem Content="Levers"/>
+                                        <ComboBoxItem Content="Doors"/>
+                                        <ComboBoxItem Content="Special Doors"/>
+                                        <ComboBoxItem Content="Stairs"/>
+                                        <ComboBoxItem Content="Mailboxes"/>
+                                        <ComboBoxItem Content="Depot Boxes"/>
+                                        <ComboBoxItem Content="Dustbins"/>
+                                        <ComboBoxItem Content="Stone Piles"/>
+                                        <ComboBoxItem Content="Signs"/>
+                                        <ComboBoxItem Content="Books"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagFullGround" Content="Full Ground" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagIgnoreLook" Content="Ignore Look" Margin="0,5,0,0"/>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagClothes" Content="Clothes" Width="130"/>
+                                    <TextBlock Text="Slot:" VerticalAlignment="Center" Width="40" Margin="10,0,0,0"/>
+                                    <ComboBox x:Name="A_FlagClothesSlot" Width="90" SelectedIndex="-1">
+                                        <ComboBoxItem Content="None"/>
+                                        <ComboBoxItem Content="Helmet"/>
+                                        <ComboBoxItem Content="Amulet"/>
+                                        <ComboBoxItem Content="Backpack"/>
+                                        <ComboBoxItem Content="Armor"/>
+                                        <ComboBoxItem Content="Shield"/>
+                                        <ComboBoxItem Content="Weapon"/>
+                                        <ComboBoxItem Content="Legs"/>
+                                        <ComboBoxItem Content="Boots"/>
+                                        <ComboBoxItem Content="Ring"/>
+                                        <ComboBoxItem Content="Arrow"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagDefaultAction" Content="Default Action" Width="130"/>
+                                    <ComboBox x:Name="A_FlagDefaultActionType" Width="90" SelectedIndex="-1">
+                                        <ComboBoxItem Content="None"/>
+                                        <ComboBoxItem Content="Look"/>
+                                        <ComboBoxItem Content="Use"/>
+                                        <ComboBoxItem Content="Open"/>
+                                        <ComboBoxItem Content="Highlight"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagMarket" Content="Market" Width="130"/>
+                                    <ComboBox x:Name="A_FlagMarketCategory" Width="110" SelectedIndex="-1">
+                                        <ComboBoxItem Content="Armors"/>
+                                        <ComboBoxItem Content="Amulets"/>
+                                        <ComboBoxItem Content="Boots"/>
+                                        <ComboBoxItem Content="Containers"/>
+                                        <ComboBoxItem Content="Decoration"/>
+                                        <ComboBoxItem Content="Food"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25">
+                                    <TextBlock Text="Name:" VerticalAlignment="Center" Width="60" Margin="5,0,0,0"/>
+                                    <TextBox x:Name="A_FlagName" Width="240"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                    <CheckBox x:Name="A_FlagWrap" Content="Wrap" Width="130"/>
+                                    <CheckBox x:Name="A_FlagUnwrap" Content="Unwrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="A_FlagTopeffect" Content="Top Effect" Margin="0,5,0,0"/>
+                                <CheckBox x:Name="A_FlagWearout" Content="Show Charges" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </WrapPanel>
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="Texture">
+                    <ScrollViewer>
+                        <WrapPanel Orientation="Horizontal" MaxWidth="700">
+                            <StackPanel HorizontalAlignment="Left" Width="321" Margin="5,0,5,0">
+                                <Grid Margin="20,20,0,0" Width="265" Height="265" HorizontalAlignment="Left">
+                                    <Border BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#FF4F4F4F">
+                                        <Image x:Name="SpriteViewerImge" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="None"/>
+                                    </Border>
+                                    <Button x:Name="SprUpArrow" Tag="0" Content="▲" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                    <Button x:Name="SprRightArrow" Tag="1" Content="▶" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    <Button x:Name="SprDownArrow" Tag="2" Content="▼" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
+                                    <Button x:Name="SprLeftArrow" Tag="3" Content="◀" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <TextBlock Text="Frame:" VerticalAlignment="Center" Margin="20,0,10,0"/>
+                                    <Slider x:Name="SprFramesSlider" Width="170" IsSnapToTickEnabled="True" TickFrequency="1" Minimum="0"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Width="320" Margin="5,10,5,0">
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <TextBlock Text="Width:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprWidth" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <TextBlock Text="Height:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprHeight" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <TextBlock Text="Layers:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprLayers" Width="110" Minimum="1" Maximum="2" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <TextBlock Text="Pattern X:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprPaternX" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <TextBlock Text="Pattern Y:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprPaternY" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                    <TextBlock Text="Pattern Z:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprPaternZ" Width="110" Minimum="1" Maximum="2" FormatString="0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,10,0,0">
+                                    <TextBlock Text="Animation:" Width="120" Margin="10,0,0,0"/>
+                                    <NumericUpDown x:Name="A_SprAnimation" Width="110" Minimum="1" Maximum="64" FormatString="0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </WrapPanel>
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="Other">
+                    <TextBox x:Name="A_FullInfo" TextWrapping="Wrap" IsReadOnly="True" AcceptsReturn="True"/>
+                </TabItem>
+            </TabControl>
+
+            <Border Grid.Row="2" BorderThickness="1" BorderBrush="Gray" Margin="0,0,0,10">
+                <TextBlock x:Name="StatusBar" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+        <!-- Right Column: Sprite List -->
+        <Border Grid.Column="2" BorderThickness="1" BorderBrush="Gray" Width="225" Margin="10,5,10,10">
+            <Grid RowDefinitions="*,30,40">
+                <ListBox Grid.Row="0" x:Name="SprListView" Margin="0,5,0,0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Id}" Width="60" VerticalAlignment="Center"/>
+                                <Image Source="{Binding Image}" Width="64" Height="64"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <NumericUpDown Grid.Row="1" x:Name="SprListViewSelectedIndex" Minimum="0" FormatString="0" ValueChanged="SprListViewSelectedIndex_Changed"/>
+                <StackPanel Grid.Row="2" Orientation="Vertical" HorizontalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="📤" Width="35" Height="35" ToolTip.Tip="Export Sprite" Click="SpriteExport_Click"/>
+                        <Button Content="📥" Width="35" Height="35" ToolTip.Tip="Import Sprite" Click="ImportSprite_Click"/>
+                        <Button Content="🗑" Width="35" Height="35" ToolTip.Tip="Delete Sprite" Click="DeleteSprite_Click"/>
+                        <Button Content="🔄" Width="35" Height="35" ToolTip.Tip="Replace Sprite" Click="ReplaceSprite_Click"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="➕" Width="35" Height="35" ToolTip.Tip="Add New Sprite" Click="AddSprite_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

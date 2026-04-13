@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:AvaloniaEdit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+        xmlns:liveCharts="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
+        mc:Ignorable="d"
+        x:Class="Assets_Editor.LuaWindow"
+        Title="Lua Script Editor" Width="1200" Height="800">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*" MinWidth="300"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="3*" MinWidth="400"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Data View -->
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,10,10,5">
+                <TextBlock Text="📊 Data View" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                <Button x:Name="ExportCsvButton" Content="Export CSV" Margin="20,0,0,0" Click="ExportCsvButton_Click"/>
+            </StackPanel>
+            <TabControl Grid.Row="1" Margin="10,0,10,10">
+                <TabItem Header="Table View">
+                    <DataGrid x:Name="DataGrid" AutoGenerateColumns="True" IsReadOnly="True" CanUserReorderColumns="False"/>
+                </TabItem>
+                <TabItem Header="Chart View">
+                    <Grid RowDefinitions="Auto,*">
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
+                            <TextBlock Text="X-Axis:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <ComboBox x:Name="XAxisComboBox" Width="120" Margin="0,0,20,0" SelectionChanged="XAxisComboBox_SelectionChanged"/>
+                            <Button x:Name="RefreshChartButton" Content="Refresh Chart" Click="RefreshChartButton_Click"/>
+                        </StackPanel>
+                        <liveCharts:CartesianChart Grid.Row="1" Margin="10,0,10,10" Series="{Binding ChartSeries}"/>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
+
+        <!-- Right: Code + Results -->
+        <Grid Grid.Column="2" RowDefinitions="Auto,*,5,*">
+            <StackPanel Grid.Row="0" Margin="10,10,10,5">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Text="💻 Lua Script Editor" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Button x:Name="ExecuteButton" Content="▶ Execute" Margin="20,0,0,0" Click="ExecuteButton_Click"/>
+                    <Button x:Name="CancelButton" Content="⏹ Cancel" Margin="10,0,0,0" Click="CancelButton_Click" IsEnabled="False"/>
+                    <Button x:Name="ClearButton" Content="Clear" Margin="10,0,0,0" Click="ClearButton_Click"/>
+                    <CheckBox x:Name="ShowInGridCheckBox" IsChecked="True" Margin="20,0,0,0" Content="Show in Data View"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <ComboBox x:Name="ScriptListComboBox" Width="200" Margin="0,0,10,0" SelectionChanged="ScriptListComboBox_SelectionChanged"/>
+                    <Button Content="New" Click="NewScriptButton_Click" Margin="0,0,5,0"/>
+                    <Button Content="Save" Click="SaveScriptButton_Click" Margin="0,0,5,0"/>
+                    <Button Content="Delete" Click="DeleteScriptButton_Click" Margin="0,0,5,0"/>
+                    <Button Content="Refresh" Click="RefreshScriptsButton_Click"/>
+                </StackPanel>
+            </StackPanel>
+
+            <AvaloniaEdit:TextEditor x:Name="LuaCodeEditor"
+                                     Grid.Row="1"
+                                     Margin="10,0,10,10"
+                                     FontFamily="Consolas,monospace"
+                                     FontSize="12"
+                                     ShowLineNumbers="True"
+                                     WordWrap="True"/>
+
+            <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch"/>
+
+            <Grid Grid.Row="3" Margin="10,0,10,10" RowDefinitions="Auto,*">
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,5,0,5">
+                    <TextBlock Text="🖥 Execution Results" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBox Grid.Row="1" x:Name="ResultsTextBox"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         FontFamily="Consolas,monospace"
+                         FontSize="11"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

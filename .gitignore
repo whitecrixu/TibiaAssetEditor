@@ -1,0 +1,35 @@
+# .NET build output
+bin/
+obj/
+publish/
+*.pdb
+
+# Local user state — must NOT be checked in
+Settings.json
+*.autosave
+autosave.dat*
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS junk
+.DS_Store
+Thumbs.db
+*~
+.~lock.*
+
+# Generated protobuf
+obj/Debug/net9.0/Appearances.cs
+
+# Release archives (regeneratable)
+*.zip
+*.tar.gz
+
+# Temp / cache
+*.tmp
+*.bak
+*.log

@@ -1,0 +1,174 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="390"
+        x:Class="Assets_Editor.MainWindow"
+        Title="Tibia Asset Editor By WhiteCrixu V1.0" Height="390" Width="600"
+        WindowStartupLocation="CenterScreen">
+  <Panel>
+  <Grid Margin="10,12,10,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Editor Settings -->
+        <Border Grid.Row="0" BorderBrush="Gray" BorderThickness="1" Padding="10,30,10,10" CornerRadius="4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Preset:" VerticalAlignment="Center" FontWeight="Bold" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="CurrentPresetDropdown" Width="120" Height="30" Margin="3,0,0,0"/>
+                    <Button x:Name="NewPresetBtn" Content="New" Margin="10,0,0,0" Click="NewPreset_Click"/>
+                    <Button x:Name="RenamePresetBtn" Content="Rename" Margin="5,0,0,0" Click="RenamePreset_Click"/>
+                    <Button x:Name="DeletePresetBtn" Content="Delete" Margin="5,0,0,0" Click="DeletePreset_Click"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock Text="Light" VerticalAlignment="Center"/>
+                    <ToggleSwitch x:Name="DarkModeToggle" Margin="5,0,5,0" OnContent="" OffContent=""
+                                  IsCheckedChanged="DarkModeToggle_Changed"/>
+                    <TextBlock Text="Dark" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <TextBlock Text="Editor Settings" Grid.Row="0"
+                   Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                   Padding="4,1,4,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                   Margin="9,-9,0,0"/>
+
+        <!-- Assets Settings -->
+        <Grid Grid.Row="1" Margin="0,15,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Grid.RowSpan="2" BorderBrush="Gray" BorderThickness="1" Padding="10,30,10,10" CornerRadius="4"/>
+            <TextBlock Text="Assets Settings" Grid.Row="0"
+                       Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                       Padding="4,1,4,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       Margin="9,-9,0,0"/>
+
+            <Grid Grid.Row="0" Margin="0,10,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="130" />
+                </Grid.RowDefinitions>
+
+                <!-- DAT Path -->
+                <Grid Grid.Row="0" Margin="0,10,0,0" HorizontalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="330"/>
+                        <ColumnDefinition Width="100"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="DAT File Path:" HorizontalAlignment="Right" VerticalAlignment="Center" Grid.Column="0"/>
+                    <TextBox x:Name="AssetsPath" VerticalAlignment="Center" Width="330" IsReadOnly="True" Margin="5,0,0,0" Grid.Column="1"/>
+                    <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Left">
+                        <Button VerticalAlignment="Center" Width="35" Height="28" Margin="10,0,0,0"
+                                Click="SelectAssetsFolder" ToolTip.Tip="Select path" Content="📂"/>
+                        <Button ToolTip.Tip="Copy Path" Width="24" Height="24" VerticalAlignment="Center"
+                                Click="CopyAssetsPath" Margin="3,0,0,0" Content="📋"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Loading status -->
+                <StackPanel Orientation="Horizontal" Grid.Row="1" Margin="140,5,0,0">
+                    <TextBlock x:Name="StatusIcon" Text="ℹ️" FontSize="14" VerticalAlignment="Center" IsVisible="False"/>
+                    <TextBlock x:Name="AssetsPathLoadingMessage" Text="Initializing ..." Padding="2,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Info area -->
+                <Grid Grid.Row="2" Margin="0,20,0,0" HorizontalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130"/>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox x:Name="AppearancesCount" Grid.Column="0"
+                             Text="Items:&#9;&#9;0&#10;Outfits:&#9;&#9;0&#10;Effects:&#9;&#9;0&#10;Missiles:&#9;&#9;0"
+                             IsReadOnly="True" BorderThickness="0" Background="Transparent" TextWrapping="Wrap"/>
+
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Right" Grid.Column="1">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleSwitch x:Name="DatExtendedToggle" Margin="5,0,5,0" OnContent="" OffContent=""
+                                          IsEnabled="False" IsCheckedChanged="DatExtended_Changed"/>
+                            <TextBlock Text="Extended" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleSwitch x:Name="DatTransparentToggle" Margin="5,0,5,0" OnContent="" OffContent=""
+                                          IsEnabled="False" IsCheckedChanged="DatTransparent_Changed"/>
+                            <TextBlock Text="Transparency" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleSwitch x:Name="DatAnimationsToggle" Margin="5,0,5,0" OnContent="" OffContent=""
+                                          IsEnabled="False" IsCheckedChanged="DatAnimations_Changed"/>
+                            <TextBlock Text="Improved Animations" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleSwitch x:Name="DatFrameGroupsToggle" Margin="5,0,5,0" OnContent="" OffContent=""
+                                          IsEnabled="False" IsCheckedChanged="DatFrameGroup_Changed"/>
+                            <TextBlock Text="Frame Groups" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Grid.Column="2" Margin="30,2,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="70"/>
+                            <RowDefinition Height="25"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBox x:Name="AssetsVersionInfo" Grid.Row="0"
+                                 Text="No version loaded" IsReadOnly="True"
+                                 BorderThickness="0" Background="Transparent" TextWrapping="Wrap"/>
+
+                        <ComboBox x:Name="DatStructureDropdown" Grid.Row="1"
+                                  Width="100" Height="25" IsEnabled="False"/>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            <Button Grid.Row="1" x:Name="LoadAssets" HorizontalAlignment="Center" VerticalAlignment="Top"
+                    IsEnabled="False" Click="LoadAssets_Click" Margin="0,10,0,0">
+                <StackPanel>
+                    <TextBlock Text="Load Assets" HorizontalAlignment="Center"/>
+                    <ProgressBar x:Name="LoadProgress" Minimum="0" Maximum="100" Value="0"
+                                 Width="200" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Margin="-10,0,-10,0" Height="8"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+
+    <!-- Preset Dialog Overlay -->
+    <Panel x:Name="PresetDialogOverlay" IsVisible="False" Background="#80000000" ZIndex="100">
+        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                CornerRadius="8" Padding="20" MinWidth="300"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BoxShadow="0 4 16 #40000000">
+            <StackPanel>
+                <TextBlock x:Name="PresetDialogTitle" Text="(action)" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Name:" VerticalAlignment="Center"/>
+                    <TextBox x:Name="PresetNameTextBox" Width="280" Height="25" Margin="10,0,0,0"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,15,0,0">
+                    <Button x:Name="PresetDialogOKBtn" Width="120" Margin="10,0,0,0"
+                            Click="ModifyPresetConfirm_Click" Content="OK"/>
+                    <Button x:Name="PresetDialogCancelBtn" Width="120" Margin="10,0,0,0"
+                            Click="ModifyPresetCancel_Click" Content="Cancel"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Panel>
+    </Panel>
+</Window>

@@ -1,0 +1,141 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Assets_Editor.OTBEditor"
+        Title="OTBEditor" Width="1220" Height="860">
+    <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Item List -->
+        <Border Grid.Column="0" BorderThickness="1" BorderBrush="Gray" Margin="10,5,0,10">
+            <ListBox x:Name="ItemListView" Width="207" Margin="0,10,0,0" SelectionChanged="ItemListView_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Id}" Width="60" VerticalAlignment="Center"/>
+                            <Image Source="{Binding Image}" Width="64" Height="64"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- Middle: Properties -->
+        <Border Grid.Column="1" BorderThickness="1" BorderBrush="Gray" Margin="5,5,10,10">
+            <Grid RowDefinitions="40,40,Auto">
+                <Menu Grid.Row="0">
+                    <MenuItem Header="_File">
+                        <MenuItem Header="Save As" Click="SaveAs_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="_Edit">
+                        <MenuItem Header="Create Missing Items" Click="CreateMissingItems"/>
+                        <MenuItem Header="Check MisMatched Items" Click="CheckMisMatcheditems"/>
+                        <MenuItem Header="Reload Selected Items Attr" Click="ReloadItemsAttr"/>
+                    </MenuItem>
+                </Menu>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="OTB File:" VerticalAlignment="Center" Margin="5,0"/>
+                    <TextBox x:Name="OtbPathText" Grid.Column="1" Width="330" IsEnabled="False" Margin="5,0"/>
+                    <Button x:Name="OpenOTBButton" Grid.Column="2" Content="📂" Width="40" Height="40" Click="OpenOTBButton_Click"/>
+                </Grid>
+                <StackPanel Grid.Row="2" Margin="5,10,5,0">
+                    <Separator Margin="0,5,0,10"/>
+                    <WrapPanel Orientation="Horizontal">
+                        <TextBlock Text="Server Id:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_ServerId" Width="110" Minimum="0" FormatString="0"/>
+                        <TextBlock Text="Client Id:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_ClientId" Width="110" Minimum="0" FormatString="0"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBlock Text="Name:" Width="110" VerticalAlignment="Center"/>
+                        <TextBox x:Name="I_Name" Width="110"/>
+                        <TextBlock Text="Stack Order:" Width="110" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="I_StackOrder" Width="110" SelectedIndex="-1">
+                            <ComboBoxItem Content="None"/>
+                            <ComboBoxItem Content="Border"/>
+                            <ComboBoxItem Content="Bottom"/>
+                            <ComboBoxItem Content="Top"/>
+                        </ComboBox>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBlock Text="Type:" Width="110" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="I_Type" Width="110" SelectedIndex="0">
+                            <ComboBoxItem Content="None"/>
+                            <ComboBoxItem Content="Ground"/>
+                            <ComboBoxItem Content="Container"/>
+                            <ComboBoxItem Content="Fluid"/>
+                            <ComboBoxItem Content="Splash"/>
+                            <ComboBoxItem Content="Deprecated"/>
+                            <ComboBoxItem Content="Podium"/>
+                        </ComboBox>
+                        <TextBlock Text="Ground Speed:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_GroundSpeed" Width="110" Minimum="0" Maximum="1000" FormatString="0"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="I_Unpassable" Content="Unpassable" Width="110"/>
+                        <CheckBox x:Name="I_Movable" Content="Movable" Width="110"/>
+                        <CheckBox x:Name="I_BlockMissiles" Content="Block Missiles" Width="110"/>
+                        <CheckBox x:Name="I_BlockPath" Content="Block Path" Width="110"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="I_Pickable" Content="Pickable" Width="110"/>
+                        <CheckBox x:Name="I_Stackable" Content="Stackable" Width="110"/>
+                        <CheckBox x:Name="I_ForceUse" Content="Force Use" Width="110"/>
+                        <CheckBox x:Name="I_MultiUse" Content="Multi Use" Width="110"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="I_Rotateable" Content="Rotateable" Width="110"/>
+                        <CheckBox x:Name="I_Hangable" Content="Hangable" Width="110"/>
+                        <CheckBox x:Name="I_HookSouth" Content="HookSouth" Width="110"/>
+                        <CheckBox x:Name="I_HookEast" Content="HookEast" Width="110"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="I_Elevation" Content="Elevation" Width="110"/>
+                        <CheckBox x:Name="I_IgnoreLook" Content="Ignore Look" Width="110"/>
+                        <CheckBox x:Name="I_Readable" Content="Readable" Width="110"/>
+                        <CheckBox x:Name="I_FullGround" Content="Full Ground" Width="110"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBlock Text="MiniMap Color:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_MiniMapColor" Width="110" Minimum="0" FormatString="0"/>
+                        <TextBlock Text="Show As:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_ShowAs" Width="110" Minimum="0" FormatString="0"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBlock Text="Light Level:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_LightLevel" Width="110" Minimum="0" FormatString="0"/>
+                        <TextBlock Text="Light Color:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_LightColor" Width="110" Minimum="0" FormatString="0"/>
+                    </WrapPanel>
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <TextBlock Text="Max ReadWrite:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_MaxReadWriteChars" Width="110" Minimum="0" FormatString="0"/>
+                        <TextBlock Text="Max Read:" Width="110" VerticalAlignment="Center"/>
+                        <NumericUpDown x:Name="I_MaxReadChars" Width="110" Minimum="0" FormatString="0"/>
+                    </WrapPanel>
+                    <Button x:Name="SaveItemButton" Content="Save" Width="300" Height="30" Click="SaveItemButton_Click" Margin="0,10,0,10" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Right: New Items List -->
+        <Border Grid.Column="2" BorderThickness="1" BorderBrush="Gray" Margin="0,5,10,10">
+            <ListBox x:Name="NewItemListView" Width="207" Margin="0,10,0,0">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Id}" Width="60" VerticalAlignment="Center"/>
+                            <Image Source="{Binding Image}" Width="64" Height="64"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+    </Grid>
+</Window>

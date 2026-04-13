@@ -1,0 +1,787 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="900"
+        x:Class="Assets_Editor.DatEditor"
+        Title="Tibia Asset Editor By WhiteCrixu V1.0 — DAT/Appearances"
+        Height="900" Width="1280"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource SystemChromeMediumLowColor}">
+
+    <Window.Styles>
+        <!-- Toolbar button style -->
+        <Style Selector="Button.toolbar">
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="3,0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseLowColor}"/>
+        </Style>
+        <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <!-- Action button style (side panels) -->
+        <Style Selector="Button.action">
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseLowColor}"/>
+        </Style>
+        <Style Selector="Button.action:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <!-- Card-like border -->
+        <Style Selector="Border.card">
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseLowColor}"/>
+            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumLowColor}"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+        <!-- Panel header style -->
+        <Style Selector="TextBlock.panelHeader">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Foreground" Value="{DynamicResource SystemAccentColor}"/>
+        </Style>
+        <!-- Section label style -->
+        <Style Selector="TextBlock.sectionLabel">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource SystemBaseMediumColor}"/>
+            <Setter Property="Margin" Value="0,8,0,4"/>
+        </Style>
+        <!-- CheckBox tidied for flag grid -->
+        <Style Selector="CheckBox.flag">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="2,3"/>
+            <Setter Property="MinWidth" Value="130"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ═══ TOP TOOLBAR ═══ -->
+        <Border Grid.Row="0" Padding="8,6" BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource SystemBaseLowColor}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <TextBlock Text="Light" VerticalAlignment="Center" FontSize="12" Margin="0,0,4,0"/>
+                    <ToggleSwitch x:Name="DarkModeToggle" OnContent="" OffContent=""
+                                  IsCheckedChanged="DarkModeToggle_Changed"/>
+                    <TextBlock Text="Dark" VerticalAlignment="Center" FontSize="12" Margin="0,0,0,0"/>
+                </StackPanel>
+                <Menu VerticalAlignment="Center">
+                    <MenuItem Header="📄 File">
+                        <MenuItem Header="📂 Open appearance.dat…" Click="OpenAppearanceDat_Click"
+                                  ToolTip.Tip="Load a standalone appearances-*.dat file (without full assets folder)"/>
+                        <MenuItem x:Name="RecentDatMenu" Header="🕒 Recent appearance.dat"/>
+                        <MenuItem x:Name="RecentXmlMenu" Header="🕒 Recent items.xml"/>
+                        <Separator/>
+                        <MenuItem Header="💾 Save DAT…"            Click="SaveDat_Click"/>
+                        <Separator/>
+                        <MenuItem Header="⚡ Compile Assets"       Click="CompileToAssets_Click"
+                                  ToolTip.Tip="Overwrite appearances file directly in the assets folder"/>
+                        <MenuItem Header="🚀 Publish to Client…"   Click="Publish_Click"
+                                  ToolTip.Tip="Rewrite appearances + catalog-content.json + assets.json + assets.json.sha256 so the Tibia client accepts modified assets"/>
+                        <Separator/>
+                        <MenuItem Header="📝 Load items.xml…"      Click="LoadItemsXml_Click"
+                                  ToolTip.Tip="Load OpenTibia items.xml to display item names in the list"/>
+                        <MenuItem Header="✏ Edit items.xml…"       Click="EditItemsXml_Click"
+                                  ToolTip.Tip="Open the items.xml editor"/>
+                    </MenuItem>
+                    <MenuItem Header="📥 Import">
+                        <MenuItem Header="📦 Import OBD…" Click="ImportOBD_Click"/>
+                        <MenuItem Header="📦 Import AEC…" Click="ImportAEC_Click"/>
+                        <Separator/>
+                        <MenuItem Header="🖼 Batch Import PNGs…" Click="BatchImportPNGs_Click"
+                                  ToolTip.Tip="Import a folder of PNGs as sprites for the selected appearance(s)"/>
+                        <MenuItem Header="🎞 Import from GIF/APNG…" Click="ImportFromGif_Click"
+                                  ToolTip.Tip="Extract frames from an animated image and import them as sprites"/>
+                    </MenuItem>
+                    <MenuItem Header="📤 Export">
+                        <MenuItem Header="📤 Export OBD…"    Click="ExportOBD_Click"/>
+                        <MenuItem Header="📤 Export AEC…"    Click="ExportAEC_Click"/>
+                        <Separator/>
+                        <MenuItem Header="🖼 Export All Images…" Click="ExportImages_Click"/>
+                        <MenuItem Header="🖼 Batch Export Selected…" Click="BatchExportSelected_Click"/>
+                        <MenuItem Header="🎞 Export GIF…" Click="ExportGif_Click"
+                                  ToolTip.Tip="Export the selected appearance animation as an animated GIF"/>
+                    </MenuItem>
+                    <MenuItem Header="✏ Edit">
+                        <MenuItem Header="↩ Undo (Ctrl+Z)" Click="Undo_Click"/>
+                        <MenuItem Header="↪ Redo (Ctrl+Y)" Click="Redo_Click"/>
+                        <MenuItem Header="⟲ Revert Current (Ctrl+R)" Click="Revert_Click"
+                                  ToolTip.Tip="Restore the currently selected appearance to the state when it was last loaded"/>
+                        <MenuItem Header="🆚 Compare Flags…"          Click="CompareFlags_Click"
+                                  ToolTip.Tip="Compare flags of current appearance with another by ID"/>
+                        <MenuItem Header="📋 Copy Sprite IDs"          Click="CopySpriteIds_Click"
+                                  ToolTip.Tip="Copy sprite IDs of selected appearances as CSV to clipboard"/>
+                        <Separator/>
+                        <MenuItem Header="🔍 Quick Jump (Ctrl+G)"   Click="QuickJumpMenu_Click"/>
+                        <MenuItem Header="⭐ Toggle Bookmark (Ctrl+B)" Click="ToggleBookmark_Click"/>
+                        <MenuItem Header="📑 Show Bookmarks…"       Click="ShowBookmarks_Click"/>
+                        <Separator/>
+                        <MenuItem Header="🏷 Batch Set Flag…" Click="BatchSetFlag_Click"
+                                  ToolTip.Tip="Set or clear a flag on all visible appearances"/>
+                        <MenuItem Header="🔄 Resize Sprites…" Click="ResizeSprites_Click"
+                                  ToolTip.Tip="Resize sprites of the selected appearance to a different sheet size"/>
+                        <Separator/>
+                        <MenuItem Header="📐 Save as Template…"     Click="SaveTemplate_Click"
+                                  ToolTip.Tip="Save the current appearance's flags + structure as a reusable template"/>
+                        <MenuItem x:Name="ApplyTemplateMenu" Header="📋 Apply Template"
+                                  ToolTip.Tip="Apply a saved template to the current appearance"/>
+                        <MenuItem Header="🗑 Manage Templates…"     Click="ManageTemplates_Click"/>
+                        <Separator/>
+                        <MenuItem Header="⚙ Settings…"              Click="OpenSettings_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="🛠 Tools">
+                        <MenuItem Header="🗂 Sprite Editor" Click="SpriteEditor_Click"/>
+                        <MenuItem Header="🔧 Lua Script"    Click="LuaScript_Click"/>
+                        <Separator/>
+                        <MenuItem Header="🔍 Compare DAT…"  Click="CompareDat_Click"/>
+                        <MenuItem Header="📊 Statistics"     Click="ShowStats_Click"/>
+                        <MenuItem Header="🩺 Validate…"     Click="ValidateAppearances_Click"
+                                  ToolTip.Tip="Check for broken sprites, duplicate IDs, missing flags"/>
+                        <MenuItem Header="🔄 Sync items.xml ↔ DAT…" Click="SyncItemsXmlDat_Click"
+                                  ToolTip.Tip="Find items in XML without DAT entries and vice-versa"/>
+                        <MenuItem Header="📦 Repack Sheets…" Click="RepackSheets_Click"
+                                  ToolTip.Tip="Remove empty slots from sprite sheets and repack"/>
+                        <MenuItem Header="🔁 Deduplicate Sprites…" Click="DeduplicateSprites_Click"
+                                  ToolTip.Tip="Find identical sprites (by SHA256), remap references to a single canonical ID, free up space"/>
+                        <MenuItem Header="🔗 Sprite References…" Click="SpriteReferences_Click"
+                                  ToolTip.Tip="Find all appearances that use a given sprite ID"/>
+                        <MenuItem Header="↔ Flip / Rotate Sprites…" Click="FlipRotateSprites_Click"
+                                  ToolTip.Tip="Apply flip or rotation to all sprites of the selected appearance"/>
+                        <MenuItem Header="⬛ Add Outline" Click="AddOutline_Click"
+                                  ToolTip.Tip="Add a 1px black outline around all sprites of the selected appearance"/>
+                        <MenuItem Header="🌑 Add Shadow"  Click="AddShadow_Click"
+                                  ToolTip.Tip="Add a semi-transparent dark shadow under the sprites"/>
+                        <MenuItem Header="👤 Outfit Preview" Click="QuickOutfitPreview_Click"
+                                  ToolTip.Tip="Show walk-cycle preview for the selected outfit"/>
+                        <MenuItem Header="🗄 OTB Editor"    Click="OTBEditor_Click"
+                                  ToolTip.Tip="Open the server-side OTB item editor"/>
+                        <MenuItem Header="🔤 Sprite Palette…" Click="SpritePalette_Click"
+                                  ToolTip.Tip="Swap/remap colors in the selected appearance sprites"/>
+                        <MenuItem Header="🌐 Search Item…"  Click="SearchWindow_Click"/>
+                        <Separator/>
+                        <MenuItem Header="📋 Log"           Click="ShowLog_Click"/>
+                    </MenuItem>
+                </Menu>
+            </DockPanel>
+        </Border>
+
+        <!-- ═══ MAIN CONTENT ═══ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" MinWidth="180" MaxWidth="320"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="230" MinWidth="160" MaxWidth="300"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ── LEFT PANEL: Object list ── -->
+            <Grid Grid.Column="0" Margin="6,6,0,6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Classes="panelHeader" Text="Appearances"/>
+
+                <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,4">
+                    <ComboBox x:Name="ObjectMenu" SelectedIndex="0"
+                              SelectionChanged="ObjectMenuChanged"
+                              HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="Outfits"/>
+                        <ComboBoxItem Content="Items"/>
+                        <ComboBoxItem Content="Effects"/>
+                        <ComboBoxItem Content="Missiles"/>
+                    </ComboBox>
+                    <TextBox x:Name="SearchBox" Watermark="Search: ID, name, or flag (e.g. Container, Light)"
+                             TextChanged="SearchBox_TextChanged"/>
+                </StackPanel>
+
+                <ListBox x:Name="ObjListView" Grid.Row="2"
+                         SelectionMode="Multiple"
+                         SelectionChanged="ObjListView_SelectionChanged"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="2,4">
+                                <ToolTip.Tip>
+                                    <StackPanel Spacing="3" MaxWidth="260">
+                                        <Image Source="{Binding Image}" Width="128" Height="128"
+                                               RenderOptions.BitmapInterpolationMode="None"/>
+                                        <TextBlock Text="{Binding Id}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource SystemBaseMediumColor}"/>
+                                    </StackPanel>
+                                </ToolTip.Tip>
+                                <Border Width="50" Height="50" CornerRadius="4"
+                                        Background="{DynamicResource SystemChromeLowColor}">
+                                    <Image Source="{Binding Image}" Width="48" Height="48"
+                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                </Border>
+                                <StackPanel Orientation="Vertical" VerticalAlignment="Center"
+                                            Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding Id}" FontSize="13"/>
+                                    <TextBlock Text="{Binding Name}" FontSize="10"
+                                               Foreground="{DynamicResource SystemBaseMediumColor}"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel Grid.Row="3" Margin="0,6,0,0" Spacing="5">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button Classes="action" Content="+ Add"    Click="AddNew_Click"/>
+                        <Button Classes="action" Content="⧉ Dup"   Click="Duplicate_Click"/>
+                        <Button Classes="action" Content="🗑 Del"  Click="DeleteObject_Click"/>
+                        <Button Classes="action" Content="👤 Template" Click="NewOutfitTemplate_Click"
+                                ToolTip.Tip="Create a new outfit with proper structure: 2 frame groups (idle+walk), 4 directions, 3 addons, 2 layers"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button Classes="action" Content="📋 Copy Flags"  Click="CopyFlags_Click"
+                                ToolTip.Tip="Copy the full flag set from the current appearance"/>
+                        <Button Classes="action" Content="📥 Paste Flags" Click="PasteFlags_Click"
+                                ToolTip.Tip="Paste the previously copied flag set onto the current appearance"/>
+                    </StackPanel>
+                    <Button Classes="action" Content="{}{ } Edit JSON" Click="EditJson_Click"
+                            ToolTip.Tip="Show and edit the raw protobuf JSON for this appearance"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- splitter -->
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" Width="4" Background="Transparent"/>
+
+            <!-- ── CENTER PANEL: Preview + Sprites + Flags ── -->
+            <Grid Grid.Column="2" Margin="6,6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="260"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Preview card -->
+                <Border Grid.Row="0" Classes="card">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal"
+                                    HorizontalAlignment="Center" Spacing="4" Margin="0,0,0,6">
+                            <Button x:Name="SprUpArrow"    Content="↑" Click="ChangeDirection" Tag="0" Width="32" Height="28" Padding="0"/>
+                            <Button x:Name="SprRightArrow" Content="→" Click="ChangeDirection" Tag="1" Width="32" Height="28" Padding="0"/>
+                            <Button x:Name="SprDownArrow"  Content="↓" Click="ChangeDirection" Tag="2" Width="32" Height="28" Padding="0"/>
+                            <Button x:Name="SprLeftArrow"  Content="←" Click="ChangeDirection" Tag="3" Width="32" Height="28" Padding="0"/>
+                            <Separator Width="1" Margin="4,0"/>
+                            <ToggleButton x:Name="SprAnimateToggle" Content="▶ Anim" Width="64" Height="28" Padding="2,0"
+                                          ToolTip.Tip="Toggle live animation preview"
+                                          IsCheckedChanged="SprAnimateToggle_Changed"/>
+                            <TextBlock Text="FPS" VerticalAlignment="Center" FontSize="10" Margin="4,0,2,0"/>
+                            <NumericUpDown x:Name="SprAnimFps" Minimum="1" Maximum="30" Value="5"
+                                           Width="60" Height="28" FontSize="11"/>
+                            <TextBlock x:Name="SprFrameCounter" Text="" VerticalAlignment="Center"
+                                       FontSize="10" Margin="6,0,0,0" Foreground="{DynamicResource SystemBaseMediumColor}"/>
+                            <Separator Width="1" Margin="4,0"/>
+                            <ToggleButton x:Name="SprCanvasGuide" Content="⊞ 32px guide" Width="100" Height="28" Padding="4,0"
+                                          ToolTip.Tip="Overlay a red 32×32 rectangle on the bottom-right of the preview — shows the area a normal-sized Tibia creature should fill."
+                                          IsCheckedChanged="SprCanvasGuide_Changed"/>
+                        </StackPanel>
+
+                        <Border Grid.Row="1" x:Name="SprPreviewContainer"
+                                Background="{DynamicResource SystemChromeLowColor}"
+                                CornerRadius="4" ClipToBounds="True">
+                            <Image x:Name="SprPreviewImage" Stretch="Uniform"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   RenderOptions.BitmapInterpolationMode="None"
+                                   Margin="8">
+                                <Image.RenderTransform>
+                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                </Image.RenderTransform>
+                                <Image.RenderTransformOrigin>0.5,0.5</Image.RenderTransformOrigin>
+                            </Image>
+                        </Border>
+
+                        <StackPanel Grid.Row="2" Spacing="4" Margin="0,6,0,0">
+                            <Slider x:Name="SprGroupSlider" Minimum="0" Maximum="1"
+                                    ValueChanged="SprGroupSlider_ValueChanged"/>
+                            <!-- Outfit colors (only visible for outfits with layers > 1) -->
+                            <Border x:Name="OutfitColorPanel" IsVisible="False" Padding="4" CornerRadius="4"
+                                    Background="{DynamicResource SystemChromeLowColor}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Outfit Colors" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                    <Grid ColumnDefinitions="50,50,10,50,50,10,50,50,10,50,50" RowDefinitions="Auto">
+                                        <TextBlock Grid.Column="0" Text="Head" FontSize="10" VerticalAlignment="Center"/>
+                                        <NumericUpDown x:Name="OutfitHead" Grid.Column="1" Minimum="0" Maximum="132" Value="0" Width="50" Height="24" FontSize="10"/>
+                                        <TextBlock Grid.Column="3" Text="Body" FontSize="10" VerticalAlignment="Center"/>
+                                        <NumericUpDown x:Name="OutfitBody" Grid.Column="4" Minimum="0" Maximum="132" Value="0" Width="50" Height="24" FontSize="10"/>
+                                        <TextBlock Grid.Column="6" Text="Legs" FontSize="10" VerticalAlignment="Center"/>
+                                        <NumericUpDown x:Name="OutfitLegs" Grid.Column="7" Minimum="0" Maximum="132" Value="0" Width="50" Height="24" FontSize="10"/>
+                                        <TextBlock Grid.Column="9" Text="Feet" FontSize="10" VerticalAlignment="Center"/>
+                                        <NumericUpDown x:Name="OutfitFeet" Grid.Column="10" Minimum="0" Maximum="132" Value="0" Width="50" Height="24" FontSize="10"/>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+                                        <ToggleButton x:Name="OutfitBlendToggle" Content="Colorize" Height="22" Padding="8,0" FontSize="10"
+                                                      ToolTip.Tip="Apply outfit colors to the preview"
+                                                      IsCheckedChanged="OutfitColor_Changed"/>
+                                        <Button Content="Random" Height="22" Padding="8,0" FontSize="10"
+                                                Click="OutfitRandomize_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Appearance Sprites editor -->
+                <Border Grid.Row="1" Classes="card" Margin="0,8,0,0">
+                    <Grid RowDefinitions="Auto,130">
+
+                        <!-- Toolbar row -->
+                        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Classes="panelHeader" Text="Appearance Sprites"
+                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Button Content="+ Add"     Padding="7,3" Margin="0,0,4,0"
+                                    Click="AppSprAdd_Click"
+                                    ToolTip.Tip="Append a new sprite ID"/>
+                            <Button Content="📥 Import" Padding="7,3" Margin="0,0,4,0"
+                                    Click="AppSprImport_Click"
+                                    ToolTip.Tip="Replace selected sprite with a PNG"/>
+                            <Button Content="📤 Export" Padding="7,3" Margin="0,0,4,0"
+                                    Click="AppSprExport_Click"
+                                    ToolTip.Tip="Export selected sprite as PNG"/>
+                            <Button Content="🔄 Change" Padding="7,3" Margin="0,0,4,0"
+                                    Click="AppSprChange_Click"
+                                    ToolTip.Tip="Assign the sprite selected in the right-hand Sprites panel to this slot"/>
+                            <Button Content="🗑 Remove" Padding="7,3" Margin="0,0,8,0"
+                                    Click="AppSprRemove_Click"
+                                    ToolTip.Tip="Remove selected sprite ID"/>
+                            <!-- Reorder buttons -->
+                            <Button Content="◀ Move"   Padding="7,3" Margin="0,0,4,0"
+                                    Click="AppSprMoveLeft_Click"
+                                    ToolTip.Tip="Move selected sprite left"/>
+                            <Button Content="Move ▶"   Padding="7,3"
+                                    Click="AppSprMoveRight_Click"
+                                    ToolTip.Tip="Move selected sprite right"/>
+                        </WrapPanel>
+
+                        <!-- Sprite tile strip -->
+                        <ScrollViewer Grid.Row="1"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled">
+                            <ListBox x:Name="AppSprListView"
+                                     SelectionChanged="AppSprListView_SelectionChanged"
+                                     ContainerPrepared="AppSprListView_ContainerPrepared"
+                                     ContainerClearing="AppSprListView_ContainerClearing"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                     DragDrop.AllowDrop="True">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="3,2" Width="48">
+                                            <Border Width="44" Height="44" CornerRadius="4"
+                                                    Background="{DynamicResource SystemChromeLowColor}">
+                                                <Image Source="{Binding Image}" Width="42" Height="42"
+                                                       RenderOptions.BitmapInterpolationMode="None"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding Id}" FontSize="9"
+                                                       HorizontalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding SizeLabel}" FontSize="8"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource SystemBaseMediumColor}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Flags + Sprite Info -->
+                <ScrollViewer Grid.Row="2" Margin="0,6,0,0"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="2">
+
+                        <TextBlock Classes="panelHeader" Text="Appearance Flags"/>
+
+                        <!-- ── Name / Description ── -->
+                        <Border Classes="card">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBox   Grid.Row="0" Grid.Column="1" x:Name="FlagName" Height="28"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Desc" VerticalAlignment="Center" FontSize="12" Margin="0,4,0,0"/>
+                                    <TextBox   Grid.Row="1" Grid.Column="1" x:Name="FlagDescription" Height="28" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── Basic Boolean Flags ── -->
+                        <TextBlock Classes="panelHeader" Text="Appearance Flags"/>
+                        <Border Classes="card">
+                            <WrapPanel>
+                                <CheckBox x:Name="FlagGround"          Content="Ground"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagClip"            Content="Clip"            Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagTop"             Content="Top"             Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagBottom"          Content="Bottom"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagContainer"       Content="Container"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagStackable"       Content="Stackable"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagUsable"          Content="Usable"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagForceUse"        Content="ForceUse"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagMultiuse"        Content="Multiuse"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagWriteable"       Content="Writeable"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagWriteOnce"       Content="WriteOnce"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagLiquidPool"      Content="LiquidPool"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagLiquidContainer" Content="LiquidContainer" Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagImpassable"      Content="Impassable"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagUnmovable"       Content="Unmovable"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagUnsight"         Content="Unsight"         Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagAvoidBlock"      Content="AvoidBlock"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagNoMoveAnimation" Content="NoMoveAnim"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagTake"            Content="Take"            Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagHangable"        Content="Hangable"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagHook"            Content="Hook"            Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagRotate"          Content="Rotate"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagLight"           Content="Light"           Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagDontHide"        Content="DontHide"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagTranslucent"     Content="Translucent"     Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagShift"           Content="Shift"           Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagHeight"          Content="Height"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagLyingCorpse"     Content="LyingCorpse"     Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagAnimateAlways"   Content="AnimateAlways"   Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagAutomap"         Content="Automap"         Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagLensHelp"        Content="LensHelp"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagFullBank"        Content="FullBank"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagIgnoreLook"      Content="IgnoreLook"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagClothes"         Content="Clothes"         Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagDefaultAction"   Content="DefaultAction"   Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagMarket"          Content="Market"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagWrap"            Content="Wrap"            Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagUnwrap"          Content="Unwrap"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagTopEffect"       Content="TopEffect"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagDecoItemKit"     Content="DecoKit"         Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagCorpse"          Content="Corpse"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagPlayerCorpse"    Content="PlayerCorpse"    Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagShowOffSocket"   Content="Podium"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagReportable"      Content="Reportable"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagReverseAddonE"   Content="RevAddonE"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagReverseAddonW"   Content="RevAddonW"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagReverseAddonN"   Content="RevAddonN"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagReverseAddonS"   Content="RevAddonS"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagWearOut"         Content="WearOut"         Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagClockExpire"     Content="ClockExpire"     Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagExpire"          Content="Expire"          Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagExpireStop"      Content="ExpireStop"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagCyclopedia"      Content="Cyclopedia"      Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagAmmo"            Content="Ammo"            Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagNPC"             Content="NPC"             Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagSkillWheelGem"   Content="SkillGem"        Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagDualWielding"    Content="DualWield"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagImbueable"       Content="Imbueable"       Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagProficiency"     Content="Proficiency"     Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagTransparency"    Content="Transparency"    Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagChangedToExpire" Content="ChangedExpire"   Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                                <CheckBox x:Name="FlagUpgradeClass"    Content="UpgradeClass"    Classes="flag" IsCheckedChanged="Flag_Changed"/>
+                            </WrapPanel>
+                        </Border>
+
+                        <!-- ── Flag Parameters ── -->
+                        <TextBlock Classes="panelHeader" Text="Flag Parameters" Margin="0,10,0,4"/>
+                        <Border Classes="card">
+                            <Grid ColumnDefinitions="115,160,20,115,160" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                <!-- Row 0: Ground speed -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Ground Speed" VerticalAlignment="Center" FontSize="11"/>
+                                <NumericUpDown x:Name="FlagGroundSpeed" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="1000" Value="0" Height="28"/>
+                                <!-- Row 0: Hook type -->
+                                <TextBlock Grid.Row="0" Grid.Column="3" Text="Hook Type" VerticalAlignment="Center" FontSize="11"/>
+                                <ComboBox x:Name="FlagHookType" Grid.Row="0" Grid.Column="4" SelectedIndex="-1" Height="28">
+                                    <ComboBoxItem Content="South"/>
+                                    <ComboBoxItem Content="East"/>
+                                </ComboBox>
+
+                                <!-- Row 1: Write max / WriteOnce max -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Write MaxLen" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagWriteMaxLen" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1024" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="1" Grid.Column="3" Text="WriteOnce Len" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagWriteOnceMaxLen" Grid.Row="1" Grid.Column="4" Minimum="0" Maximum="1024" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 2: Light -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Light Bright" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagLightBrightness" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="10" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="2" Grid.Column="3" Text="Light Color" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <StackPanel Grid.Row="2" Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
+                                    <NumericUpDown x:Name="FlagLightColor" Minimum="0" Maximum="215" Value="0" Height="28" Width="130"/>
+                                    <Border x:Name="LightColorSwatch" Width="20" Height="20" CornerRadius="3" BorderThickness="1" BorderBrush="Gray"/>
+                                </StackPanel>
+
+                                <!-- Row 3: Shift -->
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Shift X" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagShiftX" Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="32" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="3" Grid.Column="3" Text="Shift Y" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagShiftY" Grid.Row="3" Grid.Column="4" Minimum="0" Maximum="32" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 4: Elevation / Automap -->
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Elevation" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagElevation" Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="32" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="4" Grid.Column="3" Text="Automap Color" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <StackPanel Grid.Row="4" Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
+                                    <NumericUpDown x:Name="FlagAutomapColor" Minimum="0" Maximum="215" Value="0" Height="28" Width="130"/>
+                                    <Border x:Name="AutomapColorSwatch" Width="20" Height="20" CornerRadius="3" BorderThickness="1" BorderBrush="Gray"/>
+                                </StackPanel>
+
+                                <!-- Row 5: LensHelp / Clothes slot -->
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="LensHelp" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <ComboBox x:Name="FlagLensHelpId" Grid.Row="5" Grid.Column="1" SelectedIndex="-1" Height="28" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="Ladders"/>
+                                    <ComboBoxItem Content="Sewers"/>
+                                    <ComboBoxItem Content="Dungeons"/>
+                                    <ComboBoxItem Content="??4"/>
+                                    <ComboBoxItem Content="??5"/>
+                                    <ComboBoxItem Content="Pathfind"/>
+                                </ComboBox>
+                                <TextBlock Grid.Row="5" Grid.Column="3" Text="Clothes Slot" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <ComboBox x:Name="FlagClothesSlot" Grid.Row="5" Grid.Column="4" SelectedIndex="-1" Height="28" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="None"/>
+                                    <ComboBoxItem Content="Helmet"/>
+                                    <ComboBoxItem Content="Amulet"/>
+                                    <ComboBoxItem Content="Backpack"/>
+                                    <ComboBoxItem Content="Armor"/>
+                                    <ComboBoxItem Content="Shield"/>
+                                    <ComboBoxItem Content="Weapon"/>
+                                    <ComboBoxItem Content="Legs"/>
+                                    <ComboBoxItem Content="Boots"/>
+                                    <ComboBoxItem Content="Ring"/>
+                                    <ComboBoxItem Content="Arrow"/>
+                                </ComboBox>
+
+                                <!-- Row 6: DefaultAction / Transparency level -->
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Action" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <ComboBox x:Name="FlagDefaultActionType" Grid.Row="6" Grid.Column="1" SelectedIndex="-1" Height="28" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="None"/>
+                                    <ComboBoxItem Content="Look"/>
+                                    <ComboBoxItem Content="Use"/>
+                                    <ComboBoxItem Content="Open"/>
+                                    <ComboBoxItem Content="Highlight"/>
+                                </ComboBox>
+                                <TextBlock Grid.Row="6" Grid.Column="3" Text="Transparency" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagTransparencyLevel" Grid.Row="6" Grid.Column="4" Minimum="0" Maximum="255" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 7: Cyclopedia / ChangedToExpire -->
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="Cyclopedia ID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagCyclopediaId" Grid.Row="7" Grid.Column="1" Minimum="0" Maximum="999999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="7" Grid.Column="3" Text="ExpireFormerID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagChangedToExpireId" Grid.Row="7" Grid.Column="4" Minimum="0" Maximum="999999" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 8: UpgradeClassification / MinimumLevel -->
+                                <TextBlock Grid.Row="8" Grid.Column="0" Text="UpgradeClass" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagUpgradeClassAmount" Grid.Row="8" Grid.Column="1" Minimum="0" Maximum="999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="8" Grid.Column="3" Text="Min Level" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagMinimumLevel" Grid.Row="8" Grid.Column="4" Minimum="0" Maximum="99999" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 9: SkillWheel Gem -->
+                                <TextBlock Grid.Row="9" Grid.Column="0" Text="Gem Quality" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagGemQualityId" Grid.Row="9" Grid.Column="1" Minimum="0" Maximum="999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="9" Grid.Column="3" Text="Gem Vocation" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagGemVocationId" Grid.Row="9" Grid.Column="4" Minimum="0" Maximum="999" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 10: Imbueable / Proficiency -->
+                                <TextBlock Grid.Row="10" Grid.Column="0" Text="Imbue Slots" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagImbueSlotCount" Grid.Row="10" Grid.Column="1" Minimum="0" Maximum="10" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <TextBlock Grid.Row="10" Grid.Column="3" Text="Proficiency ID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagProficiencyId" Grid.Row="10" Grid.Column="4" Minimum="0" Maximum="9999" Value="0" Height="28" Margin="0,4,0,0"/>
+
+                                <!-- Row 11: WeaponType -->
+                                <TextBlock Grid.Row="11" Grid.Column="0" Text="Weapon Type" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                <ComboBox x:Name="FlagWeaponType" Grid.Row="11" Grid.Column="1" SelectedIndex="0" Height="28" Margin="0,4,0,0">
+                                    <ComboBoxItem Content="None"/>
+                                    <ComboBoxItem Content="Sword"/>
+                                    <ComboBoxItem Content="Axe"/>
+                                    <ComboBoxItem Content="Club"/>
+                                    <ComboBoxItem Content="Fist"/>
+                                    <ComboBoxItem Content="Bow"/>
+                                    <ComboBoxItem Content="CrossBow"/>
+                                    <ComboBoxItem Content="Wand/Rod"/>
+                                    <ComboBoxItem Content="Throw"/>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- ── Market ── -->
+                        <TextBlock Classes="panelHeader" Text="Market" Margin="0,10,0,4"/>
+                        <Border Classes="card">
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="80,*,20,80,*" RowDefinitions="Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Category" VerticalAlignment="Center" FontSize="11"/>
+                                    <ComboBox x:Name="FlagMarketCategory" Grid.Row="0" Grid.Column="1" SelectedIndex="-1" Height="28">
+                                        <ComboBoxItem Content="Armors"/>
+                                        <ComboBoxItem Content="Amulets"/>
+                                        <ComboBoxItem Content="Boots"/>
+                                        <ComboBoxItem Content="Containers"/>
+                                        <ComboBoxItem Content="Decoration"/>
+                                        <ComboBoxItem Content="Food"/>
+                                        <ComboBoxItem Content="HelmetsHats"/>
+                                        <ComboBoxItem Content="Legs"/>
+                                        <ComboBoxItem Content="Others"/>
+                                        <ComboBoxItem Content="Potions"/>
+                                        <ComboBoxItem Content="Rings"/>
+                                        <ComboBoxItem Content="Runes"/>
+                                        <ComboBoxItem Content="Shields"/>
+                                        <ComboBoxItem Content="Tools"/>
+                                        <ComboBoxItem Content="Valuables"/>
+                                        <ComboBoxItem Content="Ammunition"/>
+                                        <ComboBoxItem Content="Axes"/>
+                                        <ComboBoxItem Content="Clubs"/>
+                                        <ComboBoxItem Content="DistWeapons"/>
+                                        <ComboBoxItem Content="Swords"/>
+                                        <ComboBoxItem Content="WandsRods"/>
+                                        <ComboBoxItem Content="PremScrolls"/>
+                                        <ComboBoxItem Content="TibiaCoins"/>
+                                        <ComboBoxItem Content="CreatureProducts"/>
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="0" Grid.Column="3" Text="Trade As" VerticalAlignment="Center" FontSize="11"/>
+                                    <NumericUpDown x:Name="FlagMarketTrade" Grid.Row="0" Grid.Column="4" Minimum="0" Maximum="999999" Value="0" Height="28"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Show As" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                    <NumericUpDown x:Name="FlagMarketShow" Grid.Row="1" Grid.Column="4" Minimum="0" Maximum="999999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="3" Text="Min Lvl" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
+                                    <NumericUpDown x:Name="FlagMarketLevel" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="9999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                </Grid>
+                                <TextBlock Text="Market Professions" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                                <WrapPanel>
+                                    <CheckBox x:Name="FlagProfAny"       Content="Any"      FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfNone"      Content="None"     FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfKnight"    Content="Knight"   FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfPaladin"   Content="Paladin"  FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfSorcerer"  Content="Sorcerer" FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfDruid"     Content="Druid"    FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfPromoted"  Content="Promoted" FontSize="11" Margin="2"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── Vocation Restriction (item-level, separate from Market) ── -->
+                        <TextBlock Classes="panelHeader" Text="Vocation Restriction" Margin="0,10,0,4"/>
+                        <Border Classes="card">
+                            <WrapPanel>
+                                <CheckBox x:Name="FlagRestrictVocAny"       Content="Any"      FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocNone"      Content="None"     FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocKnight"    Content="Knight"   FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocPaladin"   Content="Paladin"  FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocSorcerer"  Content="Sorcerer" FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocDruid"     Content="Druid"    FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocMonk"      Content="Monk"     FontSize="11" Margin="2"/>
+                                <CheckBox x:Name="FlagRestrictVocPromoted"  Content="Promoted" FontSize="11" Margin="2"/>
+                            </WrapPanel>
+                        </Border>
+
+                        <!-- ── Full Info (read-only proto dump) ── -->
+                        <TextBlock Classes="panelHeader" Text="Full Info" Margin="0,10,0,4"/>
+                        <Border Classes="card">
+                            <TextBox x:Name="FullInfoBox" IsReadOnly="True" AcceptsReturn="True"
+                                     Height="80" FontSize="10" TextWrapping="Wrap"/>
+                        </Border>
+
+                        <TextBlock Classes="panelHeader" Text="Sprite Info" Margin="0,10,0,4"/>
+
+                        <Border Classes="card">
+                            <Grid ColumnDefinitions="Auto,160,20,Auto,160"
+                                  RowDefinitions="Auto,Auto,Auto,Auto">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Width"    VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprWidth"    Grid.Row="0" Grid.Column="1" Minimum="1" Maximum="10" Value="1" Height="28"/>
+                                <TextBlock Grid.Row="0" Grid.Column="3" Text="Height"   VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprHeight"   Grid.Row="0" Grid.Column="4" Minimum="1" Maximum="10" Value="1" Height="28"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Layers"   VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprLayers"   Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="10" Value="1" Height="28"/>
+                                <TextBlock Grid.Row="1" Grid.Column="3" Text="PatternX" VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprPatternX" Grid.Row="1" Grid.Column="4" Minimum="1" Maximum="10" Value="1" Height="28"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="PatternY" VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprPatternY" Grid.Row="2" Grid.Column="1" Minimum="1" Maximum="10" Value="1" Height="28"/>
+                                <TextBlock Grid.Row="2" Grid.Column="3" Text="PatternZ" VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprPatternZ" Grid.Row="2" Grid.Column="4" Minimum="1" Maximum="10" Value="1" Height="28"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Frames"   VerticalAlignment="Center" Margin="0,3,8,3" FontSize="12"/>
+                                <NumericUpDown x:Name="SprFrames"   Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="255" Value="1" Height="28"/>
+                            </Grid>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- splitter -->
+            <GridSplitter Grid.Column="3" ResizeDirection="Columns" Width="4" Background="Transparent"/>
+
+            <!-- ── RIGHT PANEL: Sprite list ── -->
+            <Grid Grid.Column="4" Margin="0,6,6,6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Classes="panelHeader" Text="Sprites"/>
+
+                <TextBox Grid.Row="1" x:Name="SprSearchBox" Watermark="Search sprite by ID…"
+                         Margin="0,0,0,6" TextChanged="SprSearchBox_TextChanged"/>
+
+                <ListBox x:Name="SprListView" Grid.Row="2" SelectionMode="Multiple"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="2,4">
+                                <Border Width="50" Height="50" CornerRadius="4"
+                                        Background="{DynamicResource SystemChromeLowColor}">
+                                    <Image Source="{Binding Image}" Width="48" Height="48"
+                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                </Border>
+                                <StackPanel Orientation="Vertical" VerticalAlignment="Center"
+                                            Margin="6,0,0,0">
+                                    <TextBlock Text="{Binding Id}" FontSize="11"/>
+                                    <TextBlock Text="{Binding SizeLabel}" FontSize="9"
+                                               Foreground="{DynamicResource SystemBaseMediumColor}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Grid>
+
+        <!-- ═══ STATUS BAR ═══ -->
+        <Border Grid.Row="2" Padding="8,4" BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemBaseLowColor}">
+            <TextBlock x:Name="StatusBar" FontSize="11"
+                       Foreground="{DynamicResource SystemBaseMediumColor}"
+                       Text="Ready"/>
+        </Border>
+
+    </Grid>
+</Window>

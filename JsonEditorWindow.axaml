@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Assets_Editor.JsonEditorWindow"
+        Title="JSON Editor"
+        Width="560" Height="720"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SystemChromeMediumLowColor}">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="10">
+        <TextBlock Grid.Row="0" x:Name="HeaderText"
+                   FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"
+                   Foreground="{DynamicResource SystemAccentColor}"/>
+        <Border Grid.Row="1" BorderThickness="1"
+                BorderBrush="{DynamicResource SystemBaseLowColor}" CornerRadius="6">
+            <TextBox x:Name="JsonBox"
+                     AcceptsReturn="True" AcceptsTab="True"
+                     FontFamily="Cascadia Mono,Menlo,Consolas,monospace" FontSize="12"
+                     TextWrapping="Wrap"
+                     Padding="8"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+        </Border>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="0,8,0,0" Spacing="6">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="0,0,12,0"
+                       Foreground="{DynamicResource SystemBaseMediumColor}" FontSize="11"/>
+            <Button Content="Cancel"     Click="Cancel_Click"     Padding="14,6"/>
+            <Button Content="Apply JSON" Click="Apply_Click"      Padding="14,6"
+                    Background="{DynamicResource SystemAccentColor}" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</Window>

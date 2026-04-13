@@ -1,0 +1,266 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Assets_Editor.ItemsXmlEditor"
+        Title="items.xml Editor"
+        Width="1180" Height="780"
+        WindowStartupLocation="CenterOwner">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Top toolbar -->
+        <Border Grid.Row="0" Padding="8,6" BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource SystemBaseLowColor}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="📂 Open items.xml…" Click="Open_Click"/>
+                <Button Content="💾 Save"            Click="Save_Click"/>
+                <Button Content="💾 Save As…"        Click="SaveAs_Click"/>
+                <Separator Width="1" Margin="4,0"/>
+                <Button Content="➕ New Entry"       Click="AddNew_Click"/>
+                <Button Content="🗑 Delete Selected" Click="DeleteSelected_Click"/>
+                <Separator Width="1" Margin="4,0"/>
+                <TextBlock x:Name="PathText" VerticalAlignment="Center" Opacity="0.7" FontSize="11"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Split view: list | editor -->
+        <Grid Grid.Row="1" ColumnDefinitions="340,*">
+            <!-- Left: item list with image thumbnails -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <TextBox Grid.Row="0" x:Name="SearchBox" Watermark="Search by ID or name…"
+                         Margin="6" TextChanged="SearchBox_TextChanged"/>
+                <ListBox Grid.Row="1" x:Name="ItemList"
+                         SelectionChanged="ItemList_SelectionChanged"
+                         ContainerPrepared="ItemList_ContainerPrepared"
+                         ContainerClearing="ItemList_ContainerClearing"
+                         Margin="6,0,6,6">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="2,4">
+                                <Border Width="40" Height="40" CornerRadius="4"
+                                        Background="{DynamicResource SystemChromeLowColor}">
+                                    <Image Source="{Binding Image}" Width="38" Height="38"
+                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                </Border>
+                                <StackPanel Orientation="Vertical" VerticalAlignment="Center"
+                                            Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding Id}" FontSize="11" Opacity="0.65"/>
+                                    <TextBlock Text="{Binding Name}" FontSize="13"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="240"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+
+            <!-- Right: editor form with tabs -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,*">
+                <!-- Header: big image + ID + name -->
+                <Border Grid.Row="0" Padding="10" Margin="8,8,8,0" CornerRadius="6"
+                        BorderThickness="1" BorderBrush="{DynamicResource SystemBaseLowColor}"
+                        Background="{DynamicResource SystemChromeMediumLowColor}">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border Width="96" Height="96" CornerRadius="4"
+                                Background="{DynamicResource SystemChromeLowColor}">
+                            <Image x:Name="HeaderImage" Width="90" Height="90"
+                                   RenderOptions.BitmapInterpolationMode="None"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                            <TextBlock x:Name="HeaderIdText" Text="No selection" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock x:Name="HeaderNameText" Text="" FontSize="13" Opacity="0.7"/>
+                            <TextBlock x:Name="HeaderTypeText" Text="" FontSize="11" Opacity="0.55"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Tabs: basic | combat | properties | flags | custom -->
+                <TabControl Grid.Row="1" Margin="8">
+                    <!-- Basic -->
+                    <TabItem Header="Basic">
+                        <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="ID" VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="IdBox" Minimum="1" Maximum="65535" FormatString="0"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Article" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="ArticleBox" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Name" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="NameBox" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Plural" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="3" Grid.Column="1" x:Name="PluralBox" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Description" VerticalAlignment="Top" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="DescriptionBox"
+                                             AcceptsReturn="True" Height="60" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Type" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="5" Grid.Column="1" x:Name="TypeBox" Margin="0,4,0,0"
+                                             Watermark="bucket / key / depot / teleport / door / magicfield / bed / rune / food / …"/>
+
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Weight (×100)" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="WeightBox" Minimum="0" Maximum="999999" FormatString="0" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Combat -->
+                    <TabItem Header="Combat">
+                        <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="130,*,20,130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Slot Type" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="SlotTypeBox"
+                                             Watermark="head / body / legs / feet / necklace / ring / ammo / weapon / shield / two-handed"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="3" Text="Weapon Type" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Row="0" Grid.Column="4" x:Name="WeaponTypeBox"
+                                             Watermark="sword / axe / club / distance / wand / ammunition"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Attack" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="AttackBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="3" Text="Defense" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="4" x:Name="DefenseBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Extra Def" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="ExtraDefBox" Minimum="-999" Maximum="999" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="3" Text="Armor" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="4" x:Name="ArmorBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Range" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="RangeBox" Minimum="0" Maximum="20" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="3" Text="Break Chance" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="3" Grid.Column="4" x:Name="BreakChanceBox" Minimum="0" Maximum="100" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Shoot Type" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="ShootTypeBox" Margin="0,4,0,0"
+                                             Watermark="bolt / arrow / fire / energy / poisonarrow / …"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="3" Text="Max Hit Chance" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="4" Grid.Column="4" x:Name="MaxHitChanceBox" Minimum="0" Maximum="100" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Required Level" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="ReqLevelBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="3" Text="Required Mag" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="5" Grid.Column="4" x:Name="ReqMagBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Charges" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="ChargesBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="3" Text="Duration (s)" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="6" Grid.Column="4" x:Name="DurationBox" Minimum="0" Maximum="999999" FormatString="0" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Properties -->
+                    <TabItem Header="Properties">
+                        <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="130,*,20,130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Decay To" VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="DecayToBox" Minimum="0" Maximum="65535" FormatString="0"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="3" Text="Rotate To" VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="4" x:Name="RotateToBox" Minimum="0" Maximum="65535" FormatString="0"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Container Size" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="ContainerSizeBox" Minimum="0" Maximum="100" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="3" Text="Speed" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="4" x:Name="SpeedBox" Minimum="-999" Maximum="999" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Max Text Len" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="MaxTextLenBox" Minimum="0" Maximum="9999" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="3" Text="Write-Once ID" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="4" x:Name="WriteOnceIdBox" Minimum="0" Maximum="65535" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Corpse Type" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="3" Grid.Column="1" x:Name="CorpseTypeBox" Margin="0,4,0,0"
+                                             Watermark="venom / blood / undead / fire / energy"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="3" Text="Fluid Source" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="3" Grid.Column="4" x:Name="FluidSourceBox" Margin="0,4,0,0"
+                                             Watermark="water / blood / beer / slime / mana / life / oil / …"/>
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Effect" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="EffectBox" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="3" Text="Wrapable" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="4" Grid.Column="4" x:Name="WrapableBox" Minimum="0" Maximum="65535" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Unwrapable" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="UnwrapableBox" Minimum="0" Maximum="65535" FormatString="0" Margin="0,4,0,0"/>
+                                </Grid>
+
+                                <Separator Margin="0,8"/>
+                                <TextBlock Text="Skill Bonuses" FontWeight="SemiBold"/>
+                                <Grid ColumnDefinitions="130,*,20,130,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Sword" VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="SkillSwordBox" Minimum="-99" Maximum="99" FormatString="0"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="3" Text="Axe" VerticalAlignment="Center"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="4" x:Name="SkillAxeBox" Minimum="-99" Maximum="99" FormatString="0"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Club" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="SkillClubBox" Minimum="-99" Maximum="99" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="3" Text="Distance" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="4" x:Name="SkillDistBox" Minimum="-99" Maximum="99" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Shield" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="SkillShieldBox" Minimum="-99" Maximum="99" FormatString="0" Margin="0,4,0,0"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="3" Text="Fishing" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="2" Grid.Column="4" x:Name="SkillFishBox" Minimum="-99" Maximum="99" FormatString="0" Margin="0,4,0,0"/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Magic Points" VerticalAlignment="Center" Margin="0,4,0,0"/>
+                                    <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="MagicPointsBox" Minimum="-99" Maximum="99" FormatString="0" Margin="0,4,0,0"/>
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Flags -->
+                    <TabItem Header="Flags">
+                        <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
+                            <WrapPanel>
+                                <CheckBox x:Name="StopDurationCb"    Content="stopDuration"    MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="ShowCountCb"       Content="showCount"       MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="ShowAttributesCb"  Content="showAttributes"  MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="ReadableCb"        Content="readable"        MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="WriteableCb"       Content="writeable"       MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="AllowDistReadCb"   Content="allowDistRead"   MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="ReplaceAbleCb"     Content="replaceable"     MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="BlockProjectileCb" Content="blockprojectile" MinWidth="170" Margin="2,2"/>
+                                <CheckBox x:Name="MoveAbleCb"        Content="moveable"        MinWidth="170" Margin="2,2" IsChecked="True"/>
+                                <CheckBox x:Name="PickupAbleCb"      Content="pickupable"      MinWidth="170" Margin="2,2" IsChecked="True"/>
+                            </WrapPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Custom / unknown -->
+                    <TabItem Header="Custom">
+                        <Grid RowDefinitions="*,Auto" Margin="8">
+                            <DataGrid x:Name="AttrsGrid" Grid.Row="0" AutoGenerateColumns="False"
+                                      CanUserResizeColumns="True" MinHeight="300">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Key"   Binding="{Binding Key}"   Width="240"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                                <Button Content="➕ Add Attribute"    Click="AddAttr_Click"/>
+                                <Button Content="🗑 Remove Selected" Click="RemoveAttr_Click"/>
+                                <TextBlock VerticalAlignment="Center" Opacity="0.6" FontSize="11"
+                                           Text="Attributes not known to the editor are preserved here."/>
+                            </StackPanel>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
+
+        <!-- Status bar -->
+        <Border Grid.Row="2" Padding="8,4" BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemBaseLowColor}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="💾 Apply Changes" Click="ApplyChanges_Click" Padding="8,2"/>
+                <TextBlock x:Name="StatusText" FontSize="11" Opacity="0.7" Text="Ready"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
