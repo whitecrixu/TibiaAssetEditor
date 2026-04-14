@@ -5,8 +5,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Assets_Editor</RootNamespace>
     <AssemblyName>Tibia Asset Editor</AssemblyName>
-    <FileVersion>1.0.0</FileVersion>
-    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0</FileVersion>
+    <AssemblyVersion>1.1.0</AssemblyVersion>
     <Product>Tibia Asset Editor By WhiteCrixu</Product>
     <Description>Cross-platform Tibia Assets Editor</Description>
     <Nullable>enable</Nullable>

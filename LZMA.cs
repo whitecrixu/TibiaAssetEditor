@@ -147,55 +147,74 @@ namespace Assets_Editor
 
         public static void ExportLzmaFile(SKBitmap targetImg, ref string filename)
         {
-            // BMPv5 is built by hand below; we don't need SKImage.Encode(Bmp) at all (Linux
-            // SkiaSharp doesn't even ship a BMP encoder, so that path used to NRE).
+            // BMPv4 built by hand to match the Windows writer byte-for-byte:
+            //   • positive height → bottom-up row order (Tibia's BMP loader assumes this)
+            //   • straight-alpha BGRA (unpremultiplied) — SKCanvas draws into Premul
+            //     targets, so we must unpremultiply before writing the pixels out.
+            // Any deviation from these two expectations (top-down rows or premultiplied
+            // pixels) produces sheets that load in this editor but crash Tibia at runtime.
+            int width = targetImg.Width;
+            int height = targetImg.Height;
+            int pixelDataSize = width * height * 4;
+
+            IntPtr pixelsPtr = targetImg.GetPixels();
+            byte[] srcPixels = new byte[pixelDataSize];
+            System.Runtime.InteropServices.Marshal.Copy(pixelsPtr, srcPixels, 0, pixelDataSize);
+
+            if (targetImg.AlphaType == SKAlphaType.Premul)
+            {
+                for (int i = 0; i < pixelDataSize; i += 4)
+                {
+                    byte a = srcPixels[i + 3];
+                    if (a != 0 && a != 255)
+                    {
+                        srcPixels[i]     = (byte)Math.Min(255, (srcPixels[i]     * 255 + a / 2) / a);
+                        srcPixels[i + 1] = (byte)Math.Min(255, (srcPixels[i + 1] * 255 + a / 2) / a);
+                        srcPixels[i + 2] = (byte)Math.Min(255, (srcPixels[i + 2] * 255 + a / 2) / a);
+                    }
+                    else if (a == 0)
+                    {
+                        srcPixels[i] = 0; srcPixels[i + 1] = 0; srcPixels[i + 2] = 0;
+                    }
+                }
+            }
+
             MemoryStream outFile = new MemoryStream();
 
-            // BMP header
-            outFile.WriteByte(0x42);
-            outFile.WriteByte(0x4D);
-            outFile.Write(BitConverter.GetBytes(0));
-            outFile.Write(BitConverter.GetBytes((ushort)0));
-            outFile.Write(BitConverter.GetBytes((ushort)0));
-            outFile.Write(BitConverter.GetBytes(122));
-            outFile.Write(BitConverter.GetBytes(108));
-            outFile.Write(BitConverter.GetBytes(targetImg.Width));
-            outFile.Write(BitConverter.GetBytes(-targetImg.Height));
-            outFile.Write(BitConverter.GetBytes((ushort)1));
-            outFile.Write(BitConverter.GetBytes((ushort)32));
-            outFile.Write(BitConverter.GetBytes(3));
+            // BITMAPV4HEADER — matches Windows Assets Editor/LZMA.cs byte-for-byte.
+            outFile.WriteByte(0x42);                                    // 'B'
+            outFile.WriteByte(0x4D);                                    // 'M'
+            outFile.Write(BitConverter.GetBytes(0));                    // file size (patched below)
+            outFile.Write(BitConverter.GetBytes((ushort)0));            // reserved
+            outFile.Write(BitConverter.GetBytes((ushort)0));            // reserved
+            outFile.Write(BitConverter.GetBytes(122));                  // pixel array offset
+            outFile.Write(BitConverter.GetBytes(108));                  // bV4Size
+            outFile.Write(BitConverter.GetBytes(width));                // bV4Width
+            outFile.Write(BitConverter.GetBytes(height));               // bV4Height (positive → bottom-up)
+            outFile.Write(BitConverter.GetBytes((ushort)1));            // bV4Planes
+            outFile.Write(BitConverter.GetBytes((ushort)32));           // bV4BitCount
+            outFile.Write(BitConverter.GetBytes(3));                    // bV4Compression = BI_BITFIELDS
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4SizeImage
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4XPelsPerMeter
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4YPelsPerMeter
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4ClrUsed
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4ClrImportant
+            outFile.Write(new byte[] { 0x0, 0x0, 0xFF, 0x0 }, 0, 4);    // bV4RedMask
+            outFile.Write(new byte[] { 0x0, 0xFF, 0x0, 0x0 }, 0, 4);    // bV4GreenMask
+            outFile.Write(new byte[] { 0xFF, 0x0, 0x0, 0x0 }, 0, 4);    // bV4BlueMask
+            outFile.Write(new byte[] { 0x0, 0x0, 0x0, 0xFF }, 0, 4);    // bV4AlphaMask
+            outFile.Write(new byte[] { 0x57, 0x69, 0x6E, 0x20 }, 0, 4); // bV4CSType = "Win "
+            outFile.Write(new byte[36]);                                // bV4Endpoints (9 ints)
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4GammaRed
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4GammaGreen
+            outFile.Write(BitConverter.GetBytes(0));                    // bV4GammaBlue
 
-            int pixelDataSize = targetImg.Width * targetImg.Height * 4;
-            outFile.Write(BitConverter.GetBytes(pixelDataSize));
-            outFile.Write(BitConverter.GetBytes(2835));
-            outFile.Write(BitConverter.GetBytes(2835));
-            outFile.Write(BitConverter.GetBytes(0));
-            outFile.Write(BitConverter.GetBytes(0));
-            outFile.Write(BitConverter.GetBytes(0x00FF0000));
-            outFile.Write(BitConverter.GetBytes(0x0000FF00));
-            outFile.Write(BitConverter.GetBytes(0x000000FF));
-            outFile.Write(BitConverter.GetBytes(unchecked((int)0xFF000000)));
-            outFile.Write(BitConverter.GetBytes(0x206E6957));
-            outFile.Write(new byte[36]);
-            outFile.Write(BitConverter.GetBytes(0));
-            outFile.Write(BitConverter.GetBytes(0));
-            outFile.Write(BitConverter.GetBytes(0));
-
-            // pixel data
-            IntPtr pixelsPtr = targetImg.GetPixels();
-            byte[] pixelBytes = new byte[pixelDataSize];
-            System.Runtime.InteropServices.Marshal.Copy(pixelsPtr, pixelBytes, 0, pixelDataSize);
-
-            for (int i = 0; i < pixelDataSize; i += 4)
+            // Pixel data — write rows bottom-up. SKBitmap is top-down in memory, so
+            // row (height-1) goes first.
+            int stride = width * 4;
+            for (int r = height - 1; r >= 0; r--)
             {
-                byte b = pixelBytes[i];
-                byte g = pixelBytes[i + 1];
-                byte r = pixelBytes[i + 2];
-                byte a = pixelBytes[i + 3];
-                outFile.WriteByte(b);
-                outFile.WriteByte(g);
-                outFile.WriteByte(r);
-                outFile.WriteByte(a);
+                outFile.Write(srcPixels, r * stride, stride);
             }
 
             int totalSize = (int)outFile.Length;

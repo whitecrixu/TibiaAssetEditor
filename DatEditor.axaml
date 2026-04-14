@@ -113,6 +113,8 @@
                     <MenuItem Header="📤 Export">
                         <MenuItem Header="📤 Export OBD…"    Click="ExportOBD_Click"/>
                         <MenuItem Header="📤 Export AEC…"    Click="ExportAEC_Click"/>
+                        <MenuItem Header="📤 Export AEC by ID range…" Click="ExportAECRange_Click"
+                                  ToolTip.Tip="Export all appearances in a given ID range (e.g. 5000–5100) from the active tab"/>
                         <Separator/>
                         <MenuItem Header="🖼 Export All Images…" Click="ExportImages_Click"/>
                         <MenuItem Header="🖼 Batch Export Selected…" Click="BatchExportSelected_Click"/>

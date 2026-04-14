@@ -1090,6 +1090,58 @@ namespace Assets_Editor
             }
         }
 
+        // ── Progress dialog helper ────────────────────────────────────────────
+        //
+        // Inline, non-modal progress window used by AEC import/export and by the
+        // range-export handler. Ticking yields to the dispatcher at Background
+        // priority so pending render frames can flush — without that, the window
+        // never repaints during a tight loop on the UI thread.
+        private sealed class ProgressHost
+        {
+            public Window Window = null!;
+            public ProgressBar Bar = null!;
+            public TextBlock Label = null!;
+            public int Total;
+
+            public async System.Threading.Tasks.Task Tick(int current, string text)
+            {
+                Bar.Value = current;
+                Label.Text = $"{current} / {Total} — {text}";
+                await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            }
+
+            public void Close() => Window.Close();
+        }
+
+        private ProgressHost OpenProgress(string title, int total)
+        {
+            var w = new Window
+            {
+                Title = title,
+                Width = 460,
+                Height = 130,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false,
+                ShowInTaskbar = false,
+                SystemDecorations = Avalonia.Controls.SystemDecorations.BorderOnly,
+            };
+            var panel = new StackPanel { Margin = new Avalonia.Thickness(14), Spacing = 10 };
+            var label = new TextBlock { Text = $"0 / {total}", FontWeight = Avalonia.Media.FontWeight.SemiBold };
+            var bar = new ProgressBar
+            {
+                Minimum = 0,
+                Maximum = Math.Max(1, total),
+                Value = 0,
+                Height = 22,
+                ShowProgressText = true,
+            };
+            panel.Children.Add(label);
+            panel.Children.Add(bar);
+            w.Content = panel;
+            w.Show(this);
+            return new ProgressHost { Window = w, Bar = bar, Label = label, Total = total };
+        }
+
         // ── AEC (Assets Editor Container) ─────────────────────────────────────
         //
         // AEC is just the `Appearances` protobuf serialized to disk, with each
@@ -1106,28 +1158,12 @@ namespace Assets_Editor
                 ErrorManager.ShowError("No appearances loaded.");
                 return;
             }
-            if (CurrentObjectAppearance == null)
-            {
-                ErrorManager.ShowInfo("Select an appearance in the list first.");
-                return;
-            }
-
-            try { ApplyFlagsToAppearance(CurrentObjectAppearance); } catch { /* not fatal */ }
-
-            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = "Export AEC",
-                DefaultExtension = "aec",
-                SuggestedFileName = $"{CurrentObjectAppearance.AppearanceType}_{CurrentObjectAppearance.Id}.aec",
-                FileTypeChoices = [new FilePickerFileType("Assets Editor Container") { Patterns = ["*.aec"] }]
-            });
-            if (file == null) return;
 
             // Tibia's .dat files leave Appearance.appearance_type unset — the category
             // is implied by which repeated field the entry lives in (outfit/object/…).
-            // For AEC we must infer the category from the source list (which ObjectMenu
-            // tab the user is on), otherwise protobuf's default enum value would make
-            // every exported outfit look like an APPEARANCE_OBJECT on re-import.
+            // For AEC we must force the category from the active tab, otherwise
+            // protobuf's default enum value would make every exported outfit look like
+            // an APPEARANCE_OBJECT on re-import.
             var sourceType = ObjectMenu.SelectedIndex switch
             {
                 0 => APPEARANCE_TYPE.AppearanceOutfit,
@@ -1137,52 +1173,293 @@ namespace Assets_Editor
                 _ => APPEARANCE_TYPE.AppearanceObject,
             };
 
+            // Collect sources: all multi-selected rows, or fall back to the currently
+            // previewed appearance if nothing is selected.
+            var sources = new List<Appearance>();
+            if (ObjListView.SelectedItems != null && ObjListView.SelectedItems.Count > 0)
+            {
+                foreach (var item in ObjListView.SelectedItems)
+                {
+                    if (item is not ShowList sl) continue;
+                    Appearance? a = sourceType switch
+                    {
+                        APPEARANCE_TYPE.AppearanceOutfit  => _outfitLookup.GetValueOrDefault(sl.Id),
+                        APPEARANCE_TYPE.AppearanceObject  => _itemLookup.GetValueOrDefault(sl.Id),
+                        APPEARANCE_TYPE.AppearanceEffect  => _effectLookup.GetValueOrDefault(sl.Id),
+                        APPEARANCE_TYPE.AppearanceMissile => _missileLookup.GetValueOrDefault(sl.Id),
+                        _ => null,
+                    };
+                    if (a != null) sources.Add(a);
+                }
+            }
+            if (sources.Count == 0 && CurrentObjectAppearance != null)
+                sources.Add(CurrentObjectAppearance);
+
+            if (sources.Count == 0)
+            {
+                ErrorManager.ShowInfo("Select one or more appearances in the list first.");
+                return;
+            }
+
+            // Flush pending UI edits to the currently previewed appearance so they get
+            // included when that appearance is part of the selection.
+            if (CurrentObjectAppearance != null)
+            {
+                try { ApplyFlagsToAppearance(CurrentObjectAppearance); } catch { /* not fatal */ }
+            }
+
+            string suggestedName = sources.Count == 1
+                ? $"{sourceType}_{sources[0].Id}.aec"
+                : $"{sourceType}_{sources.Count}items.aec";
+
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export AEC",
+                DefaultExtension = "aec",
+                SuggestedFileName = suggestedName,
+                FileTypeChoices = [new FilePickerFileType("Assets Editor Container") { Patterns = ["*.aec"] }]
+            });
+            if (file == null) return;
+
+            var progress = OpenProgress($"Exporting {sources.Count} {sourceType}(s) to AEC…", sources.Count);
             try
             {
                 var container = new Appearances();
-                var clone = CurrentObjectAppearance.Clone();
-                clone.AppearanceType = sourceType;
+                uint counter = 0;  // global across all exported appearances
 
-                // Fill SpriteData with PNG bytes (one per SpriteId across all frame groups)
-                // and renumber SpriteId to a simple 0..N counter so the file is self-contained.
-                uint counter = 0;
-                for (int fg = 0; fg < clone.FrameGroup.Count; fg++)
+                int done = 0;
+                foreach (var src in sources)
                 {
-                    var si = clone.FrameGroup[fg].SpriteInfo;
-                    for (int s = 0; s < si.SpriteId.Count; s++)
+                    await progress.Tick(done, $"collecting sprites for ID {src.Id}");
+
+                    var clone = src.Clone();
+                    clone.AppearanceType = sourceType;
+
+                    // Fill SpriteData with PNG bytes (one per SpriteId across all frame
+                    // groups) and renumber SpriteId to a simple 0..N counter that spans
+                    // the entire container, matching the importer's flat walk.
+                    for (int fg = 0; fg < clone.FrameGroup.Count; fg++)
                     {
-                        var stream = MainWindow.getSpriteStream((int)si.SpriteId[s]);
-                        if (stream != null)
+                        var si = clone.FrameGroup[fg].SpriteInfo;
+                        for (int s = 0; s < si.SpriteId.Count; s++)
                         {
-                            stream.Position = 0;
-                            clone.SpriteData.Add(ByteString.CopyFrom(stream.ToArray()));
+                            var stream = MainWindow.getSpriteStream((int)si.SpriteId[s]);
+                            if (stream != null)
+                            {
+                                stream.Position = 0;
+                                clone.SpriteData.Add(ByteString.CopyFrom(stream.ToArray()));
+                            }
+                            else
+                            {
+                                clone.SpriteData.Add(ByteString.Empty);
+                            }
+                            si.SpriteId[s] = counter++;
                         }
-                        else
-                        {
-                            clone.SpriteData.Add(ByteString.Empty);
-                        }
-                        si.SpriteId[s] = counter++;
                     }
+
+                    switch (sourceType)
+                    {
+                        case APPEARANCE_TYPE.AppearanceOutfit:  container.Outfit.Add(clone);  break;
+                        case APPEARANCE_TYPE.AppearanceObject:  container.Object.Add(clone);  break;
+                        case APPEARANCE_TYPE.AppearanceEffect:  container.Effect.Add(clone);  break;
+                        case APPEARANCE_TYPE.AppearanceMissile: container.Missile.Add(clone); break;
+                    }
+                    done++;
                 }
 
-                switch (sourceType)
-                {
-                    case APPEARANCE_TYPE.AppearanceOutfit:  container.Outfit.Add(clone);  break;
-                    case APPEARANCE_TYPE.AppearanceObject:  container.Object.Add(clone);  break;
-                    case APPEARANCE_TYPE.AppearanceEffect:  container.Effect.Add(clone);  break;
-                    case APPEARANCE_TYPE.AppearanceMissile: container.Missile.Add(clone); break;
-                }
-
+                await progress.Tick(done, "writing .aec file");
                 using (var fs = await file.OpenWriteAsync())
                     container.WriteTo(fs);
 
                 if (StatusBar != null)
-                    StatusBar.Text = $"Exported {clone.AppearanceType} {CurrentObjectAppearance.Id} as AEC.";
-                ErrorManager.ShowInfo($"Exported to:\n{file.Path.LocalPath}");
+                    StatusBar.Text = $"Exported {sources.Count} {sourceType}(s) as AEC.";
+                ErrorManager.ShowInfo($"Exported {sources.Count} appearance(s) to:\n{file.Path.LocalPath}");
             }
             catch (Exception ex)
             {
                 ErrorManager.ShowError($"AEC export failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                progress.Close();
+            }
+        }
+
+        private async void ExportAECRange_Click(object? sender, RoutedEventArgs e)
+        {
+            if (MainWindow.appearances == null)
+            {
+                ErrorManager.ShowError("No appearances loaded.");
+                return;
+            }
+
+            var sourceType = ObjectMenu.SelectedIndex switch
+            {
+                0 => APPEARANCE_TYPE.AppearanceOutfit,
+                1 => APPEARANCE_TYPE.AppearanceObject,
+                2 => APPEARANCE_TYPE.AppearanceEffect,
+                3 => APPEARANCE_TYPE.AppearanceMissile,
+                _ => APPEARANCE_TYPE.AppearanceObject,
+            };
+
+            var lookup = sourceType switch
+            {
+                APPEARANCE_TYPE.AppearanceOutfit  => _outfitLookup,
+                APPEARANCE_TYPE.AppearanceObject  => _itemLookup,
+                APPEARANCE_TYPE.AppearanceEffect  => _effectLookup,
+                APPEARANCE_TYPE.AppearanceMissile => _missileLookup,
+                _ => _itemLookup,
+            };
+
+            // Range prompt
+            var dialog = new Window
+            {
+                Title = $"Export {sourceType} range to AEC",
+                Width = 340,
+                Height = 180,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false,
+            };
+
+            var panel = new StackPanel { Margin = new Avalonia.Thickness(12), Spacing = 8 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"Export {sourceType} by ID range\n(both ends inclusive, missing IDs are skipped)",
+                FontWeight = Avalonia.Media.FontWeight.SemiBold,
+            });
+
+            var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            row.Children.Add(new TextBlock { Text = "From:", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            var fromBox = new TextBox { Width = 100, Watermark = "5000" };
+            row.Children.Add(fromBox);
+            row.Children.Add(new TextBlock { Text = "To:", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            var toBox = new TextBox { Width = 100, Watermark = "5100" };
+            row.Children.Add(toBox);
+            panel.Children.Add(row);
+
+            var btns = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 6,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            };
+            var okBtn = new Button { Content = "Export", IsDefault = true };
+            var cancelBtn = new Button { Content = "Cancel", IsCancel = true };
+            btns.Children.Add(okBtn);
+            btns.Children.Add(cancelBtn);
+            panel.Children.Add(btns);
+
+            dialog.Content = panel;
+
+            (uint from, uint to)? picked = null;
+            okBtn.Click += (_, _) =>
+            {
+                if (uint.TryParse(fromBox.Text?.Trim(), out uint f) &&
+                    uint.TryParse(toBox.Text?.Trim(), out uint t))
+                {
+                    if (f > t) (f, t) = (t, f);
+                    picked = (f, t);
+                    dialog.Close();
+                }
+                else
+                {
+                    ErrorManager.ShowError("Enter two numeric IDs.");
+                }
+            };
+            cancelBtn.Click += (_, _) => dialog.Close();
+
+            await dialog.ShowDialog(this);
+            if (picked == null) return;
+
+            var (fromId, toId) = picked.Value;
+            var sources = new List<Appearance>();
+            for (uint id = fromId; id <= toId; id++)
+            {
+                if (lookup.TryGetValue(id, out var a))
+                    sources.Add(a);
+            }
+
+            if (sources.Count == 0)
+            {
+                ErrorManager.ShowInfo($"No {sourceType} found in range {fromId}–{toId}.");
+                return;
+            }
+
+            // Flush pending edits on the currently-previewed appearance if it falls
+            // in the range, so in-flight flag changes get exported.
+            if (CurrentObjectAppearance != null &&
+                CurrentObjectAppearance.Id >= fromId && CurrentObjectAppearance.Id <= toId)
+            {
+                try { ApplyFlagsToAppearance(CurrentObjectAppearance); } catch { /* not fatal */ }
+            }
+
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export AEC range",
+                DefaultExtension = "aec",
+                SuggestedFileName = $"{sourceType}_{fromId}-{toId}.aec",
+                FileTypeChoices = [new FilePickerFileType("Assets Editor Container") { Patterns = ["*.aec"] }]
+            });
+            if (file == null) return;
+
+            var progress = OpenProgress($"Exporting {sourceType} {fromId}–{toId}…", sources.Count);
+            try
+            {
+                var container = new Appearances();
+                uint counter = 0;
+                int done = 0;
+
+                foreach (var src in sources)
+                {
+                    await progress.Tick(done, $"collecting sprites for ID {src.Id}");
+
+                    var clone = src.Clone();
+                    clone.AppearanceType = sourceType;
+
+                    for (int fg = 0; fg < clone.FrameGroup.Count; fg++)
+                    {
+                        var si = clone.FrameGroup[fg].SpriteInfo;
+                        for (int s = 0; s < si.SpriteId.Count; s++)
+                        {
+                            var stream = MainWindow.getSpriteStream((int)si.SpriteId[s]);
+                            if (stream != null)
+                            {
+                                stream.Position = 0;
+                                clone.SpriteData.Add(ByteString.CopyFrom(stream.ToArray()));
+                            }
+                            else
+                            {
+                                clone.SpriteData.Add(ByteString.Empty);
+                            }
+                            si.SpriteId[s] = counter++;
+                        }
+                    }
+
+                    switch (sourceType)
+                    {
+                        case APPEARANCE_TYPE.AppearanceOutfit:  container.Outfit.Add(clone);  break;
+                        case APPEARANCE_TYPE.AppearanceObject:  container.Object.Add(clone);  break;
+                        case APPEARANCE_TYPE.AppearanceEffect:  container.Effect.Add(clone);  break;
+                        case APPEARANCE_TYPE.AppearanceMissile: container.Missile.Add(clone); break;
+                    }
+                    done++;
+                }
+
+                await progress.Tick(done, "writing .aec file");
+                using (var fs = await file.OpenWriteAsync())
+                    container.WriteTo(fs);
+
+                if (StatusBar != null)
+                    StatusBar.Text = $"Exported {sources.Count} {sourceType}(s) from range {fromId}–{toId} as AEC.";
+                ErrorManager.ShowInfo($"Exported {sources.Count} appearance(s) from range {fromId}–{toId} to:\n{file.Path.LocalPath}");
+            }
+            catch (Exception ex)
+            {
+                ErrorManager.ShowError($"AEC range export failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                progress.Close();
             }
         }
 
@@ -1212,25 +1489,38 @@ namespace Assets_Editor
 
             int imported = 0, failed = 0;
             var failureDetails = new List<string>();
-            foreach (var file in files)
+
+            var progress = OpenProgress($"Importing {files.Count} AEC file(s)…", files.Count);
+            try
             {
-                try
+                int fileIndex = 0;
+                foreach (var file in files)
                 {
-                    int count = InternalImportAEC(file.Path.LocalPath);
-                    if (count > 0) imported += count;
-                    else
+                    await progress.Tick(fileIndex, $"{Path.GetFileName(file.Path.LocalPath)}");
+                    try
+                    {
+                        int count = await InternalImportAECAsync(file.Path.LocalPath, progress);
+                        if (count > 0) imported += count;
+                        else
+                        {
+                            failed++;
+                            failureDetails.Add($"{Path.GetFileName(file.Path.LocalPath)}: parsed 0 appearances");
+                        }
+                    }
+                    catch (Exception ex)
                     {
                         failed++;
-                        failureDetails.Add($"{Path.GetFileName(file.Path.LocalPath)}: parsed 0 appearances");
+                        string detail = $"{Path.GetFileName(file.Path.LocalPath)}: {ex.GetType().Name}: {ex.Message}";
+                        failureDetails.Add(detail);
+                        MainWindow.Log($"AEC import failed — {detail}\n{ex.StackTrace}");
                     }
+                    fileIndex++;
+                    await progress.Tick(fileIndex, $"done {Path.GetFileName(file.Path.LocalPath)}");
                 }
-                catch (Exception ex)
-                {
-                    failed++;
-                    string detail = $"{Path.GetFileName(file.Path.LocalPath)}: {ex.GetType().Name}: {ex.Message}";
-                    failureDetails.Add(detail);
-                    MainWindow.Log($"AEC import failed — {detail}\n{ex.StackTrace}");
-                }
+            }
+            finally
+            {
+                progress.Close();
             }
 
             FocusLastImported();
@@ -1311,6 +1601,95 @@ namespace Assets_Editor
 
             MainWindow.Log($"AEC '{Path.GetFileName(fileName)}' inserted {imported} appearance(s), {streams.Count} sprite blob(s) → {newIdByStreamIdx.Count} new ids.");
             return imported;
+        }
+
+        // Progress-reporting variant of InternalImportAEC. Ticks the shared ProgressHost
+        // between each major stage (parse / collect / build sheets / insert) and once
+        // per appearance during the two appearance-walk passes, so the UI repaints
+        // during long imports. Logic is intentionally duplicated from InternalImportAEC
+        // rather than folded in, to keep the sync path simple for any future callers.
+        private async System.Threading.Tasks.Task<int> InternalImportAECAsync(string fileName, ProgressHost parent)
+        {
+            string baseLabel = Path.GetFileName(fileName);
+
+            Appearances container;
+            using (var fs = new FileStream(fileName, FileMode.Open, FileAccess.Read))
+                container = Appearances.Parser.ParseFrom(fs);
+
+            int totalAppearances =
+                container.Outfit.Count + container.Object.Count +
+                container.Effect.Count + container.Missile.Count;
+
+            MainWindow.Log($"AEC '{baseLabel}' parsed: outfits={container.Outfit.Count} objects={container.Object.Count} effects={container.Effect.Count} missiles={container.Missile.Count}");
+
+            // Per-file sub-progress window so the user sees appearance-level ticks on
+            // top of the outer file-level progress bar.
+            var sub = OpenProgress($"Importing {baseLabel}", Math.Max(1, totalAppearances * 2));
+            try
+            {
+                var streams = new List<(int width, int height, MemoryStream png)>();
+                int ticked = 0;
+
+                async System.Threading.Tasks.Task AddFromAppearance(Appearance a, string kind)
+                {
+                    foreach (var bs in a.SpriteData)
+                    {
+                        byte[] bytes = bs.ToByteArray();
+                        int w = 32, h = 32;
+                        try
+                        {
+                            using var bmp = SKBitmap.Decode(bytes);
+                            if (bmp != null) { w = bmp.Width; h = bmp.Height; }
+                        }
+                        catch { /* fall back to 32×32 */ }
+                        var ms = new MemoryStream(bytes, writable: false);
+                        streams.Add((w, h, ms));
+                    }
+                    ticked++;
+                    await sub.Tick(ticked, $"reading {kind} {a.Id}");
+                }
+
+                foreach (var a in container.Outfit)  await AddFromAppearance(a, "outfit");
+                foreach (var a in container.Object)  await AddFromAppearance(a, "object");
+                foreach (var a in container.Effect)  await AddFromAppearance(a, "effect");
+                foreach (var a in container.Missile) await AddFromAppearance(a, "missile");
+
+                await sub.Tick(ticked, $"building {streams.Count} sprite sheet(s)");
+                var newIdByStreamIdx = BuildSpriteSheetsAndRegister(streams);
+
+                int counter = 0;
+                int imported = 0;
+
+                async System.Threading.Tasks.Task RemapAndInsert(Appearance a, APPEARANCE_TYPE type, string kind)
+                {
+                    a.AppearanceType = type;
+                    for (int fg = 0; fg < a.FrameGroup.Count; fg++)
+                    {
+                        var si = a.FrameGroup[fg].SpriteInfo;
+                        for (int s = 0; s < si.SpriteId.Count; s++)
+                        {
+                            si.SpriteId[s] = newIdByStreamIdx.TryGetValue(counter, out uint nid) ? nid : 0u;
+                            counter++;
+                        }
+                    }
+                    a.SpriteData.Clear();
+                    if (InsertAppearance(a)) imported++;
+                    ticked++;
+                    await sub.Tick(ticked, $"inserting {kind} {a.Id}");
+                }
+
+                foreach (var a in container.Outfit)  await RemapAndInsert(a, APPEARANCE_TYPE.AppearanceOutfit,  "outfit");
+                foreach (var a in container.Object)  await RemapAndInsert(a, APPEARANCE_TYPE.AppearanceObject,  "object");
+                foreach (var a in container.Effect)  await RemapAndInsert(a, APPEARANCE_TYPE.AppearanceEffect,  "effect");
+                foreach (var a in container.Missile) await RemapAndInsert(a, APPEARANCE_TYPE.AppearanceMissile, "missile");
+
+                MainWindow.Log($"AEC '{baseLabel}' inserted {imported} appearance(s), {streams.Count} sprite blob(s) → {newIdByStreamIdx.Count} new ids.");
+                return imported;
+            }
+            finally
+            {
+                sub.Close();
+            }
         }
 
         // Pack a list of freshly-decoded composite PNGs into new Tibia sprite sheets,
