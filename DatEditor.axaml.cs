@@ -3784,101 +3784,567 @@ namespace Assets_Editor
             if (string.IsNullOrEmpty(MainWindow._assetsPath))
             { ErrorManager.ShowError("Assets path not set."); return; }
 
-            // Determine current size
-            var firstFg = CurrentObjectAppearance.FrameGroup[0];
+            // Detect current sprite size from the first valid sprite id.
             int currentW = 32, currentH = 32;
-            if (firstFg.SpriteInfo.SpriteId.Count > 0)
+            foreach (var fg in CurrentObjectAppearance.FrameGroup)
             {
-                var (w, h) = MainWindow.GetSpriteSize((int)firstFg.SpriteInfo.SpriteId[0]);
-                if (w > 0 && h > 0) { currentW = w; currentH = h; }
+                bool found = false;
+                foreach (var sid in fg.SpriteInfo.SpriteId)
+                {
+                    var (w, h) = MainWindow.GetSpriteSize((int)sid);
+                    if (w > 0 && h > 0) { currentW = w; currentH = h; found = true; break; }
+                }
+                if (found) break;
             }
 
-            // Toggle between common sizes
-            int targetW, targetH;
-            if (currentW <= 32 && currentH <= 32) { targetW = 64; targetH = 64; }
-            else if (currentW <= 64 && currentH <= 64) { targetW = 32; targetH = 32; }
-            else { targetW = 32; targetH = 32; }
+            // ── Dialog: pick target size + resampler ────────────────────────
+            var dialog = new Window
+            {
+                Title = $"Resize sprites of ID {CurrentObjectAppearance.Id}",
+                Width = 420,
+                Height = 240,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false,
+            };
 
-            bool ok = await ErrorManager.ConfirmAsync("Resize Sprites",
-                $"Current sprite size: {currentW}x{currentH}\n" +
-                $"Target size: {targetW}x{targetH}\n\n" +
-                "This will create new resized sprites and update all sprite IDs. Continue?");
-            if (!ok) return;
+            var panel = new StackPanel { Margin = new Avalonia.Thickness(14), Spacing = 10 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"Current sprite size: {currentW}×{currentH}",
+                FontWeight = Avalonia.Media.FontWeight.SemiBold,
+            });
 
+            panel.Children.Add(new TextBlock { Text = "Target size:" });
+            var sizeCombo = new ComboBox { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch };
+            foreach (var sz in SpriteSizes)
+                sizeCombo.Items.Add($"{sz.Width}×{sz.Height}");
+            // Default selection: same as current if found, otherwise 32×32.
+            int curIdx = SpriteSizes.FindIndex(s => s.Width == currentW && s.Height == currentH);
+            sizeCombo.SelectedIndex = curIdx >= 0 ? curIdx : 0;
+            panel.Children.Add(sizeCombo);
+
+            panel.Children.Add(new TextBlock { Text = "Quality (resampling filter):" });
+            var filterCombo = new ComboBox { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch };
+            filterCombo.Items.Add("Lanczos + sharpen (Magick.NET, best for downscale)");
+            filterCombo.Items.Add("Lanczos (Magick.NET, sharp, no post-sharpen)");
+            filterCombo.Items.Add("Mitchell (SkiaSharp, soft/smooth)");
+            filterCombo.Items.Add("Nearest-neighbor (pixel-perfect, crunchy)");
+            filterCombo.Items.Add("Pixel-art 2× (Scale2x, upscale only)");
+            filterCombo.Items.Add("Pixel-art 4× (Scale2x ×2, upscale only)");
+            filterCombo.SelectedIndex = 0;
+            panel.Children.Add(filterCombo);
+
+            var btns = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 6,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            };
+            var okBtn = new Button { Content = "Resize", IsDefault = true };
+            var cancelBtn = new Button { Content = "Cancel", IsCancel = true };
+            btns.Children.Add(okBtn);
+            btns.Children.Add(cancelBtn);
+            panel.Children.Add(btns);
+            dialog.Content = panel;
+
+            bool confirmed = false;
+            okBtn.Click += (_, _) => { confirmed = true; dialog.Close(); };
+            cancelBtn.Click += (_, _) => dialog.Close();
+            await dialog.ShowDialog(this);
+            if (!confirmed) return;
+
+            var selectedSize = SpriteSizes[sizeCombo.SelectedIndex];
+            int targetW = selectedSize.Width;
+            int targetH = selectedSize.Height;
+
+            if (targetW == currentW && targetH == currentH)
+            {
+                ErrorManager.ShowInfo("Target size is the same as current. Nothing to do.");
+                return;
+            }
+
+            // Filter index → symbolic key consumed by ResizePngSprite.
+            // 0: Lanczos + sharpen (Magick.NET, recommended for downscale)
+            // 1: Lanczos (Magick.NET, sharp, no post-sharpen)
+            // 2: Mitchell (SkiaSharp, soft)
+            // 3: Nearest (SkiaSharp, pixel-perfect)
+            // 4: Pixel-art 2× (Scale2x)
+            // 5: Pixel-art 4× (Scale2x ×2)
+            string filterKey = filterCombo.SelectedIndex switch
+            {
+                0 => "lanczos_sharp",
+                1 => "lanczos",
+                2 => "mitchell",
+                3 => "nearest",
+                4 => "pixelart2x",
+                5 => "pixelart4x",
+                _ => "lanczos_sharp",
+            };
+
+            // Pixel-art scalers only work at fixed multipliers, and only when the
+            // output is an integer upscale of the source.
+            bool isPixelArt = filterKey == "pixelart2x" || filterKey == "pixelart4x";
+            int pixelArtMult = filterKey == "pixelart4x" ? 4 : 2;
+            if (isPixelArt && (targetW != currentW * pixelArtMult || targetH != currentH * pixelArtMult))
+            {
+                ErrorManager.ShowError($"Pixel-art {pixelArtMult}× requires target = source × {pixelArtMult}. " +
+                                       $"Current {currentW}×{currentH} → {targetW}×{targetH} is not an exact {pixelArtMult}× upscale.");
+                return;
+            }
+
+            PushUndo();
+
+            // Collect unique source sprite IDs in order of first appearance, so we only
+            // decode + resize each distinct sprite once even if it's reused across
+            // frame groups or pattern slots.
+            var oldToStreamIdx = new Dictionary<uint, int>();
+            var streams = new List<(int width, int height, MemoryStream png)>();
+            int total = 0;
+            foreach (var fg in CurrentObjectAppearance.FrameGroup)
+                foreach (var sid in fg.SpriteInfo.SpriteId)
+                    if (!oldToStreamIdx.ContainsKey(sid)) { oldToStreamIdx[sid] = -1; total++; }
+            oldToStreamIdx.Clear();
+
+            var progress = OpenProgress($"Resizing {total} sprite(s) → {targetW}×{targetH}…", Math.Max(1, total));
             try
             {
-                var streams = new List<(int width, int height, MemoryStream png)>();
-                var oldToNewMap = new Dictionary<uint, int>(); // old sprite id -> stream index
-                int streamIdx = 0;
-
+                int done = 0;
                 foreach (var fg in CurrentObjectAppearance.FrameGroup)
                 {
                     foreach (var sid in fg.SpriteInfo.SpriteId)
                     {
-                        if (oldToNewMap.ContainsKey(sid)) continue; // already processed
+                        if (oldToStreamIdx.ContainsKey(sid)) continue;
+
+                        await progress.Tick(done, $"sprite {sid}");
 
                         var srcStream = MainWindow.getSpriteStream((int)sid);
-                        if (srcStream == null) continue;
+                        if (srcStream == null)
+                        {
+                            oldToStreamIdx[sid] = -1;
+                            done++;
+                            continue;
+                        }
 
-                        var ms = LoadPngAsSpriteStream(srcStream, targetW, targetH);
+                        var ms = ResizePngSprite(srcStream, targetW, targetH, filterKey);
                         if (ms != null)
                         {
+                            oldToStreamIdx[sid] = streams.Count;
                             streams.Add((targetW, targetH, ms));
-                            oldToNewMap[sid] = streamIdx++;
                         }
+                        else
+                        {
+                            oldToStreamIdx[sid] = -1;
+                        }
+                        done++;
                     }
                 }
 
-                if (streams.Count == 0) { ErrorManager.ShowInfo("No sprites to resize."); return; }
+                if (streams.Count == 0)
+                {
+                    ErrorManager.ShowInfo("No sprites could be resized.");
+                    return;
+                }
 
-                var newIdByIdx = BuildSpriteSheetsAndRegister(streams);
+                await progress.Tick(done, "registering new sprite sheets");
+                var newIdByStreamIdx = BuildSpriteSheetsAndRegister(streams);
 
-                // Remap sprite IDs
                 foreach (var fg in CurrentObjectAppearance.FrameGroup)
                 {
                     for (int i = 0; i < fg.SpriteInfo.SpriteId.Count; i++)
                     {
                         uint oldId = fg.SpriteInfo.SpriteId[i];
-                        if (oldToNewMap.TryGetValue(oldId, out int idx) && newIdByIdx.TryGetValue(idx, out uint newId))
+                        if (oldToStreamIdx.TryGetValue(oldId, out int idx) && idx >= 0 &&
+                            newIdByStreamIdx.TryGetValue(idx, out uint newId))
+                        {
                             fg.SpriteInfo.SpriteId[i] = newId;
+                        }
                     }
                 }
 
                 LoadAppearanceSpritesList(CurrentObjectAppearance);
                 UpdatePreview(CurrentObjectAppearance);
-                StatusBar.Text = $"Resized {streams.Count} sprites from {currentW}x{currentH} to {targetW}x{targetH}.";
-                ErrorManager.ShowInfo($"Resized {streams.Count} sprites to {targetW}x{targetH}.");
+                if (StatusBar != null)
+                    StatusBar.Text = $"Resized {streams.Count} sprite(s) of ID {CurrentObjectAppearance.Id} from {currentW}×{currentH} to {targetW}×{targetH}.";
+                ErrorManager.ShowInfo($"Resized {streams.Count} sprite(s) to {targetW}×{targetH}.\nUse Ctrl+Z to undo.");
             }
             catch (Exception ex)
             {
-                ErrorManager.ShowError($"Resize failed: {ex.Message}");
+                ErrorManager.ShowError($"Resize failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                progress.Close();
             }
         }
 
-        // Overload that reads from MemoryStream instead of file path
-        private static MemoryStream? LoadPngAsSpriteStream(MemoryStream source, int targetW, int targetH)
+        // Decode a sprite PNG and resize it to targetW×targetH. The filterKey selects
+        // the resampling strategy:
+        //
+        //   "lanczos_sharp" — Magick.NET Lanczos + mild unsharp mask (recommended for
+        //                     downscale; best detail retention we can ship without ML)
+        //   "lanczos"       — Magick.NET Lanczos, no post-sharpen
+        //   "mitchell"      — SkiaSharp cubic Mitchell (softer, artifact-free)
+        //   "nearest"       — SkiaSharp nearest-neighbor (pixel-perfect, crunchy)
+        //   "pixelart2x"    — Scale2x upscale, requires target = source × 2
+        //   "pixelart4x"    — Scale2x ×2 upscale, requires target = source × 4
+        //
+        // Magick.NET does the resize in linear-light RGB (gamma-correct) and keeps
+        // straight alpha, so semi-transparent edges don't get dark halos that the
+        // premultiplied Skia path can introduce on fine detail.
+        //
+        // We decode via byte[] rather than directly from the MemoryStream because on
+        // Linux SkiaSharp wraps the incoming stream in an SKManagedStream that disposes
+        // the original on completion — see CLAUDE.md.
+        private static MemoryStream? ResizePngSprite(MemoryStream source, int targetW, int targetH, string filterKey)
         {
             source.Position = 0;
-            using var srcBmp = SKBitmap.Decode(source.ToArray());
-            if (srcBmp == null) return null;
+            byte[] bytes = source.ToArray();
 
-            using var canvasBmp = new SKBitmap(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
-            using (var canvas = new SKCanvas(canvasBmp))
+            if (filterKey == "pixelart2x" || filterKey == "pixelart4x")
             {
-                canvas.Clear(SKColors.Transparent);
-                // Nearest-neighbor resize, anchor bottom-right (Tibia convention)
-                var resized = srcBmp.Resize(new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul),
-                    SKFilterQuality.None);
-                if (resized != null)
+                int mult = filterKey == "pixelart4x" ? 4 : 2;
+                return ScalePixelArt(bytes, mult);
+            }
+
+            if (filterKey == "lanczos" || filterKey == "lanczos_sharp")
+            {
+                try
                 {
-                    canvas.DrawBitmap(resized, 0, 0);
-                    resized.Dispose();
+                    using var mi = new MagickImage(bytes);
+                    // Gamma-correct resize: convert to linear light, resize, back to sRGB.
+                    mi.ColorSpace = ColorSpace.RGB;
+                    mi.FilterType = FilterType.Lanczos;
+                    mi.Resize((uint)targetW, (uint)targetH);
+                    mi.ColorSpace = ColorSpace.sRGB;
+
+                    if (filterKey == "lanczos_sharp")
+                    {
+                        // Mild unsharp mask — recovers perceptual edge crispness
+                        // without introducing visible ringing on pixel art.
+                        // radius, sigma, amount, threshold
+                        mi.UnsharpMask(1.0, 0.5, 0.8, 0.02);
+                    }
+
+                    mi.Format = MagickFormat.Png;
+                    return new MemoryStream(mi.ToByteArray());
+                }
+                catch
+                {
+                    // fall through to Skia as a last resort
                 }
             }
 
-            using var img = SKImage.FromBitmap(canvasBmp);
+            // Skia fallback (Mitchell / Nearest / Magick failure)
+            using var srcBmp = SKBitmap.Decode(bytes);
+            if (srcBmp == null) return null;
+
+            var sampling = filterKey == "nearest"
+                ? new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None)
+                : new SKSamplingOptions(SKCubicResampler.Mitchell);
+
+            var dstInfo = new SKImageInfo(targetW, targetH, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var dstBmp = srcBmp.Resize(dstInfo, sampling);
+            if (dstBmp == null) return null;
+
+            using var img = SKImage.FromBitmap(dstBmp);
             using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
             return new MemoryStream(dat.ToArray());
+        }
+
+        // ── Pixel-art scaler (Scale2x / Scale4x) ──────────────────────────────
+        //
+        // Scale2x is the AdvMAME2x pixel-art upscaling algorithm. For each source
+        // pixel P it looks at the 4-neighborhood (A=up, B=right, C=down, D=left)
+        // and, instead of bilinear blur, decides whether each of the four 2×2
+        // output sub-pixels should follow a nearby diagonal edge or stay equal to
+        // P. The result is clean integer-pixel diagonals suitable for creature
+        // sprites that started life as pixel art.
+        //
+        // Implementation is from-scratch from the well-known algorithm description.
+        // For 4× we just apply Scale2x twice.
+        private static MemoryStream? ScalePixelArt(byte[] sourcePng, int mult)
+        {
+            using var srcBmp = SKBitmap.Decode(sourcePng);
+            if (srcBmp == null) return null;
+
+            // Copy to an explicit RGBA32 straight-alpha buffer so our index math is
+            // predictable regardless of Skia's internal color type.
+            var rgbaInfo = new SKImageInfo(srcBmp.Width, srcBmp.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+            using var rgbaBmp = new SKBitmap(rgbaInfo);
+            if (!srcBmp.CopyTo(rgbaBmp, SKColorType.Rgba8888)) return null;
+
+            byte[] srcPixels = rgbaBmp.Bytes;
+            int w = rgbaBmp.Width;
+            int h = rgbaBmp.Height;
+
+            byte[] scaled2x = Scale2xCore(srcPixels, w, h);
+            int curW = w * 2;
+            int curH = h * 2;
+
+            if (mult == 4)
+            {
+                scaled2x = Scale2xCore(scaled2x, curW, curH);
+                curW *= 2;
+                curH *= 2;
+            }
+
+            // Wrap the scaled buffer in an SKBitmap and encode to PNG.
+            var outInfo = new SKImageInfo(curW, curH, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+            using var outBmp = new SKBitmap(outInfo);
+            System.Runtime.InteropServices.Marshal.Copy(scaled2x, 0, outBmp.GetPixels(), scaled2x.Length);
+
+            using var img = SKImage.FromBitmap(outBmp);
+            using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
+            return new MemoryStream(dat.ToArray());
+        }
+
+        // Scale2x core: takes an RGBA8888 straight-alpha buffer, returns a 2× buffer.
+        // Classical rule set — for each pixel P with 4-neighbors A B C D:
+        //   E0 E1   E0 = (D==A && D!=C && A!=B) ? A : P
+        //   E2 E3   E1 = (A==B && A!=D && B!=C) ? B : P
+        //           E2 = (D==C && D!=A && C!=B) ? C : P
+        //           E3 = (C==B && C!=D && B!=A) ? B : P
+        private static byte[] Scale2xCore(byte[] src, int w, int h)
+        {
+            int dstW = w * 2;
+            int dstH = h * 2;
+            byte[] dst = new byte[dstW * dstH * 4];
+
+            uint GetPx(int x, int y)
+            {
+                if (x < 0) x = 0; else if (x >= w) x = w - 1;
+                if (y < 0) y = 0; else if (y >= h) y = h - 1;
+                int idx = (y * w + x) * 4;
+                return (uint)(src[idx] | (src[idx + 1] << 8) | (src[idx + 2] << 16) | (src[idx + 3] << 24));
+            }
+
+            void SetPx(int x, int y, uint px)
+            {
+                int idx = (y * dstW + x) * 4;
+                dst[idx]     = (byte)(px & 0xFF);
+                dst[idx + 1] = (byte)((px >> 8) & 0xFF);
+                dst[idx + 2] = (byte)((px >> 16) & 0xFF);
+                dst[idx + 3] = (byte)((px >> 24) & 0xFF);
+            }
+
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    uint P = GetPx(x, y);
+                    uint A = GetPx(x, y - 1);
+                    uint B = GetPx(x + 1, y);
+                    uint C = GetPx(x, y + 1);
+                    uint D = GetPx(x - 1, y);
+
+                    uint E0 = (D == A && D != C && A != B) ? A : P;
+                    uint E1 = (A == B && A != D && B != C) ? B : P;
+                    uint E2 = (D == C && D != A && C != B) ? C : P;
+                    uint E3 = (C == B && C != D && B != A) ? B : P;
+
+                    int dx = x * 2;
+                    int dy = y * 2;
+                    SetPx(dx,     dy,     E0);
+                    SetPx(dx + 1, dy,     E1);
+                    SetPx(dx,     dy + 1, E2);
+                    SetPx(dx + 1, dy + 1, E3);
+                }
+            }
+
+            return dst;
+        }
+
+        // Back-compat shim: other importers (ImportFromGif_Click) still call this.
+        // Defaults to Lanczos + sharpen for best general-purpose downscaling quality.
+        private static MemoryStream? LoadPngAsSpriteStream(MemoryStream source, int targetW, int targetH)
+            => ResizePngSprite(source, targetW, targetH, "lanczos_sharp");
+
+        // ── Bounding Square (name/HP bar anchor) ──────────────────────────────
+        //
+        // Tibia's client uses SpriteInfo.bounding_square as the logical UI footprint
+        // of a creature — it anchors the name label and HP bar to the top-center of
+        // this square, which is placed at the bottom-right of the creature's tile.
+        // For large 64×64 outfits that only occupy part of their canvas, leaving
+        // this field unset makes the name float far from the visible art (see the
+        // Panther screenshot). Setting it to the actual visible width (e.g. 32)
+        // brings the label back over the creature's head.
+        //
+        // This dialog gives a manual numeric entry plus an Auto button that decodes
+        // every sprite in the appearance, finds the tightest rectangle around
+        // non-transparent pixels, and picks the next multiple of 8 as the square.
+        private async void SetBoundingSquare_Click(object? sender, RoutedEventArgs e)
+        {
+            if (CurrentObjectAppearance == null || CurrentObjectAppearance.FrameGroup.Count == 0)
+            { ErrorManager.ShowInfo("Select an appearance first."); return; }
+
+            var firstSi = CurrentObjectAppearance.FrameGroup[0].SpriteInfo;
+            uint current = firstSi.HasBoundingSquare ? firstSi.BoundingSquare : 0;
+
+            var dialog = new Window
+            {
+                Title = $"Bounding square — ID {CurrentObjectAppearance.Id}",
+                Width = 440,
+                Height = 260,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                CanResize = false,
+            };
+
+            var panel = new StackPanel { Margin = new Avalonia.Thickness(14), Spacing = 10 };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Bounding square controls where the Tibia client draws the\n" +
+                       "creature's name label and HP bar.\n\n" +
+                       "• Typical values: 32 (small), 64 (large)\n" +
+                       "• 0 / empty = use sprite's physical size (default)\n" +
+                       "• Auto-detect scans non-transparent pixels in every frame.",
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            });
+
+            var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock { Text = "Value:", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+            var valueBox = new TextBox { Width = 90, Text = current.ToString() };
+            row.Children.Add(valueBox);
+            var autoBtn = new Button { Content = "🔍 Auto-detect" };
+            row.Children.Add(autoBtn);
+            var clearBtn = new Button { Content = "✕ Clear (unset)" };
+            row.Children.Add(clearBtn);
+            panel.Children.Add(row);
+
+            var hintLabel = new TextBlock
+            {
+                Text = current == 0 ? "Currently unset." : $"Currently set to {current}.",
+                FontStyle = Avalonia.Media.FontStyle.Italic,
+                Opacity = 0.8,
+            };
+            panel.Children.Add(hintLabel);
+
+            var btns = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 6,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            };
+            var okBtn = new Button { Content = "Apply", IsDefault = true };
+            var cancelBtn = new Button { Content = "Cancel", IsCancel = true };
+            btns.Children.Add(okBtn);
+            btns.Children.Add(cancelBtn);
+            panel.Children.Add(btns);
+            dialog.Content = panel;
+
+            autoBtn.Click += (_, _) =>
+            {
+                uint? auto = AutoDetectBoundingSquare(CurrentObjectAppearance);
+                if (auto.HasValue)
+                {
+                    valueBox.Text = auto.Value.ToString();
+                    hintLabel.Text = $"Auto-detected: {auto.Value} (snap-to-next-multiple-of-8 of the visible pixel bounds).";
+                }
+                else
+                {
+                    hintLabel.Text = "Auto-detect failed — no decodable sprites found.";
+                }
+            };
+
+            clearBtn.Click += (_, _) =>
+            {
+                valueBox.Text = "0";
+                hintLabel.Text = "Will clear the field so Tibia uses the sprite's physical size.";
+            };
+
+            bool confirmed = false;
+            okBtn.Click += (_, _) => { confirmed = true; dialog.Close(); };
+            cancelBtn.Click += (_, _) => dialog.Close();
+            await dialog.ShowDialog(this);
+            if (!confirmed) return;
+
+            if (!uint.TryParse(valueBox.Text?.Trim(), out uint newVal))
+            {
+                ErrorManager.ShowError("Invalid number.");
+                return;
+            }
+
+            PushUndo();
+
+            foreach (var fg in CurrentObjectAppearance.FrameGroup)
+            {
+                if (newVal == 0)
+                    fg.SpriteInfo.ClearBoundingSquare();
+                else
+                    fg.SpriteInfo.BoundingSquare = newVal;
+            }
+
+            if (StatusBar != null)
+                StatusBar.Text = newVal == 0
+                    ? $"Cleared BoundingSquare on ID {CurrentObjectAppearance.Id}."
+                    : $"Set BoundingSquare = {newVal} on ID {CurrentObjectAppearance.Id}.";
+        }
+
+        // Decode every sprite across all frame groups of the appearance and find the
+        // tightest square that contains every non-transparent pixel across every
+        // frame (union bounding box). Returned value is rounded up to the next
+        // multiple of 8 to match the values Tibia ships in official content.
+        private static uint? AutoDetectBoundingSquare(Appearance appearance)
+        {
+            int minX = int.MaxValue, minY = int.MaxValue;
+            int maxX = int.MinValue, maxY = int.MinValue;
+            int spriteSide = 0;
+            bool anyDecoded = false;
+
+            foreach (var fg in appearance.FrameGroup)
+            {
+                foreach (var sid in fg.SpriteInfo.SpriteId)
+                {
+                    var stream = MainWindow.getSpriteStream((int)sid);
+                    if (stream == null) continue;
+                    stream.Position = 0;
+                    using var bmp = SKBitmap.Decode(stream.ToArray());
+                    if (bmp == null) continue;
+
+                    int w = bmp.Width;
+                    int h = bmp.Height;
+                    spriteSide = Math.Max(spriteSide, Math.Max(w, h));
+                    anyDecoded = true;
+
+                    // Copy into a predictable RGBA8888 straight-alpha buffer for
+                    // alpha sampling.
+                    var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+                    using var conv = new SKBitmap(info);
+                    if (!bmp.CopyTo(conv, SKColorType.Rgba8888)) continue;
+                    byte[] px = conv.Bytes;
+
+                    for (int y = 0; y < h; y++)
+                    {
+                        for (int x = 0; x < w; x++)
+                        {
+                            byte a = px[(y * w + x) * 4 + 3];
+                            if (a == 0) continue;
+                            if (x < minX) minX = x;
+                            if (y < minY) minY = y;
+                            if (x > maxX) maxX = x;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+            }
+
+            if (!anyDecoded || minX > maxX) return null;
+
+            // Tibia's client anchors the name/HP bar at the top of a square centered
+            // at the bottom-right of the creature's tile. We want the square to span
+            // from the creature's bottom-right visible pixel up/left far enough to
+            // cover the full visible extent, so the side is max(width-from-right,
+            // height-from-bottom) relative to the sprite's bottom-right corner.
+            int widthFromRight  = spriteSide - minX;      // distance from left-most pixel to right edge
+            int heightFromBottom = spriteSide - minY;     // distance from top-most pixel to bottom edge
+            int side = Math.Max(widthFromRight, heightFromBottom);
+
+            // Snap up to next multiple of 8, clamp to [8, 64] — official content uses
+            // exactly these values.
+            int snapped = ((side + 7) / 8) * 8;
+            if (snapped < 8) snapped = 8;
+            if (snapped > 64) snapped = 64;
+            return (uint)snapped;
         }
 
         #endregion

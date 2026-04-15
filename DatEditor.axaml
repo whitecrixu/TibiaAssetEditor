@@ -139,6 +139,8 @@
                                   ToolTip.Tip="Set or clear a flag on all visible appearances"/>
                         <MenuItem Header="🔄 Resize Sprites…" Click="ResizeSprites_Click"
                                   ToolTip.Tip="Resize sprites of the selected appearance to a different sheet size"/>
+                        <MenuItem Header="📏 Set Bounding Square…" Click="SetBoundingSquare_Click"
+                                  ToolTip.Tip="Tell the Tibia client the creature's UI footprint (affects name/HP bar position). Auto-detect scans non-transparent pixels."/>
                         <Separator/>
                         <MenuItem Header="📐 Save as Template…"     Click="SaveTemplate_Click"
                                   ToolTip.Tip="Save the current appearance's flags + structure as a reusable template"/>
