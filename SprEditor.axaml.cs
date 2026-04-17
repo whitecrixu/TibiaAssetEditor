@@ -8,6 +8,8 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
 using Newtonsoft.Json;
 using SkiaSharp;
 using static Assets_Editor.MainWindow;
@@ -33,26 +35,205 @@ namespace Assets_Editor
             SheetWrap.PointerPressed  += SheetWrap_PointerPressed;
             SheetWrap.PointerReleased += SheetWrap_PointerReleased;
 
-            // Window-level Del handler so the key works whenever the editor has focus.
-            KeyDown += SprEditor_KeyDown;
+            // Make SheetWrap focusable so it can receive keyboard events.
+            SheetWrap.Focusable = true;
+
+            // Right-click on SheetsList → context menu with Delete/Edit
+            SheetsList.PointerReleased += SheetsList_PointerReleased;
+
+            // Tunnel so the key handler fires before any child control can swallow it.
+            AddHandler(KeyDownEvent, SprEditor_KeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         }
 
         private async void SprEditor_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
         {
+            // Ctrl+A — select all filled tiles
+            if (e.Key == Avalonia.Input.Key.A && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                ClearSelection();
+                for (int i = 0; i < SheetWrap.Children.Count; i++)
+                {
+                    if (_tilePngs.ContainsKey(i))
+                    {
+                        _selectedTiles.Add(i);
+                        UpdateTileSelectionVisual(i);
+                    }
+                }
+                SprStatusText.Text = $"Selected {_selectedTiles.Count} sprite(s).";
+                e.Handled = true;
+                return;
+            }
+
+            // Escape — clear selection
+            if (e.Key == Avalonia.Input.Key.Escape)
+            {
+                ClearSelection();
+                SprStatusText.Text = "Selection cleared.";
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key != Avalonia.Input.Key.Delete) return;
 
+            // Delete selected tiles (multi) or focused tile (single)
+            if (_selectedTiles.Count > 0)
+            {
+                var filled = _selectedTiles.Where(i => _tilePngs.ContainsKey(i)).ToList();
+                if (filled.Count == 0) return;
+
+                bool ok = await ConfirmHere(
+                    "Delete sprites",
+                    $"Clear {filled.Count} selected sprite(s)?");
+                if (!ok) return;
+
+                foreach (int i in filled)
+                    SetTilePng(i, null);
+                ClearSelection();
+                SprStatusText.Text = $"Cleared {filled.Count} sprite(s). Click \U0001f4be to persist.";
+                e.Handled = true;
+                return;
+            }
+
+            // Single tile delete (focused)
             int idx = focusedIndex;
             if (idx < 0 || idx >= SheetWrap.Children.Count) return;
             if (!_tilePngs.ContainsKey(idx)) return;
 
-            bool ok = await ErrorManager.ConfirmAsync(
+            bool confirm = await ConfirmHere(
                 "Delete sprite",
                 $"Clear sprite from tile {idx}?");
-            if (!ok) return;
+            if (!confirm) return;
 
             SetTilePng(idx, null);
-            SprStatusText.Text = $"Cleared tile {idx}. Click 💾 to persist.";
+            SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
             e.Handled = true;
+        }
+
+        private void ShowTileContextMenu(int idx, PointerPressedEventArgs e)
+        {
+            var menu = new ContextMenu();
+            bool hasTile = _tilePngs.ContainsKey(idx);
+            bool hasSelection = _selectedTiles.Count > 0;
+            int filledInSelection = hasSelection
+                ? _selectedTiles.Count(i => _tilePngs.ContainsKey(i))
+                : 0;
+
+            // ── Delete single tile ──
+            var deleteSingle = new MenuItem { Header = $"Usu\u0144 sprite (tile {idx})", IsEnabled = hasTile };
+            deleteSingle.Click += async (_, _) =>
+            {
+                bool ok = await ConfirmHere("Delete sprite", $"Clear sprite from tile {idx}?");
+                if (!ok) return;
+                SetTilePng(idx, null);
+                SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
+            };
+            menu.Items.Add(deleteSingle);
+
+            // ── Delete selected tiles ──
+            var deleteSelected = new MenuItem
+            {
+                Header = $"Usu\u0144 zaznaczone ({filledInSelection})",
+                IsEnabled = filledInSelection > 0
+            };
+            deleteSelected.Click += async (_, _) =>
+            {
+                var filled = _selectedTiles.Where(i => _tilePngs.ContainsKey(i)).ToList();
+                bool ok = await ConfirmHere("Delete sprites", $"Clear {filled.Count} selected sprite(s)?");
+                if (!ok) return;
+                foreach (int i in filled)
+                    SetTilePng(i, null);
+                ClearSelection();
+                SprStatusText.Text = $"Cleared {filled.Count} sprite(s). Click \U0001f4be to persist.";
+            };
+            menu.Items.Add(deleteSelected);
+
+            menu.Items.Add(new Separator());
+
+            // ── Export single tile ──
+            var exportSingle = new MenuItem { Header = $"Eksportuj sprite (tile {idx})", IsEnabled = hasTile };
+            exportSingle.Click += async (_, _) => await ExportTileAsPngAsync(idx);
+            menu.Items.Add(exportSingle);
+
+            // ── Select all ──
+            var selectAll = new MenuItem { Header = "Zaznacz wszystkie (Ctrl+A)" };
+            selectAll.Click += (_, _) =>
+            {
+                ClearSelection();
+                for (int i = 0; i < SheetWrap.Children.Count; i++)
+                {
+                    if (_tilePngs.ContainsKey(i))
+                    {
+                        _selectedTiles.Add(i);
+                        UpdateTileSelectionVisual(i);
+                    }
+                }
+                SprStatusText.Text = $"Selected {_selectedTiles.Count} sprite(s).";
+            };
+            menu.Items.Add(selectAll);
+
+            // ── Clear selection ──
+            if (hasSelection)
+            {
+                var clearSel = new MenuItem { Header = "Wyczy\u015b\u0107 zaznaczenie (Esc)" };
+                clearSel.Click += (_, _) =>
+                {
+                    ClearSelection();
+                    SprStatusText.Text = "Selection cleared.";
+                };
+                menu.Items.Add(clearSel);
+            }
+
+            // Open the context menu at the pointer position on the SheetWrap.
+            menu.Open(SheetWrap);
+        }
+
+        private async void DeleteSelected_Click(object? sender, RoutedEventArgs e)
+        {
+            // If there's a selection, delete all selected filled tiles
+            if (_selectedTiles.Count > 0)
+            {
+                var filled = _selectedTiles.Where(i => _tilePngs.ContainsKey(i)).ToList();
+                if (filled.Count == 0)
+                {
+                    SprStatusText.Text = "No filled sprites in selection.";
+                    return;
+                }
+
+                bool ok = await ConfirmHere(
+                    "Delete sprites",
+                    $"Clear {filled.Count} selected sprite(s)?");
+                if (!ok) return;
+
+                foreach (int i in filled)
+                    SetTilePng(i, null);
+                ClearSelection();
+                SprStatusText.Text = $"Cleared {filled.Count} sprite(s). Click \U0001f4be to persist.";
+                return;
+            }
+
+            // No selection — delete the focused (hovered) tile
+            int idx = focusedIndex;
+            if (idx < 0 || idx >= SheetWrap.Children.Count || !_tilePngs.ContainsKey(idx))
+            {
+                SprStatusText.Text = "Select or hover a sprite to delete.";
+                return;
+            }
+
+            bool confirm = await ConfirmHere(
+                "Delete sprite",
+                $"Clear sprite from tile {idx}?");
+            if (!confirm) return;
+
+            SetTilePng(idx, null);
+            SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
+        }
+
+        // Show confirm dialog parented to this SprEditor window (not MainWindow).
+        private async System.Threading.Tasks.Task<bool> ConfirmHere(string title, string message)
+        {
+            var box = MessageBoxManager.GetMessageBoxStandard(title, message, ButtonEnum.YesNo, MsBox.Avalonia.Enums.Icon.Warning);
+            var result = await box.ShowWindowDialogAsync(this);
+            return result == ButtonResult.Yes;
         }
 
         private int SpriteWidth = 32;
@@ -65,6 +246,10 @@ namespace Assets_Editor
         // PNG-encoded bytes for each tile index in SheetWrap. This is the source of truth for
         // save — we never round-trip Avalonia.Bitmap.Save(Stream), which has quirks on Linux.
         private readonly System.Collections.Generic.Dictionary<int, byte[]> _tilePngs = new();
+
+        // Multi-selection state: tracks which tile indices are currently selected.
+        private readonly System.Collections.Generic.HashSet<int> _selectedTiles = new();
+        private int _lastClickedTile = -1; // anchor for Shift+Click range selection
 
         // ── Sheet grid in the viewer ──────────────────────────────────────────
 
@@ -166,8 +351,15 @@ namespace Assets_Editor
             if (sender is Border border)
             {
                 focusedIndex = (int)(border.Tag ?? 0);
-                border.BorderBrush = new SolidColorBrush(Colors.Blue);
-                border.BorderThickness = new Avalonia.Thickness(2);
+
+                // Grab keyboard focus so Del/Ctrl+A/Esc work.
+                SheetWrap.Focus();
+
+                if (!_selectedTiles.Contains(focusedIndex))
+                {
+                    border.BorderBrush = new SolidColorBrush(Colors.Blue);
+                    border.BorderThickness = new Avalonia.Thickness(2);
+                }
 
                 // Show tile info
                 if (CurrentSheet != null)
@@ -185,11 +377,46 @@ namespace Assets_Editor
         {
             if (sender is Border border)
             {
+                int idx = (int)(border.Tag ?? 0);
+                if (_selectedTiles.Contains(idx))
+                {
+                    border.BorderBrush = new SolidColorBrush(Colors.Orange);
+                    border.BorderThickness = new Avalonia.Thickness(2);
+                }
+                else
+                {
+                    bool showGrid = GridOverlayToggle.IsChecked == true;
+                    border.BorderBrush = showGrid ? new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)) : null;
+                    border.BorderThickness = showGrid ? new Avalonia.Thickness(1) : new Avalonia.Thickness(0);
+                }
+            }
+            TileInfoText.Text = "";
+        }
+
+        private void UpdateTileSelectionVisual(int idx)
+        {
+            if (idx < 0 || idx >= SheetWrap.Children.Count) return;
+            if (SheetWrap.Children[idx] is not Border border) return;
+
+            if (_selectedTiles.Contains(idx))
+            {
+                border.BorderBrush = new SolidColorBrush(Colors.Orange);
+                border.BorderThickness = new Avalonia.Thickness(2);
+            }
+            else
+            {
                 bool showGrid = GridOverlayToggle.IsChecked == true;
                 border.BorderBrush = showGrid ? new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)) : null;
                 border.BorderThickness = showGrid ? new Avalonia.Thickness(1) : new Avalonia.Thickness(0);
             }
-            TileInfoText.Text = "";
+        }
+
+        private void ClearSelection()
+        {
+            var old = _selectedTiles.ToList();
+            _selectedTiles.Clear();
+            foreach (int idx in old)
+                UpdateTileSelectionVisual(idx);
         }
 
         private void GridOverlayToggle_Changed(object? sender, RoutedEventArgs e)
@@ -491,6 +718,95 @@ namespace Assets_Editor
             }
         }
 
+        private async void DeleteSheet_Click(object? sender, RoutedEventArgs e)
+        {
+            // Try selected item from list first, then fall back to currently edited sheet.
+            ShowList? showList = SheetsList.SelectedItem as ShowList;
+            Catalog? cat = null;
+
+            if (showList != null)
+                cat = MainWindow.catalog.Find(x => x.File == showList.Name);
+
+            // Fallback: if nothing selected in list, use the currently edited sheet.
+            if (cat == null && CurrentSheet != null)
+            {
+                cat = CurrentSheet;
+                showList = CustomSheetsList.FirstOrDefault(s => s.Name == cat.File);
+            }
+
+            if (cat == null)
+            {
+                SprStatusText.Text = "Select a sheet from the list or edit one first.";
+                return;
+            }
+
+            bool ok = await ConfirmHere(
+                "Delete sheet",
+                $"Delete sheet {cat.File}?\nSprite IDs {cat.FirstSpriteid}–{cat.LastSpriteid} will be removed.\n\nThis cannot be undone!");
+            if (!ok) return;
+
+            try
+            {
+                // 1. Remove sprite IDs from SprLists and AllSprList
+                var idsToRemove = new System.Collections.Generic.List<uint>();
+                for (int id = cat.FirstSpriteid; id <= cat.LastSpriteid; id++)
+                {
+                    MainWindow.SprLists.TryRemove(id, out _);
+                    idsToRemove.Add((uint)id);
+                }
+                _editor.SafeRemoveFromAllSprList(idsToRemove);
+
+                // 2. Delete the .bmp.lzma file from disk
+                string sprPath = Path.Combine(MainWindow._assetsPath, cat.File);
+                if (File.Exists(sprPath))
+                    File.Delete(sprPath);
+
+                // 3. Remove from catalog and save
+                MainWindow.catalog.Remove(cat);
+                SaveCatalog();
+
+                // 4. Remove from the UI sheets list
+                if (showList != null)
+                    CustomSheetsList.Remove(showList);
+
+                // 5. Clear the viewer if this sheet was being edited
+                if (CurrentSheet == cat)
+                {
+                    CurrentSheet = null;
+                    SheetWrap.Children.Clear();
+                    _tilePngs.Clear();
+                    _selectedTiles.Clear();
+                }
+
+                SprStatusText.Text = $"Deleted sheet {cat.File} (IDs {cat.FirstSpriteid}–{cat.LastSpriteid}).";
+            }
+            catch (Exception ex)
+            {
+                SprStatusText.Text = $"Delete failed: {ex.Message}";
+            }
+        }
+
+        private void SheetsList_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton != MouseButton.Right) return;
+
+            var selected = SheetsList.SelectedItem as ShowList;
+            if (selected == null) return;
+
+            var menu = new ContextMenu();
+
+            var editItem = new MenuItem { Header = "Edytuj sheet" };
+            editItem.Click += (_, _) => EditSheet_Click(null, null!);
+            menu.Items.Add(editItem);
+
+            var deleteItem = new MenuItem { Header = "Usu\u0144 sheet" };
+            deleteItem.Click += (_, _) => DeleteSheet_Click(null, null!);
+            menu.Items.Add(deleteItem);
+
+            menu.Open(SheetsList);
+            e.Handled = true;
+        }
+
         private void SearchSpr_Click(object? sender, RoutedEventArgs e)
         {
             int searchId = (int)(A_SearchSprId.Value ?? 1);
@@ -692,18 +1008,51 @@ namespace Assets_Editor
             int idx = HitTestTile(p);
             if (idx < 0) { _moveSrcIdx = -1; return; }
 
-            // Right-click on a filled tile → export it as a single PNG.
+            // Right-click → context menu
             var props = e.GetCurrentPoint(SheetWrap).Properties;
             if (props.IsRightButtonPressed)
             {
                 _moveSrcIdx = -1;
-                if (_tilePngs.ContainsKey(idx))
-                {
-                    _ = ExportTileAsPngAsync(idx);
-                    e.Handled = true;
-                }
+                ShowTileContextMenu(idx, e);
+                e.Handled = true;
                 return;
             }
+
+            // Ctrl+Click: toggle selection on individual tile
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                _moveSrcIdx = -1;
+                if (_selectedTiles.Contains(idx))
+                    _selectedTiles.Remove(idx);
+                else
+                    _selectedTiles.Add(idx);
+                UpdateTileSelectionVisual(idx);
+                _lastClickedTile = idx;
+                SprStatusText.Text = $"Selected {_selectedTiles.Count} sprite(s).";
+                e.Handled = true;
+                return;
+            }
+
+            // Shift+Click: range selection from last clicked tile to this one
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _lastClickedTile >= 0)
+            {
+                _moveSrcIdx = -1;
+                int from = Math.Min(_lastClickedTile, idx);
+                int to = Math.Max(_lastClickedTile, idx);
+                for (int i = from; i <= to; i++)
+                {
+                    _selectedTiles.Add(i);
+                    UpdateTileSelectionVisual(i);
+                }
+                SprStatusText.Text = $"Selected {_selectedTiles.Count} sprite(s).";
+                e.Handled = true;
+                return;
+            }
+
+            // Plain click: clear selection, set anchor for future Shift+Click
+            if (_selectedTiles.Count > 0)
+                ClearSelection();
+            _lastClickedTile = idx;
 
             if (SheetWrap.Children[idx] is not Border b || b.Child is not Image img || img.Source == null)
             {
@@ -767,6 +1116,85 @@ namespace Assets_Editor
                                + $"Missing: {missing}. Failed: {failed}.";
         }
 
+        // ── Delete sprite ID range ──────────────────────────────────────────
+
+        private async void DeleteSpriteRange_Click(object? sender, RoutedEventArgs e)
+        {
+            int from = (int)(A_DeleteRangeFrom.Value ?? 0);
+            int to   = (int)(A_DeleteRangeTo.Value   ?? 0);
+            if (from <= 0 || to <= 0 || to < from)
+            {
+                SprStatusText.Text = "Invalid range — set From \u2264 To and both \u2265 1.";
+                return;
+            }
+
+            bool ok = await ConfirmHere(
+                "Delete sprite range",
+                $"Delete sprites {from}\u2013{to} ({to - from + 1} sprites)?\n\nThis clears them from their sheets and removes from SprLists. Cannot be undone!");
+            if (!ok) return;
+
+            int deleted = 0;
+
+            // Group sprite IDs by their catalog sheet so we can blank them out in bulk.
+            var affectedSheets = new System.Collections.Generic.HashSet<Catalog>();
+
+            var idsToRemove = new System.Collections.Generic.List<uint>();
+
+            for (int id = from; id <= to; id++)
+            {
+                var cat = MainWindow.catalog.Find(c =>
+                    c.Type == "sprite" && id >= c.FirstSpriteid && id <= c.LastSpriteid);
+
+                if (cat != null)
+                    affectedSheets.Add(cat);
+
+                MainWindow.SprLists.TryRemove(id, out _);
+                idsToRemove.Add((uint)id);
+                deleted++;
+            }
+
+            // Safely remove from AllSprList via DatEditor (disconnects binding first).
+            _editor.SafeRemoveFromAllSprList(idsToRemove);
+
+            // For each affected sheet: decompress, blank out the deleted tiles, re-save.
+            foreach (var cat in affectedSheets)
+            {
+                string sprPath = Path.Combine(MainWindow._assetsPath, cat.File);
+                if (!File.Exists(sprPath)) continue;
+
+                try
+                {
+                    using SKBitmap bmp = LZMA.DecompressFileLZMA(sprPath);
+                    var layout = DatEditor.GetSpriteLayout(cat.SpriteType);
+                    int tWidth = layout.SpriteSizeX;
+                    int tHeight = layout.SpriteSizeY;
+                    int cols = layout.Cols;
+
+                    using var canvas = new SKCanvas(bmp);
+                    for (int id = Math.Max(from, cat.FirstSpriteid); id <= Math.Min(to, cat.LastSpriteid); id++)
+                    {
+                        int tileIdx = id - cat.FirstSpriteid;
+                        int col = tileIdx % cols;
+                        int row = tileIdx / cols;
+                        canvas.Save();
+                        canvas.ClipRect(SKRect.Create(col * tWidth, row * tHeight, tWidth, tHeight));
+                        canvas.Clear(SKColors.Transparent);
+                        canvas.Restore();
+                    }
+
+                    string outPath = sprPath;
+                    LZMA.ExportLzmaFile(bmp, ref outPath);
+                }
+                catch { /* sheet rewrite failed — sprites already removed from cache */ }
+            }
+
+            // If the currently edited sheet is affected, reload the viewer.
+            if (CurrentSheet != null && affectedSheets.Contains(CurrentSheet))
+                CreateNewSheetImg(CurrentSheet.SpriteType, true);
+
+            SprStatusText.Text = $"Deleted {deleted} sprite(s) in range {from}\u2013{to}. Affected {affectedSheets.Count} sheet(s).";
+        }
+
         // ── Batch PNG downscale (e.g. 64×64 → 32×32) ─────────────────────────
 
         private async void BatchDownscale_Click(object? sender, RoutedEventArgs e)
@@ -799,7 +1227,7 @@ namespace Assets_Editor
 
             if (string.Equals(Path.GetFullPath(srcDir), Path.GetFullPath(dstDir), StringComparison.Ordinal))
             {
-                bool ok = await ErrorManager.ConfirmAsync(
+                bool ok = await ConfirmHere(
                     "Overwrite originals?",
                     "Source and destination are the same folder. Original PNGs will be overwritten. Continue?");
                 if (!ok) { SprStatusText.Text = "Cancelled."; return; }

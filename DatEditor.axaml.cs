@@ -216,6 +216,28 @@ namespace Assets_Editor
             isPageLoaded = true;
         }
 
+        /// <summary>
+        /// Safely removes sprite IDs from AllSprList by disconnecting the virtualized
+        /// list binding first, then reconnecting after removal. Call from SprEditor.
+        /// </summary>
+        public void SafeRemoveFromAllSprList(System.Collections.Generic.IEnumerable<uint> idsToRemove)
+        {
+            var idSet = new System.Collections.Generic.HashSet<uint>(idsToRemove);
+            if (idSet.Count == 0) return;
+
+            // Disconnect binding to prevent index-out-of-range during removal
+            SprListView.ItemsSource = null;
+
+            for (int i = MainWindow.AllSprList.Count - 1; i >= 0; i--)
+            {
+                if (idSet.Contains(MainWindow.AllSprList[i].Id))
+                    MainWindow.AllSprList.RemoveAt(i);
+            }
+
+            // Reconnect
+            SprListView.ItemsSource = MainWindow.AllSprList;
+        }
+
         private void UpdateShowList(int selection, uint? preserveId = null)
         {
             if (ObjListView == null) return;

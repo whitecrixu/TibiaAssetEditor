@@ -29,6 +29,8 @@
                     <Button Content="🖼" Width="35" Height="25" ToolTip.Tip="Export focused sprite as PNG (hover a tile, then click). Tip: right-click a tile for the same action." Click="ExportSingleSprite_Click"/>
                     <Button Content="🔽" Width="35" Height="25" ToolTip.Tip="Batch downscale a folder of PNGs to 32×32 (nearest-neighbor, keeps pixel art crisp)" Click="BatchDownscale_Click"/>
                     <Separator Width="1" Margin="4,0"/>
+                    <Button Content="🗑" Width="35" Height="25" ToolTip.Tip="Delete selected sprites (select with Ctrl+Click / Shift+Click, or Ctrl+A for all)" Click="DeleteSelected_Click"/>
+                    <Separator Width="1" Margin="4,0"/>
                     <ToggleButton x:Name="GridOverlayToggle" Content="⊞" Width="35" Height="25"
                                   ToolTip.Tip="Toggle grid overlay on the sheet viewer"
                                   IsCheckedChanged="GridOverlayToggle_Changed"/>
@@ -58,8 +60,16 @@
                         <NumericUpDown x:Name="A_ExportRangeTo" Width="150" Minimum="1" FormatString="0"/>
                         <Button Content="📤" Width="35" Height="25" ToolTip.Tip="Export every sprite ID in the range as individual PNG files" Click="ExportSpriteRange_Click"/>
                     </StackPanel>
+                    <TextBlock Text="Delete Sprite Range" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
+                        <TextBlock Text="From" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <NumericUpDown x:Name="A_DeleteRangeFrom" Width="150" Minimum="1" FormatString="0"/>
+                        <TextBlock Text="To" VerticalAlignment="Center" Margin="6,0,4,0"/>
+                        <NumericUpDown x:Name="A_DeleteRangeTo" Width="150" Minimum="1" FormatString="0"/>
+                        <Button Content="🗑" Width="35" Height="25" ToolTip.Tip="Delete every sprite ID in the range (clears from sheets, SprLists and catalog)" Click="DeleteSpriteRange_Click"/>
+                    </StackPanel>
                 </StackPanel>
-                <ListBox Grid.Row="1" x:Name="SheetsList">
+                <ListBox Grid.Row="1" x:Name="SheetsList" SelectionMode="Single">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel>
@@ -72,6 +82,7 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
                     <Button Content="➕" Width="35" Height="25" ToolTip.Tip="Create New Sheet" Click="CreateSheet_Click"/>
                     <Button Content="✏" Width="35" Height="25" ToolTip.Tip="Edit Sheet" Click="EditSheet_Click"/>
+                    <Button Content="🗑" Width="35" Height="25" ToolTip.Tip="Delete selected sheet" Click="DeleteSheet_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
