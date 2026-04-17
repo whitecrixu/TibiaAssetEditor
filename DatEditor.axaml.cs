@@ -2709,6 +2709,27 @@ namespace Assets_Editor
             if (e.Container.DataContext is ShowList s) s.Image = null;
         }
 
+        // Invalidate the cached thumbnail in the main ObjListView for the
+        // currently selected appearance so it reloads with the new sprite data.
+        private void RefreshCurrentObjectThumbnail()
+        {
+            if (CurrentObjectAppearance == null) return;
+            uint id = CurrentObjectAppearance.Id;
+            var source = ObjListView?.ItemsSource as IEnumerable<ShowList>;
+            if (source == null) return;
+            foreach (var sl in source)
+            {
+                if (sl.Id == id)
+                {
+                    sl.StopAnimation();
+                    sl.Images.Clear();
+                    sl.Image = null;
+                    LoadObjectImage(sl);
+                    break;
+                }
+            }
+        }
+
         #endregion
 
         #region Appearance Sprites editing
@@ -2769,12 +2790,32 @@ namespace Assets_Editor
             AppearanceSprites.Insert(insertAt, new ShowList { Id = newId, Cid = (uint)groupIdx });
         }
 
+        // Universal sprite import — works for ALL categories (outfit, item, effect, missile).
+        // Uses BuildSpriteSheetsAndRegister to write sprites to disk immediately.
         private async void AppSprImport_Click(object? sender, RoutedEventArgs e)
         {
-            if (CurrentObjectAppearance == null || CurrentObjectAppearance.FrameGroup.Count == 0)
+            if (CurrentObjectAppearance == null)
             {
                 ErrorManager.ShowInfo("Select an appearance first.");
                 return;
+            }
+            if (string.IsNullOrEmpty(MainWindow._assetsPath) || !Directory.Exists(MainWindow._assetsPath))
+            {
+                ErrorManager.ShowError("Assets path not set. Load a Tibia client assets folder first.");
+                return;
+            }
+
+            // Ensure at least one frame group exists
+            if (CurrentObjectAppearance.FrameGroup.Count == 0)
+            {
+                CurrentObjectAppearance.FrameGroup.Add(new FrameGroup
+                {
+                    SpriteInfo = new SpriteInfo
+                    {
+                        PatternWidth = 1, PatternHeight = 1, PatternDepth = 1, Layers = 1, PatternFrames = 1,
+                    }
+                });
+                LoadAppearanceSpritesList(CurrentObjectAppearance);
             }
 
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -2785,109 +2826,181 @@ namespace Assets_Editor
             });
             if (files.Count == 0) return;
 
-            // Determine the starting slot index. If the user clicked a slot use it; otherwise
-            // start at 0 (or append a new slot if there are none).
             int startIdx = 0;
             if (AppSprListView.SelectedItem is ShowList selected)
                 startIdx = Math.Max(0, AppearanceSprites.IndexOf(selected));
-            else if (AppearanceSprites.Count == 0)
+
+            await ImportPngsIntoSlots(files, startIdx);
+        }
+
+        // Import PNGs into ALL sprite slots of the current appearance at once.
+        private async void AppSprImportAll_Click(object? sender, RoutedEventArgs e)
+        {
+            if (CurrentObjectAppearance == null)
             {
-                AppSprAdd_Click(sender, e);
-                startIdx = 0;
+                ErrorManager.ShowInfo("Select an appearance first.");
+                return;
+            }
+            if (string.IsNullOrEmpty(MainWindow._assetsPath) || !Directory.Exists(MainWindow._assetsPath))
+            {
+                ErrorManager.ShowError("Assets path not set. Load a Tibia client assets folder first.");
+                return;
             }
 
-            // Resolve target sprite size from the first existing slot we'd write to.
-            // Fallback to 32×32 when nothing is known yet (brand-new appearance).
+            if (CurrentObjectAppearance.FrameGroup.Count == 0)
+            {
+                CurrentObjectAppearance.FrameGroup.Add(new FrameGroup
+                {
+                    SpriteInfo = new SpriteInfo
+                    {
+                        PatternWidth = 1, PatternHeight = 1, PatternDepth = 1, Layers = 1, PatternFrames = 1,
+                    }
+                });
+                LoadAppearanceSpritesList(CurrentObjectAppearance);
+            }
+
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = $"Select PNG(s) to replace ALL {AppearanceSprites.Count} slots",
+                AllowMultiple = true,
+                FileTypeFilter = [new FilePickerFileType("PNG / BMP Image") { Patterns = ["*.png", "*.bmp"] }]
+            });
+            if (files.Count == 0) return;
+
+            await ImportPngsIntoSlots(files, 0);
+        }
+
+        // Core import logic shared by Import and Import All.
+        // Reads PNGs, builds sprite sheets (written to disk immediately via
+        // BuildSpriteSheetsAndRegister), assigns new sprite IDs to slots, and
+        // refreshes the UI. Works for every category.
+        private async Task ImportPngsIntoSlots(IReadOnlyList<Avalonia.Platform.Storage.IStorageFile> files, int startIdx)
+        {
+            if (CurrentObjectAppearance == null) return;
+
+            // Determine target sprite size from the first slot or default 32×32.
             int targetW = 32, targetH = 32;
             if (startIdx < AppearanceSprites.Count)
             {
-                var firstSlot = AppearanceSprites[startIdx];
-                var (tw, th) = MainWindow.GetSpriteSize((int)firstSlot.Id);
+                var (tw, th) = MainWindow.GetSpriteSize((int)AppearanceSprites[startIdx].Id);
                 if (tw > 0 && th > 0) { targetW = tw; targetH = th; }
             }
 
-            // Warn the user when any source file is larger than the target slot.
-            // Downscaling 64→32 loses detail; the user might prefer to cancel and
-            // open SprEditor's batch downscaler (nearest-neighbor) instead, or
-            // swap the appearance onto a bigger sprite sheet first.
-            var oversized = new List<string>();
-            foreach (var f in files)
-            {
-                try
-                {
-                    using var probe = SkiaSharp.SKBitmap.Decode(f.Path.LocalPath);
-                    if (probe != null && (probe.Width > targetW || probe.Height > targetH))
-                        oversized.Add($"{System.IO.Path.GetFileName(f.Path.LocalPath)} ({probe.Width}×{probe.Height})");
-                }
-                catch { }
-            }
-            if (oversized.Count > 0)
-            {
-                string sample = string.Join("\n  ", oversized.Take(5));
-                if (oversized.Count > 5) sample += $"\n  …and {oversized.Count - 5} more";
-                bool proceed = await ErrorManager.ConfirmAsync(
-                    "Source PNGs larger than target slot",
-                    $"Target slot is {targetW}×{targetH}, but some PNGs are bigger:\n  {sample}\n\n"
-                  + "Continuing will downscale them (nearest-neighbor, keeps pixel-art crisp). "
-                  + "Cancel to resize manually or switch the appearance to a bigger sheet first.");
-                if (!proceed) return;
-            }
-
-            int imported = 0;
             try
             {
-                for (int i = 0; i < files.Count; i++)
+                // Read all PNGs into memory streams
+                var streams = new List<(int width, int height, MemoryStream png)>();
+                var failedFiles = new List<string>();
+                foreach (var f in files)
                 {
+                    string path = f.Path.LocalPath;
+                    try
+                    {
+                        var ms = LoadPngAsSpriteStream(path, targetW, targetH);
+                        if (ms != null)
+                            streams.Add((targetW, targetH, ms));
+                        else
+                            failedFiles.Add(System.IO.Path.GetFileName(path));
+                    }
+                    catch (Exception ex)
+                    {
+                        failedFiles.Add($"{System.IO.Path.GetFileName(path)}: {ex.Message}");
+                    }
+                }
+
+                if (streams.Count == 0)
+                {
+                    ErrorManager.ShowError("No valid PNG/BMP files could be loaded." +
+                        (failedFiles.Count > 0 ? $"\n\nFailed:\n{string.Join("\n", failedFiles.Take(10))}" : ""));
+                    return;
+                }
+
+                // Build sprite sheets and write them to disk immediately.
+                // Returns map: stream index → new sprite ID.
+                var newIdByIdx = BuildSpriteSheetsAndRegister(streams);
+
+                if (newIdByIdx.Count == 0)
+                {
+                    ErrorManager.ShowError("Failed to build sprite sheets.");
+                    return;
+                }
+
+                // Save updated catalog so new sheets are known on next load
+                SaveCatalogToDisk();
+
+                // Assign new sprite IDs to appearance slots
+                int groupIdx = CurrentObjectAppearance.FrameGroup.Count > 0 ? 0 : -1;
+                if (groupIdx < 0) return;
+
+                int assigned = 0;
+                for (int i = 0; i < newIdByIdx.Count; i++)
+                {
+                    if (!newIdByIdx.TryGetValue(i, out uint newSprId)) continue;
+
                     int slotIdx = startIdx + i;
 
-                    // If we've run past the existing slot list, append a new one into the
-                    // frame group of the last visible slot (or group 0).
-                    if (slotIdx >= AppearanceSprites.Count)
+                    if (slotIdx < AppearanceSprites.Count)
                     {
-                        AppSprListView.SelectedIndex = AppearanceSprites.Count - 1;
-                        AppSprAdd_Click(sender, e);
-                        slotIdx = AppearanceSprites.Count - 1;
-                    }
-
-                    var slot = AppearanceSprites[slotIdx];
-                    // Re-resolve target size per slot in case different slots live in
-                    // different sheets.
-                    var (stw, sth) = MainWindow.GetSpriteSize((int)slot.Id);
-                    int slotW = stw > 0 ? stw : targetW;
-                    int slotH = sth > 0 ? sth : targetH;
-                    var ms = LoadPngAsSpriteStream(files[i].Path.LocalPath, slotW, slotH);
-                    if (ms == null) continue;
-
-                    int groupIdx = (int)slot.Cid;
-                    var info = CurrentObjectAppearance.FrameGroup[groupIdx].SpriteInfo;
-                    int localIdx = LocalIndex(slotIdx);
-
-                    uint id = slot.Id;
-                    if (id == 0)
-                    {
-                        uint newId = AllocateFreeSpriteId();
+                        // Replace existing slot
+                        var slot = AppearanceSprites[slotIdx];
+                        int gIdx = (int)slot.Cid;
+                        var info = CurrentObjectAppearance.FrameGroup[gIdx].SpriteInfo;
+                        int localIdx = LocalIndex(slotIdx);
                         if (localIdx >= 0 && localIdx < info.SpriteId.Count)
-                            info.SpriteId[localIdx] = newId;
-                        slot.Id = newId;
-                        id = newId;
-                    }
-                    else if (!MainWindow.SprLists.ContainsKey((int)id))
-                    {
-                        MainWindow.SprLists[(int)id] = null!;
-                        MainWindow.AllSprList.Add(new ShowList { Id = id });
-                    }
+                            info.SpriteId[localIdx] = newSprId;
+                        slot.Id = newSprId;
 
-                    MainWindow.SprLists[(int)id] = ms;
-                    slot.Image = Utils.MemoryStreamToBitmap(ms);
-                    imported++;
+                        // Update UI image from the just-registered SprLists entry
+                        if (MainWindow.SprLists.TryGetValue((int)newSprId, out var sprMs) && sprMs != null)
+                            slot.Image = Utils.MemoryStreamToBitmap(sprMs);
+                    }
+                    else
+                    {
+                        // Append new slot to frame group 0
+                        var info = CurrentObjectAppearance.FrameGroup[groupIdx].SpriteInfo;
+                        info.SpriteId.Add(newSprId);
+                        var newSlot = new ShowList { Id = newSprId, Cid = (uint)groupIdx };
+                        if (MainWindow.SprLists.TryGetValue((int)newSprId, out var sprMs) && sprMs != null)
+                            newSlot.Image = Utils.MemoryStreamToBitmap(sprMs);
+                        AppearanceSprites.Add(newSlot);
+                    }
+                    assigned++;
                 }
 
                 UpdatePreview(CurrentObjectAppearance);
-                ErrorManager.ShowInfo($"Imported {imported} sprite(s) starting at slot {startIdx}.");
+                RefreshCurrentObjectThumbnail();
+
+                string msg = $"Imported {assigned} sprite(s).";
+                if (failedFiles.Count > 0)
+                    msg += $"\n{failedFiles.Count} file(s) failed to load.";
+                ErrorManager.ShowInfo(msg);
             }
             catch (Exception ex)
             {
-                ErrorManager.ShowError($"Import failed: {ex.Message}");
+                ErrorManager.ShowError($"Import failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        // Save catalog-content.json to disk so new sprite sheets are known on next load.
+        private static void SaveCatalogToDisk()
+        {
+            if (string.IsNullOrEmpty(MainWindow._assetsPath)) return;
+            try
+            {
+                string catalogPath = Path.Combine(MainWindow._assetsPath, "catalog-content.json");
+                var settings = new Newtonsoft.Json.JsonSerializerSettings
+                {
+                    NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
+                    DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
+                    ContractResolver = new LowercaseContractResolver(),
+                };
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(
+                    MainWindow.catalog, Newtonsoft.Json.Formatting.Indented, settings);
+                File.WriteAllText(catalogPath, json);
+            }
+            catch (Exception ex)
+            {
+                MainWindow.Log($"SaveCatalogToDisk failed: {ex.Message}", "Error");
             }
         }
 
@@ -3208,76 +3321,43 @@ namespace Assets_Editor
                 e.DragEffects = Avalonia.Input.DragDropEffects.None;
         }
 
-        private void AppSprListView_Drop(object? sender, Avalonia.Input.DragEventArgs e)
+        private async void AppSprListView_Drop(object? sender, Avalonia.Input.DragEventArgs e)
         {
-            if (CurrentObjectAppearance == null || CurrentObjectAppearance.FrameGroup.Count == 0) return;
+            if (CurrentObjectAppearance == null) return;
+            if (string.IsNullOrEmpty(MainWindow._assetsPath) || !Directory.Exists(MainWindow._assetsPath)) return;
             if (!e.Data.Contains(Avalonia.Input.DataFormats.Files)) return;
 
-            var files = e.Data.GetFiles();
-            if (files == null) return;
+            var storageFiles = e.Data.GetFiles();
+            if (storageFiles == null) return;
 
-            var pngFiles = files
-                .Select(f => f.Path.LocalPath)
-                .Where(p => !string.IsNullOrEmpty(p) &&
-                    (p.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                     p.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)))
+            var pngStorageFiles = storageFiles
+                .Where(f =>
+                {
+                    string p = f.Path.LocalPath;
+                    return !string.IsNullOrEmpty(p) &&
+                        (p.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                         p.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase));
+                })
                 .ToList();
-            if (pngFiles.Count == 0) return;
+            if (pngStorageFiles.Count == 0) return;
 
-            int targetW = 32, targetH = 32;
-            if (AppearanceSprites.Count > 0)
+            // Ensure frame group exists
+            if (CurrentObjectAppearance.FrameGroup.Count == 0)
             {
-                var (tw, th) = MainWindow.GetSpriteSize((int)AppearanceSprites[0].Id);
-                if (tw > 0 && th > 0) { targetW = tw; targetH = th; }
+                CurrentObjectAppearance.FrameGroup.Add(new FrameGroup
+                {
+                    SpriteInfo = new SpriteInfo
+                    {
+                        PatternWidth = 1, PatternHeight = 1, PatternDepth = 1, Layers = 1, PatternFrames = 1,
+                    }
+                });
+                LoadAppearanceSpritesList(CurrentObjectAppearance);
             }
 
             int startIdx = AppSprListView.SelectedIndex >= 0 ? AppSprListView.SelectedIndex : 0;
-            int imported = 0;
-
-            try
-            {
-                for (int i = 0; i < pngFiles.Count; i++)
-                {
-                    int slotIdx = startIdx + i;
-                    if (slotIdx >= AppearanceSprites.Count)
-                    {
-                        AppSprListView.SelectedIndex = AppearanceSprites.Count - 1;
-                        AppSprAdd_Click(sender, new RoutedEventArgs());
-                        slotIdx = AppearanceSprites.Count - 1;
-                    }
-
-                    var slot = AppearanceSprites[slotIdx];
-                    var path = pngFiles[i];
-                    if (string.IsNullOrEmpty(path)) continue;
-                    var ms = LoadPngAsSpriteStream(path, targetW, targetH);
-                    if (ms == null) continue;
-
-                    int groupIdx = (int)slot.Cid;
-                    var info = CurrentObjectAppearance.FrameGroup[groupIdx].SpriteInfo;
-                    int localIdx = LocalIndex(slotIdx);
-
-                    uint id = slot.Id;
-                    if (id == 0)
-                    {
-                        uint newId = AllocateFreeSpriteId();
-                        if (localIdx >= 0 && localIdx < info.SpriteId.Count)
-                            info.SpriteId[localIdx] = newId;
-                        slot.Id = newId;
-                        id = newId;
-                    }
-
-                    MainWindow.SprLists[(int)id] = ms;
-                    slot.Image = Utils.MemoryStreamToBitmap(ms);
-                    imported++;
-                }
-
-                UpdatePreview(CurrentObjectAppearance);
-                StatusBar.Text = $"Dropped {imported} sprite(s).";
-            }
-            catch (Exception ex)
-            {
-                ErrorManager.ShowError($"Drop import failed: {ex.Message}");
-            }
+            // Cast to IReadOnlyList<IStorageFile> for ImportPngsIntoSlots
+            var fileList = pngStorageFiles.Cast<Avalonia.Platform.Storage.IStorageFile>().ToList();
+            await ImportPngsIntoSlots(fileList, startIdx);
         }
 
         #endregion
@@ -3396,6 +3476,7 @@ namespace Assets_Editor
 
                 LoadAppearanceSpritesList(CurrentObjectAppearance);
                 UpdatePreview(CurrentObjectAppearance);
+                RefreshCurrentObjectThumbnail();
 
                 StatusBar.Text = $"Batch import: {imported} sprites added.";
                 ErrorManager.ShowInfo($"Imported {imported} sprite(s) into appearance {CurrentObjectAppearance.Id}.");
@@ -3431,6 +3512,9 @@ namespace Assets_Editor
 
             try
             {
+                if (StatusBar != null) StatusBar.Text = "Writing dirty sprite sheets…";
+                RewriteDirtySheets();
+
                 if (StatusBar != null) StatusBar.Text = "Publishing…";
                 var result = await AssetsPublisher.PublishAsync(
                     MainWindow.appearances,
@@ -3507,6 +3591,10 @@ namespace Assets_Editor
                 System.IO.File.Copy(catalogPath, catalogPath + "-bak", true);
                 System.IO.File.Copy(MainWindow._datPath, MainWindow._datPath + "-bak", true);
 
+                // Write dirty sprite sheets FIRST — this may add new catalog entries
+                // for orphan sprites, so the catalog must be serialized afterwards.
+                int sheetsRewritten = RewriteDirtySheets();
+
                 var catalogSettings = new Newtonsoft.Json.JsonSerializerSettings
                 {
                     NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
@@ -3526,10 +3614,14 @@ namespace Assets_Editor
 
                 if (StatusBar != null)
                     StatusBar.Text = $"Compiled → {System.IO.Path.GetFileName(MainWindow._datPath)}  ({DateTime.Now:HH:mm:ss})";
+
+                string sheetsMsg = sheetsRewritten > 0
+                    ? $"\nSprite sheets rewritten: {sheetsRewritten}"
+                    : "";
                 ErrorManager.ShowInfo(
                     $"Compiled successfully.\n\n" +
                     $"appearances: {System.IO.Path.GetFileName(MainWindow._datPath)}\n" +
-                    $"catalog-content.json updated\n" +
+                    $"catalog-content.json updated{sheetsMsg}\n" +
                     $"Backups: *-bak");
             }
             catch (Exception ex)
@@ -3542,6 +3634,204 @@ namespace Assets_Editor
         private class LowercaseContractResolver : Newtonsoft.Json.Serialization.DefaultContractResolver
         {
             protected override string ResolvePropertyName(string propertyName) => propertyName.ToLower();
+        }
+
+        // Rewrite every sprite sheet that contains at least one dirty (imported) sprite,
+        // and create new sheets for orphan sprites (newly allocated IDs not in any sheet).
+        private int RewriteDirtySheets()
+        {
+            if (MainWindow.DirtySpriteIds.Count == 0) return 0;
+
+            // Partition dirty IDs into "belongs to existing sheet" vs "orphan" (new ID).
+            var sheetToDirty = new Dictionary<MainWindow.Catalog, List<int>>();
+            var orphanIds = new List<int>(MainWindow.DirtySpriteIds);
+
+            foreach (var cat in MainWindow.catalog)
+            {
+                if (cat.Type != "sprite") continue;
+                for (int i = orphanIds.Count - 1; i >= 0; i--)
+                {
+                    int id = orphanIds[i];
+                    if (id >= cat.FirstSpriteid && id <= cat.LastSpriteid)
+                    {
+                        if (!sheetToDirty.TryGetValue(cat, out var list))
+                        {
+                            list = new List<int>();
+                            sheetToDirty[cat] = list;
+                        }
+                        list.Add(id);
+                        orphanIds.RemoveAt(i);
+                    }
+                }
+            }
+
+            int rewritten = 0;
+
+            // ── 1. Patch existing sheets ────────────────────────────────────────
+            foreach (var (cat, dirtyIds) in sheetToDirty)
+            {
+                string sheetPath = Path.Combine(MainWindow._assetsPath, cat.File);
+                var layout = GetSpriteLayout(cat.SpriteType);
+                int tW = layout.SpriteSizeX, tH = layout.SpriteSizeY;
+                int cols = layout.Cols, rows = layout.Rows;
+
+                SKBitmap? baseBmp = null;
+                if (File.Exists(sheetPath))
+                {
+                    try { baseBmp = LZMA.DecompressFileLZMA(sheetPath); }
+                    catch { }
+                }
+                using var sheet = baseBmp ?? new SKBitmap(SprSheetWidth, SprSheetHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+
+                using (var canvas = new SKCanvas(sheet))
+                {
+                    foreach (int sprId in dirtyIds)
+                    {
+                        if (!MainWindow.SprLists.TryGetValue(sprId, out var ms) || ms == null) continue;
+
+                        int i = sprId - cat.FirstSpriteid;
+                        if (i < 0 || i >= cols * rows) continue;
+
+                        byte[] pngBytes = ms.ToArray();
+                        using var tileBmp = SKBitmap.Decode(pngBytes);
+                        if (tileBmp == null) continue;
+
+                        int col = i % cols;
+                        int row = i / cols;
+
+                        canvas.Save();
+                        canvas.ClipRect(SKRect.Create(col * tW, row * tH, tW, tH));
+                        canvas.Clear(SKColors.Transparent);
+                        canvas.Restore();
+                        canvas.DrawBitmap(tileBmp, SKRect.Create(col * tW, row * tH, tW, tH));
+                    }
+                }
+
+                LZMA.ExportLzmaFile(sheet, ref sheetPath);
+                rewritten++;
+            }
+
+            // ── 2. Create new sheets for orphan sprites ─────────────────────────
+            if (orphanIds.Count > 0)
+            {
+                // Find the next free contiguous ID range above all existing catalog entries.
+                uint nextFreeId = 1;
+                foreach (var c in MainWindow.catalog)
+                    if (c.Type == "sprite" && c.LastSpriteid != int.MinValue && (uint)c.LastSpriteid >= nextFreeId)
+                        nextFreeId = (uint)c.LastSpriteid + 1;
+                foreach (var k in MainWindow.SprLists.Keys)
+                    if ((uint)k >= nextFreeId) nextFreeId = (uint)k + 1;
+
+                // Collect PNG data grouped by sprite size.
+                var groups = new Dictionary<(int w, int h), List<(int oldSprId, byte[] png)>>();
+                foreach (int sprId in orphanIds)
+                {
+                    if (!MainWindow.SprLists.TryGetValue(sprId, out var ms) || ms == null) continue;
+                    byte[] png = ms.ToArray();
+                    using var probe = SKBitmap.Decode(png);
+                    if (probe == null) continue;
+                    var key = (probe.Width, probe.Height);
+                    if (!groups.TryGetValue(key, out var list))
+                    {
+                        list = new List<(int, byte[])>();
+                        groups[key] = list;
+                    }
+                    list.Add((sprId, png));
+                }
+
+                foreach (var (size, items) in groups)
+                {
+                    int spriteType = SpriteSizes.FindIndex(s => s.Width == size.w && s.Height == size.h);
+                    if (spriteType < 0) spriteType = 0;
+                    int cols = Math.Max(1, SprSheetWidth / size.w);
+                    int rows = Math.Max(1, SprSheetHeight / size.h);
+                    int perSheet = cols * rows;
+
+                    for (int off = 0; off < items.Count; off += perSheet)
+                    {
+                        int count = Math.Min(perSheet, items.Count - off);
+                        uint firstId = nextFreeId;
+
+                        using var sheet = new SKBitmap(SprSheetWidth, SprSheetHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+                        using var canvas = new SKCanvas(sheet);
+                        canvas.Clear(SKColors.Transparent);
+
+                        for (int i = 0; i < count; i++)
+                        {
+                            var (oldSprId, png) = items[off + i];
+                            uint newId = nextFreeId++;
+
+                            using var bmp = SKBitmap.Decode(png);
+                            if (bmp != null)
+                            {
+                                int col = i % cols;
+                                int row = i / cols;
+                                canvas.DrawBitmap(bmp, SKRect.Create(col * size.w, row * size.h, size.w, size.h));
+                            }
+
+                            // Move sprite to new contiguous ID
+                            MainWindow.SprLists[(int)newId] = new MemoryStream(png, writable: false);
+                            if ((uint)oldSprId != newId)
+                            {
+                                MainWindow.SprLists.TryRemove(oldSprId, out _);
+                                RemapSpriteIdEverywhere((uint)oldSprId, newId);
+                            }
+                        }
+
+                        uint lastId = nextFreeId - 1;
+
+                        using var sha = System.Security.Cryptography.SHA256.Create();
+                        string hash = Convert.ToHexString(sha.ComputeHash(sheet.Bytes)).ToLowerInvariant();
+                        string sheetName = $"sprites-{hash}.bmp.lzma";
+                        string sheetPath = Path.Combine(MainWindow._assetsPath, sheetName);
+                        LZMA.ExportLzmaFile(sheet, ref sheetPath);
+
+                        MainWindow.catalog.Add(new MainWindow.Catalog
+                        {
+                            Type = "sprite",
+                            File = sheetName,
+                            SpriteType = spriteType,
+                            FirstSpriteid = (int)firstId,
+                            LastSpriteid = (int)lastId,
+                            Area = 0,
+                        });
+                        rewritten++;
+                    }
+                }
+            }
+
+            MainWindow.DirtySpriteIds.Clear();
+            return rewritten;
+        }
+
+        // Update all SpriteId references everywhere: protobuf, AppearanceSprites UI list,
+        // and the AllSprList global sprite list.
+        private void RemapSpriteIdEverywhere(uint oldId, uint newId)
+        {
+            if (MainWindow.appearances != null)
+            {
+                foreach (var list in new[] { MainWindow.appearances.Outfit, MainWindow.appearances.Object,
+                                             MainWindow.appearances.Effect, MainWindow.appearances.Missile })
+                {
+                    foreach (var app in list)
+                    {
+                        foreach (var fg in app.FrameGroup)
+                        {
+                            for (int i = 0; i < fg.SpriteInfo.SpriteId.Count; i++)
+                            {
+                                if (fg.SpriteInfo.SpriteId[i] == oldId)
+                                    fg.SpriteInfo.SpriteId[i] = newId;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update AppearanceSprites (UI list for current appearance)
+            foreach (var sl in AppearanceSprites)
+            {
+                if (sl.Id == oldId) sl.Id = newId;
+            }
         }
 
         #endregion

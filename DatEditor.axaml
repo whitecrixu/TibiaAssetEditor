@@ -371,7 +371,10 @@
                                     ToolTip.Tip="Append a new sprite ID"/>
                             <Button Content="📥 Import" Padding="7,3" Margin="0,0,4,0"
                                     Click="AppSprImport_Click"
-                                    ToolTip.Tip="Replace selected sprite with a PNG"/>
+                                    ToolTip.Tip="Replace selected sprite(s) with PNG(s) — multi-select fills slots from selection"/>
+                            <Button Content="📥 All" Padding="7,3" Margin="0,0,4,0"
+                                    Click="AppSprImportAll_Click"
+                                    ToolTip.Tip="Replace ALL sprite slots — select PNGs matching the number of slots"/>
                             <Button Content="📤 Export" Padding="7,3" Margin="0,0,4,0"
                                     Click="AppSprExport_Click"
                                     ToolTip.Tip="Export selected sprite as PNG"/>

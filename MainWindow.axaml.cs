@@ -185,6 +185,7 @@ public partial class MainWindow : Window
     public static Appearances? appearances;
     public static List<ShowList> AllSprList = [];
     public static ConcurrentDictionary<int, MemoryStream> SprLists = [];
+    public static HashSet<int> DirtySpriteIds = [];
     public static bool LegacyClient = false;
     public static uint DatSignature { get; set; }
     public static uint SprSignature { get; set; }
@@ -651,6 +652,7 @@ public partial class MainWindow : Window
     {
         int progress = 0;
         SprLists = new ConcurrentDictionary<int, MemoryStream>();
+        DirtySpriteIds = [];
         var options = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount * 5 };
 
         // Register placeholder (null) entries only for sprite-type catalog entries
