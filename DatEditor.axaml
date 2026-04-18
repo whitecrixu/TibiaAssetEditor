@@ -4,77 +4,36 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="900"
         x:Class="Assets_Editor.DatEditor"
-        Title="Tibia Asset Editor By WhiteCrixu V1.0 — DAT/Appearances"
+        Title="Tibia MultiTool Editor — DAT/Appearances"
         Height="900" Width="1280"
         WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource SystemChromeMediumLowColor}">
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        TransparencyLevelHint="Mica,AcrylicBlur,Blur">
 
     <Window.Styles>
-        <!-- Toolbar button style -->
+        <!-- Window-local overrides. Card / panelHeader / flag / action come
+             from Resources/Theme.axaml; only DAT-specific tweaks live here. -->
         <Style Selector="Button.toolbar">
-            <Setter Property="Padding" Value="12,7"/>
-            <Setter Property="Margin" Value="3,0"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseLowColor}"/>
+            <Setter Property="Padding"      Value="10,5"/>
+            <Setter Property="Margin"       Value="2,0"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="FontWeight"   Value="Medium"/>
         </Style>
-        <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
-            <Setter Property="Foreground" Value="White"/>
-        </Style>
-        <!-- Action button style (side panels) -->
-        <Style Selector="Button.action">
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseLowColor}"/>
-        </Style>
-        <Style Selector="Button.action:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
-            <Setter Property="Foreground" Value="White"/>
-        </Style>
-        <!-- Card-like border -->
-        <Style Selector="Border.card">
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SystemBaseLowColor}"/>
-            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumLowColor}"/>
-            <Setter Property="Padding" Value="10"/>
-        </Style>
-        <!-- Panel header style -->
-        <Style Selector="TextBlock.panelHeader">
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
-            <Setter Property="Foreground" Value="{DynamicResource SystemAccentColor}"/>
-        </Style>
-        <!-- Section label style -->
         <Style Selector="TextBlock.sectionLabel">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{DynamicResource SystemBaseMediumColor}"/>
-            <Setter Property="Margin" Value="0,8,0,4"/>
-        </Style>
-        <!-- CheckBox tidied for flag grid -->
-        <Style Selector="CheckBox.flag">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Margin" Value="2,3"/>
-            <Setter Property="MinWidth" Value="130"/>
+            <Setter Property="FontSize"     Value="11"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Foreground"   Value="{DynamicResource SemiColorTextSecondary}"/>
+            <Setter Property="Margin"       Value="0,8,0,4"/>
         </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- ═══ TOP TOOLBAR ═══ -->
-        <Border Grid.Row="0" Padding="8,6" BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource SystemBaseLowColor}">
+        <Border Grid.Row="0" Classes="appbar">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
                     <TextBlock Text="Light" VerticalAlignment="Center" FontSize="12" Margin="0,0,4,0"/>
@@ -100,6 +59,17 @@
                                   ToolTip.Tip="Load OpenTibia items.xml to display item names in the list"/>
                         <MenuItem Header="✏ Edit items.xml…"       Click="EditItemsXml_Click"
                                   ToolTip.Tip="Open the items.xml editor"/>
+                        <Separator/>
+                        <MenuItem Header="📝 Load proficiencies.json…" Click="LoadProficiencies_Click"
+                                  ToolTip.Tip="Load a canary-style proficiencies.json"/>
+                        <MenuItem x:Name="RecentProficienciesMenu" Header="🕒 Recent proficiencies.json"/>
+                        <MenuItem Header="✏ Edit proficiencies.json…"  Click="EditProficiencies_Click"
+                                  ToolTip.Tip="Open the proficiencies editor"/>
+                        <Separator/>
+                        <MenuItem Header="📂 Load monster folder…" Click="LoadMonsterFolder_Click"
+                                  ToolTip.Tip="Recursively scan a Canary monster/ folder for .lua files"/>
+                        <MenuItem x:Name="RecentMonsterFoldersMenu" Header="🕒 Recent monster folders"/>
+                        <MenuItem Header="🐺 Open Monster Editor…" Click="OpenMonsterEditor_Click"/>
                     </MenuItem>
                     <MenuItem Header="📥 Import">
                         <MenuItem Header="📦 Import OBD…" Click="ImportOBD_Click"/>
@@ -130,6 +100,10 @@
                                   ToolTip.Tip="Compare flags of current appearance with another by ID"/>
                         <MenuItem Header="📋 Copy Sprite IDs"          Click="CopySpriteIds_Click"
                                   ToolTip.Tip="Copy sprite IDs of selected appearances as CSV to clipboard"/>
+                        <MenuItem Header="🗑 Usuń zaznaczone sprite'y" Click="DeleteSelectedSprites_Click"
+                                  ToolTip.Tip="Permanently delete selected sprites (from the Sprites list on the right) — blanks tiles in their sheets on disk"/>
+                        <MenuItem Header="🧹 Usuń wszystkie puste sprite'y" Click="DeleteAllEmptySprites_Click"
+                                  ToolTip.Tip="Scan all sheets and delete fully-transparent sprites. Also drops sheets that end up fully empty."/>
                         <Separator/>
                         <MenuItem Header="🔍 Quick Jump (Ctrl+G)"   Click="QuickJumpMenu_Click"/>
                         <MenuItem Header="⭐ Toggle Bookmark (Ctrl+B)" Click="ToggleBookmark_Click"/>
@@ -215,6 +189,7 @@
                         <ComboBoxItem Content="Items"/>
                         <ComboBoxItem Content="Effects"/>
                         <ComboBoxItem Content="Missiles"/>
+                        <ComboBoxItem Content="Monsters"/>
                     </ComboBox>
                     <TextBox x:Name="SearchBox" Watermark="Search: ID, name, or flag (e.g. Container, Light)"
                              TextChanged="SearchBox_TextChanged"/>
@@ -622,7 +597,13 @@
                                 <TextBlock Grid.Row="10" Grid.Column="0" Text="Imbue Slots" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
                                 <NumericUpDown x:Name="FlagImbueSlotCount" Grid.Row="10" Grid.Column="1" Minimum="0" Maximum="10" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="10" Grid.Column="3" Text="Proficiency ID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagProficiencyId" Grid.Row="10" Grid.Column="4" Minimum="0" Maximum="9999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <StackPanel Grid.Row="10" Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
+                                    <NumericUpDown x:Name="FlagProficiencyId" Minimum="0" Maximum="999999" Value="0" Height="28" Width="130"/>
+                                    <Button x:Name="FlagProficiencyPickBtn" Content="…" Width="28" Height="28" Padding="0"
+                                            ToolTip.Tip="Pick proficiency by name (from loaded proficiencies.json)"
+                                            Click="PickProficiency_Click"/>
+                                    <TextBlock x:Name="FlagProficiencyName" VerticalAlignment="Center" FontSize="11" Opacity="0.7"/>
+                                </StackPanel>
 
                                 <!-- Row 11: WeaponType -->
                                 <TextBlock Grid.Row="11" Grid.Column="0" Text="Weapon Type" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
@@ -783,11 +764,8 @@
         </Grid>
 
         <!-- ═══ STATUS BAR ═══ -->
-        <Border Grid.Row="2" Padding="8,4" BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemBaseLowColor}">
-            <TextBlock x:Name="StatusBar" FontSize="11"
-                       Foreground="{DynamicResource SystemBaseMediumColor}"
-                       Text="Ready"/>
+        <Border Grid.Row="2" Classes="statusbar">
+            <TextBlock x:Name="StatusBar" Classes="dim" Text="Ready"/>
         </Border>
 
     </Grid>

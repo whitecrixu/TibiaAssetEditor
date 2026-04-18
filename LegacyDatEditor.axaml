@@ -5,7 +5,7 @@
         xmlns:local="clr-namespace:Assets_Editor"
         mc:Ignorable="d"
         x:Class="Assets_Editor.LegacyDatEditor"
-        Title="LegacyDatEditor" Width="1220" Height="880">
+        Title="Tibia MultiTool Editor — Legacy DAT" Width="1240" Height="900">
     <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -14,7 +14,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- Left Column: Object List -->
-        <Border Grid.Column="0" BorderThickness="1" BorderBrush="Gray" Margin="10,5,0,10" Width="240">
+        <Border Grid.Column="0" Classes="card" Margin="10,5,0,10" Width="240">
             <Grid RowDefinitions="45,*,40,75">
                 <ComboBox Grid.Row="0" x:Name="ObjectMenu" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="ObjectMenuChanged">
                     <ComboBoxItem Content="Outfits"/>
@@ -33,7 +33,7 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
                 <NumericUpDown Grid.Row="2" x:Name="ObjListViewSelectedIndex" Minimum="0" FormatString="0" Margin="0,5,0,0" ValueChanged="ObjListViewSelectedIndex_Changed"/>
-                <Border Grid.Row="3" BorderThickness="1" BorderBrush="Gray" Margin="0,5,0,0">
+                <Border Grid.Row="3" Classes="card" Margin="0,5,0,0">
                     <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                             <Button Content="💾" Width="35" Height="35" ToolTip.Tip="Save" Click="ObjectSave_Click"/>
@@ -276,13 +276,13 @@
                 </TabItem>
             </TabControl>
 
-            <Border Grid.Row="2" BorderThickness="1" BorderBrush="Gray" Margin="0,0,0,10">
+            <Border Grid.Row="2" Classes="card" Margin="0,0,0,10">
                 <TextBlock x:Name="StatusBar" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
         </Grid>
 
         <!-- Right Column: Sprite List -->
-        <Border Grid.Column="2" BorderThickness="1" BorderBrush="Gray" Width="225" Margin="10,5,10,10">
+        <Border Grid.Column="2" Classes="card" Width="225" Margin="10,5,10,10">
             <Grid RowDefinitions="*,30,40">
                 <ListBox Grid.Row="0" x:Name="SprListView" Margin="0,5,0,0">
                     <ListBox.ItemTemplate>

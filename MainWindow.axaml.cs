@@ -109,15 +109,20 @@ public partial class MainWindow : Window
         DatStructureDropdown.ItemsSource = items;
     }
 
+    public enum UiDensity { Comfortable = 0, Cozy = 1, Compact = 2 }
+
     public class Settings
     {
         public bool DarkMode { get; set; }
         public int LastPresetChoice { get; set; }
+        public UiDensity Density { get; set; } = UiDensity.Cozy;
         public ObservableCollection<PresetSettings> Presets { get; set; } = [];
 
         // Pass 1 additions
-        public List<string> RecentAppearanceDats { get; set; } = [];
-        public List<string> RecentItemsXml       { get; set; } = [];
+        public List<string> RecentAppearanceDats  { get; set; } = [];
+        public List<string> RecentItemsXml        { get; set; } = [];
+        public List<string> RecentProficiencies   { get; set; } = [];
+        public List<string> RecentMonsterFolders  { get; set; } = [];
         public int AutoSaveIntervalMinutes { get; set; } = 5;
         public bool AutoSaveEnabled { get; set; } = true;
         public int DefaultPreviewFps { get; set; } = 5;
@@ -152,6 +157,24 @@ public partial class MainWindow : Window
         SettingsList.RecentItemsXml.Insert(0, path);
         while (SettingsList.RecentItemsXml.Count > 10)
             SettingsList.RecentItemsXml.RemoveAt(SettingsList.RecentItemsXml.Count - 1);
+        PersistSettings();
+    }
+
+    public static void AddRecentProficiencies(string path)
+    {
+        SettingsList.RecentProficiencies.RemoveAll(p => p == path);
+        SettingsList.RecentProficiencies.Insert(0, path);
+        while (SettingsList.RecentProficiencies.Count > 10)
+            SettingsList.RecentProficiencies.RemoveAt(SettingsList.RecentProficiencies.Count - 1);
+        PersistSettings();
+    }
+
+    public static void AddRecentMonsterFolder(string path)
+    {
+        SettingsList.RecentMonsterFolders.RemoveAll(p => p == path);
+        SettingsList.RecentMonsterFolders.Insert(0, path);
+        while (SettingsList.RecentMonsterFolders.Count > 10)
+            SettingsList.RecentMonsterFolders.RemoveAt(SettingsList.RecentMonsterFolders.Count - 1);
         PersistSettings();
     }
 
@@ -257,6 +280,8 @@ public partial class MainWindow : Window
         }
 
         DarkModeToggle.IsChecked = SettingsList.DarkMode;
+        DensityDropdown.SelectedIndex = (int)SettingsList.Density;
+        App.SetDensity(SettingsList.Density);
         CreateSettingsChoices();
     }
 
@@ -275,7 +300,12 @@ public partial class MainWindow : Window
 
     private void UpdateAppearancesCount()
     {
-        AppearancesCount.Text = $"Items:\t{ObjectCount}\nOutfits:\t{OutfitCount}\nEffects:\t{EffectCount}\nMissiles:\t{MissileCount}";
+        AppearancesCount.Text =
+            $"Items:\t{ObjectCount}\n" +
+            $"Outfits:\t{OutfitCount}\n" +
+            $"Effects:\t{EffectCount}\n" +
+            $"Missiles:\t{MissileCount}\n" +
+            $"Sprites:\t{SprLists.Count}";
     }
 
     private void LoadAppearances()
@@ -592,6 +622,9 @@ public partial class MainWindow : Window
         });
 
         SetUILock(false);
+        // Sprite count isn't known until LoadSprSheet/InternalTryLoadSpr populate
+        // SprLists; refresh the stats panel now that it's final.
+        UpdateAppearancesCount();
 
         if (appearances == null)
         {
@@ -601,17 +634,79 @@ public partial class MainWindow : Window
 
         if (!Loaded) { LoadAssets.IsEnabled = true; return; }
 
-        if (LegacyClient == false)
+        // Assets are loaded — unlock the tiles that need them and stay on the
+        // hub (MainWindow no longer auto-navigates to DAT editor). Update only
+        // the text label, NOT the Button.Content, because replacing Content
+        // would blow away the inner ProgressBar and break the % binding.
+        OpenDatEditorTile.IsEnabled = true;
+        OpenSpriteEditorTile.IsEnabled = true;
+        LoadAssetsLabel.Text = "Reload Assets";
+    }
+
+    private DatEditor? _datEditorWindow;
+    private LegacyDatEditor? _legacyDatEditorWindow;
+
+    private void OpenDatEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        if (appearances == null) return;
+        if (LegacyClient)
         {
-            DatEditor datEditor = new(appearances);
-            datEditor.Show();
+            if (_legacyDatEditorWindow == null || !_legacyDatEditorWindow.IsVisible)
+                _legacyDatEditorWindow = new LegacyDatEditor(appearances, (VersionInfo)DatStructureDropdown.SelectedItem!);
+            _legacyDatEditorWindow.Show();
+            _legacyDatEditorWindow.Activate();
         }
         else
         {
-            LegacyDatEditor legacyDatEditor = new(appearances, (VersionInfo)DatStructureDropdown.SelectedItem!);
-            legacyDatEditor.Show();
+            if (_datEditorWindow == null || !_datEditorWindow.IsVisible)
+                _datEditorWindow = new DatEditor(appearances);
+            _datEditorWindow.Show();
+            _datEditorWindow.Activate();
         }
-        Hide();
+    }
+
+    private void OpenSpriteEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        if (appearances == null) return;
+        // SprEditor needs a DatEditor to talk to for list refresh; spin one up
+        // (it stays open) if the user hasn't already clicked the DAT tile.
+        if (LegacyClient)
+        {
+            ErrorManager.ShowInfo("Sprite Editor is available on modern clients only.");
+            return;
+        }
+        if (_datEditorWindow == null || !_datEditorWindow.IsVisible)
+        {
+            _datEditorWindow = new DatEditor(appearances);
+            _datEditorWindow.Show();
+        }
+        new SprEditor(_datEditorWindow).Show();
+    }
+
+    private void OpenMonsterEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        new MonsterEditor().Show();
+    }
+
+    private void OpenProficienciesEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        new ProficienciesEditor().Show();
+    }
+
+    private void OpenItemsXmlEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        new ItemsXmlEditor().Show();
+    }
+
+    private void OpenOtbEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        // OTBEditor uses dynamic dispatch on the "editor" param to reach
+        // ObjectMenu/ObjListView — works with either a DatEditor (modern) or
+        // this MainWindow (falls back to no-op when those fields are missing,
+        // which is fine for server-side-only workflows).
+        dynamic owner = _datEditorWindow ?? (object)this;
+        var otb = new OTBEditor(owner, LegacyClient);
+        otb.Show();
     }
 
     private static void GenerateTileSetImageList(SKBitmap bitmap, Catalog sheet)
@@ -1051,6 +1146,15 @@ public partial class MainWindow : Window
     private void DarkModeToggle_Changed(object? sender, RoutedEventArgs e)
     {
         SetCurrentTheme(DarkModeToggle.IsChecked ?? false);
+    }
+
+    private void DensityDropdown_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        int idx = DensityDropdown.SelectedIndex;
+        if (idx < 0) return;
+        SettingsList.Density = (UiDensity)idx;
+        App.SetDensity(SettingsList.Density);
+        PersistSettings();
     }
 
     private void SetVersionDescription(string text)

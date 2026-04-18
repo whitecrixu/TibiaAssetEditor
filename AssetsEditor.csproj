@@ -4,11 +4,11 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Assets_Editor</RootNamespace>
-    <AssemblyName>Tibia Asset Editor</AssemblyName>
-    <FileVersion>1.1.0</FileVersion>
-    <AssemblyVersion>1.1.0</AssemblyVersion>
-    <Product>Tibia Asset Editor By WhiteCrixu</Product>
-    <Description>Cross-platform Tibia Assets Editor</Description>
+    <AssemblyName>Tibia MultiTool Editor</AssemblyName>
+    <FileVersion>2.0.0</FileVersion>
+    <AssemblyVersion>2.0.0</AssemblyVersion>
+    <Product>Tibia MultiTool Editor By WhiteCrixu</Product>
+    <Description>Cross-platform Tibia MultiTool Editor</Description>
     <Nullable>enable</Nullable>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -18,6 +18,9 @@
     <PackageReference Include="Avalonia" Version="11.2.3" />
     <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Semi.Avalonia" Version="11.2.1.4" />
+    <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.5.1" />
+    <PackageReference Include="Projektanker.Icons.Avalonia.FontAwesome" Version="9.5.1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.2.0" />

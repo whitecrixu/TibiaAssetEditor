@@ -1,22 +1,26 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="https://github.com/projektanker/icons.avalonia"
         x:Class="Assets_Editor.ItemsXmlEditor"
         Title="items.xml Editor"
         Width="1180" Height="780"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        TransparencyLevelHint="Mica,AcrylicBlur,Blur">
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- Top toolbar -->
-        <Border Grid.Row="0" Padding="8,6" BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource SystemBaseLowColor}">
+        <Border Grid.Row="0" Classes="appbar">
             <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button Content="📂 Open items.xml…" Click="Open_Click"/>
-                <Button Content="💾 Save"            Click="Save_Click"/>
-                <Button Content="💾 Save As…"        Click="SaveAs_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-folder-open" Content="Open items.xml…" Click="Open_Click"/>
+                <Button Classes="tool primary" i:Attached.Icon="fa-floppy-disk" Content="Save" Click="Save_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-floppy-disk" Content="Save As…" Click="SaveAs_Click"/>
                 <Separator Width="1" Margin="4,0"/>
-                <Button Content="➕ New Entry"       Click="AddNew_Click"/>
-                <Button Content="🗑 Delete Selected" Click="DeleteSelected_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-plus"  Content="New Entry" Click="AddNew_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-trash" Content="Delete Selected" Click="DeleteSelected_Click"/>
                 <Separator Width="1" Margin="4,0"/>
-                <TextBlock x:Name="PathText" VerticalAlignment="Center" Opacity="0.7" FontSize="11"/>
+                <TextBlock x:Name="PathText" VerticalAlignment="Center" Classes="dim"/>
             </StackPanel>
         </Border>
 
@@ -34,8 +38,7 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" Margin="2,4">
-                                <Border Width="40" Height="40" CornerRadius="4"
-                                        Background="{DynamicResource SystemChromeLowColor}">
+                                <Border Classes="spriteSlot" Width="40" Height="40">
                                     <Image Source="{Binding Image}" Width="38" Height="38"
                                            RenderOptions.BitmapInterpolationMode="None"/>
                                 </Border>
@@ -54,19 +57,16 @@
             <!-- Right: editor form with tabs -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
                 <!-- Header: big image + ID + name -->
-                <Border Grid.Row="0" Padding="10" Margin="8,8,8,0" CornerRadius="6"
-                        BorderThickness="1" BorderBrush="{DynamicResource SystemBaseLowColor}"
-                        Background="{DynamicResource SystemChromeMediumLowColor}">
+                <Border Grid.Row="0" Classes="hero" Margin="8,8,8,0">
                     <StackPanel Orientation="Horizontal" Spacing="12">
-                        <Border Width="96" Height="96" CornerRadius="4"
-                                Background="{DynamicResource SystemChromeLowColor}">
+                        <Border Classes="spriteSlot" Width="96" Height="96">
                             <Image x:Name="HeaderImage" Width="90" Height="90"
                                    RenderOptions.BitmapInterpolationMode="None"/>
                         </Border>
                         <StackPanel VerticalAlignment="Center" Spacing="4">
                             <TextBlock x:Name="HeaderIdText" Text="No selection" FontWeight="SemiBold" FontSize="16"/>
-                            <TextBlock x:Name="HeaderNameText" Text="" FontSize="13" Opacity="0.7"/>
-                            <TextBlock x:Name="HeaderTypeText" Text="" FontSize="11" Opacity="0.55"/>
+                            <TextBlock x:Name="HeaderNameText" Classes="dim" FontSize="13" Text=""/>
+                            <TextBlock x:Name="HeaderTypeText" Classes="dim" Text=""/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -254,12 +254,10 @@
         </Grid>
 
         <!-- Status bar -->
-        <Border Grid.Row="2" Padding="8,4" BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemBaseLowColor}">
+        <Border Grid.Row="2" Classes="statusbar">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="💾 Apply Changes" Click="ApplyChanges_Click" Padding="8,2"/>
-                <TextBlock x:Name="StatusText" FontSize="11" Opacity="0.7" Text="Ready"
-                           VerticalAlignment="Center"/>
+                <Button Classes="tool primary" i:Attached.Icon="fa-check" Content="Apply Changes" Click="ApplyChanges_Click"/>
+                <TextBlock x:Name="StatusText" Classes="dim" Text="Ready" VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
     </Grid>

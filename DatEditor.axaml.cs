@@ -152,7 +152,7 @@ namespace Assets_Editor
             FlagGemQualityId.ValueChanged += (s, e) => FlagParam_Changed(s, e);
             FlagGemVocationId.ValueChanged += (s, e) => FlagParam_Changed(s, e);
             FlagImbueSlotCount.ValueChanged += (s, e) => FlagParam_Changed(s, e);
-            FlagProficiencyId.ValueChanged += (s, e) => FlagParam_Changed(s, e);
+            FlagProficiencyId.ValueChanged += (s, e) => { FlagParam_Changed(s, e); RefreshProficiencyName(); };
             FlagMarketTrade.ValueChanged += (s, e) => FlagParam_Changed(s, e);
             FlagMarketShow.ValueChanged += (s, e) => FlagParam_Changed(s, e);
             FlagMarketLevel.ValueChanged += (s, e) => FlagParam_Changed(s, e);
@@ -320,6 +320,15 @@ namespace Assets_Editor
         private void ObjectMenuChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (!isPageLoaded || ObjectMenu == null) return;
+            // The "Monsters" choice doesn't belong to the dat/appearances model —
+            // pop the dedicated editor window and roll the dropdown back so the
+            // rest of the DAT UI stays coherent.
+            if (ObjectMenu.SelectedIndex == 4)
+            {
+                ObjectMenu.SelectedIndex = 0;
+                OpenMonsterEditor_Click(sender, new RoutedEventArgs());
+                return;
+            }
             UpdateShowList(ObjectMenu.SelectedIndex);
         }
 
@@ -3161,6 +3170,18 @@ namespace Assets_Editor
 
         private void Window_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
         {
+            if (e.Key == Avalonia.Input.Key.Delete)
+            {
+                try
+                {
+                    var ownerLb = FindOwningListBox(e.Source);
+                    string ownerName = ownerLb == SprListView ? "SprListView" : ownerLb == AppSprListView ? "AppSprListView" : ownerLb == ObjListView ? "ObjListView" : ownerLb?.Name ?? "<null>";
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
+                        $"{DateTime.Now:HH:mm:ss.fff} [Window_KeyDown] Delete pressed, owner={ownerName}, source={e.Source?.GetType().Name}\n");
+                }
+                catch { }
+            }
+
             // Undo: Ctrl+Z
             if (e.Key == Avalonia.Input.Key.Z && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control))
             {
@@ -3180,8 +3201,157 @@ namespace Assets_Editor
             if (e.Key != Avalonia.Input.Key.Delete) return;
 
             var owner = FindOwningListBox(e.Source);
-            if (owner == SprListView)     { _ = HandleSprDelete();    e.Handled = true; return; }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} [Window_KeyDown] Dispatching. owner==SprListView: {owner == SprListView}, owner==AppSprListView: {owner == AppSprListView}\n"); } catch { }
+            if (owner == SprListView)     { _ = SafeHandleSprDelete();    e.Handled = true; return; }
             if (owner == AppSprListView)  { _ = HandleAppSprDelete(); e.Handled = true; return; }
+        }
+
+        private async System.Threading.Tasks.Task SafeHandleSprDelete()
+        {
+            try { await HandleSprDelete(); }
+            catch (Exception ex)
+            {
+                try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
+                    $"{DateTime.Now:HH:mm:ss.fff} [SafeHandleSprDelete] EXCEPTION: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n"); } catch { }
+                MainWindow.Log($"[HandleSprDelete] Exception: {ex.Message}", "Error");
+            }
+        }
+
+        // Menu → Edit → Usuń zaznaczone sprite'y. Same semantics as the Delete key
+        // dispatch, but triggered from the menu so it works even when keyboard routing
+        // is flaky. Requires selection in SprListView (the right-hand "Sprites" panel).
+        private async void DeleteSelectedSprites_Click(object? sender, RoutedEventArgs e)
+        {
+            if (SprListView == null || SprListView.SelectedItems == null || SprListView.SelectedItems.Count == 0)
+            {
+                ErrorManager.ShowInfo("Zaznacz sprite'y w panelu \"Sprites\" po prawej, a następnie użyj tej opcji.");
+                return;
+            }
+            // Menu click is an explicit intent — skip the (currently broken) confirm dialog.
+            try { await HandleSprDelete(skipConfirm: true); }
+            catch (Exception ex)
+            {
+                try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
+                    $"{DateTime.Now:HH:mm:ss.fff} [DeleteSelectedSprites_Click] EXCEPTION: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n"); } catch { }
+                ErrorManager.ShowError($"Delete failed: {ex.Message}");
+            }
+        }
+
+        // Menu → Edit → Usuń wszystkie puste sprite'y. Scans every sprite sheet, finds
+        // tiles that are fully transparent *and* still have a matching ShowList entry,
+        // and runs them through the same delete pipeline (blanks pixels — no-op here
+        // since they're already blank — then removes IDs and drops empty sheets).
+        private async void DeleteAllEmptySprites_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(MainWindow._assetsPath) || !System.IO.Directory.Exists(MainWindow._assetsPath))
+            {
+                ErrorManager.ShowInfo("Najpierw załaduj assety.");
+                return;
+            }
+
+            // Pre-filter: only bother decompressing sheets that actually have an AllSprList
+            // entry in their ID range. With many thousands of sheets, this skips most of them.
+            var idToShowList = MainWindow.AllSprList
+                .GroupBy(s => s.Id)
+                .ToDictionary(g => g.Key, g => g.First());
+            var sheetsToScan = MainWindow.catalog
+                .Where(c => c.Type == "sprite"
+                            && MainWindow.AllSprList.Any(s => s.Id >= c.FirstSpriteid && s.Id <= c.LastSpriteid))
+                .ToList();
+
+            if (sheetsToScan.Count == 0)
+            {
+                ErrorManager.ShowInfo("Brak sheetów do przeskanowania.");
+                return;
+            }
+
+            if (StatusBar != null) StatusBar.Text = $"Skanowanie pustych sprite'ów… 0/{sheetsToScan.Count}";
+
+            int scanned = 0;
+            var empty = await System.Threading.Tasks.Task.Run(() =>
+            {
+                var result = new System.Collections.Concurrent.ConcurrentBag<ShowList>();
+                System.Threading.Tasks.Parallel.ForEach(sheetsToScan, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, cat =>
+                {
+                    string sprPath = System.IO.Path.Combine(MainWindow._assetsPath, cat.File);
+                    if (!System.IO.File.Exists(sprPath))
+                    {
+                        System.Threading.Interlocked.Increment(ref scanned);
+                        return;
+                    }
+
+                    SkiaSharp.SKBitmap? bmp = null;
+                    try
+                    {
+                        bmp = LZMA.DecompressFileLZMA(sprPath);
+                        var layout = GetSpriteLayout(cat.SpriteType);
+                        int tWidth = layout.SpriteSizeX;
+                        int tHeight = layout.SpriteSizeY;
+                        int cols = layout.Cols;
+                        int tileCount = layout.Cols * layout.Rows;
+
+                        for (int tileIdx = 0; tileIdx < tileCount; tileIdx++)
+                        {
+                            uint id = (uint)(cat.FirstSpriteid + tileIdx);
+                            if (id > cat.LastSpriteid) break;
+                            if (!idToShowList.TryGetValue(id, out var sl)) continue;
+
+                            int col = tileIdx % cols;
+                            int row = tileIdx / cols;
+                            if (IsTileFullyTransparent(bmp, col * tWidth, row * tHeight, tWidth, tHeight))
+                                result.Add(sl);
+                        }
+                    }
+                    catch { }
+                    finally { bmp?.Dispose(); }
+
+                    int done = System.Threading.Interlocked.Increment(ref scanned);
+                    if (done % 200 == 0)
+                    {
+                        int cap = sheetsToScan.Count;
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            if (StatusBar != null) StatusBar.Text = $"Skanowanie pustych sprite'ów… {done}/{cap}";
+                        });
+                    }
+                });
+                return result.ToList();
+            });
+
+            if (empty.Count == 0)
+            {
+                ErrorManager.ShowInfo("Nie znaleziono pustych sprite'ów.");
+                if (StatusBar != null) StatusBar.Text = "Ready";
+                return;
+            }
+
+            try { await HandleSprDelete(skipConfirm: true, overrideSelection: empty); }
+            catch (Exception ex)
+            {
+                ErrorManager.ShowError($"Delete empty failed: {ex.Message}");
+                return;
+            }
+
+            ErrorManager.ShowInfo($"Usunięto {empty.Count} pustych sprite'ów.");
+            if (StatusBar != null) StatusBar.Text = $"Usunięto {empty.Count} pustych sprite'ów.";
+        }
+
+        private static bool IsTileFullyTransparent(SkiaSharp.SKBitmap sheet, int x0, int y0, int w, int h)
+        {
+            // Sheets are BGRA8888, so alpha is byte 3 of each pixel.
+            int rowBytes = sheet.RowBytes;
+            IntPtr basePtr = sheet.GetPixels();
+            byte[] rowBuf = new byte[rowBytes];
+            for (int y = y0; y < y0 + h; y++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(basePtr + y * rowBytes, rowBuf, 0, rowBytes);
+                for (int x = x0; x < x0 + w; x++)
+                {
+                    if (rowBuf[x * 4 + 3] != 0) return false;
+                }
+            }
+            return true;
         }
 
         private async System.Threading.Tasks.Task HandleAppSprDelete()
@@ -3194,27 +3364,151 @@ namespace Assets_Editor
             AppSprRemove_Click(this, new RoutedEventArgs());
         }
 
-        private async System.Threading.Tasks.Task HandleSprDelete()
+        private async System.Threading.Tasks.Task HandleSprDelete(bool skipConfirm = false, List<ShowList>? overrideSelection = null)
         {
-            var selected = SprListView.SelectedItems?.Cast<ShowList>().ToList() ?? [];
-            if (selected.Count == 0) return;
-
-            string preview = selected.Count == 1
-                ? $"sprite ID {selected[0].Id}"
-                : $"{selected.Count} sprite IDs ({selected.Min(s => s.Id)}…{selected.Max(s => s.Id)})";
-            bool ok = await ErrorManager.ConfirmAsync(
-                "Delete sprites",
-                $"Remove {preview} from the in-memory sprite list?\n\n" +
-                "This hides them from the browser. Entries that were never saved are gone for good; " +
-                "IDs that still live inside an existing sheet on disk will come back next time assets load.");
-            if (!ok) return;
-
-            foreach (var s in selected.ToList())
+            string debugLog = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log");
+            void Trace(string msg)
             {
-                MainWindow.SprLists.TryRemove((int)s.Id, out _);
+                try { System.IO.File.AppendAllText(debugLog, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n"); } catch { }
+                MainWindow.Log(msg);
+            }
+
+            var selected = overrideSelection ?? (SprListView.SelectedItems?.Cast<ShowList>().ToList() ?? []);
+            Trace($"[HandleSprDelete] Entered. Selected count: {selected.Count}, SelectedItems null: {SprListView.SelectedItems == null}, skipConfirm={skipConfirm}");
+            if (selected.Count == 0)
+            {
+                Trace("[HandleSprDelete] Early return: no selection");
+                return;
+            }
+
+            if (!skipConfirm)
+            {
+                string preview = selected.Count == 1
+                    ? $"sprite ID {selected[0].Id}"
+                    : $"{selected.Count} sprite IDs ({selected.Min(s => s.Id)}…{selected.Max(s => s.Id)})";
+                bool ok = await ErrorManager.ConfirmAsync(
+                    "Delete sprites",
+                    $"Delete {preview} permanently?\n\n" +
+                    "Tiles will be blanked out in their sprite sheets on disk and the IDs removed " +
+                    "from the browser. Cannot be undone!");
+                Trace($"[HandleSprDelete] Confirm result: {ok}");
+                if (!ok) return;
+            }
+
+            var ids = selected.Select(s => s.Id).ToList();
+            Trace($"[HandleSprDelete] Start: {ids.Count} IDs, assetsPath={MainWindow._assetsPath}");
+
+            // Group IDs by the catalog sheet they belong to so we only decompress + rewrite
+            // each affected sheet once, regardless of how many IDs were selected in it.
+            var affectedSheets = new Dictionary<MainWindow.Catalog, List<uint>>();
+            foreach (var id in ids)
+            {
+                var cat = MainWindow.catalog.Find(c =>
+                    c.Type == "sprite" && id >= c.FirstSpriteid && id <= c.LastSpriteid);
+                if (cat == null)
+                {
+                    Trace($"[HandleSprDelete] ID {id}: no catalog sheet found");
+                    continue;
+                }
+                if (!affectedSheets.TryGetValue(cat, out var list))
+                    affectedSheets[cat] = list = new List<uint>();
+                list.Add(id);
+            }
+            Trace($"[HandleSprDelete] Grouped into {affectedSheets.Count} sheets");
+
+            // Blank the tile pixels in each affected sheet and re-save to disk so Compile /
+            // Publish carries the deletion through to the client. Then drop the IDs from the
+            // in-memory caches and finally remove the UI entries with a proper binding reset.
+            int sheetsRewritten = 0;
+            foreach (var (cat, sheetIds) in affectedSheets)
+            {
+                string sprPath = System.IO.Path.Combine(MainWindow._assetsPath, cat.File);
+                if (!System.IO.File.Exists(sprPath))
+                {
+                    Trace($"[HandleSprDelete] Sheet not found on disk: {sprPath}");
+                    continue;
+                }
+                long sizeBefore = new System.IO.FileInfo(sprPath).Length;
+                Trace($"[HandleSprDelete] Rewriting sheet {cat.File} ({sheetIds.Count} tiles), size before={sizeBefore}");
+                try
+                {
+                    using SkiaSharp.SKBitmap bmp = LZMA.DecompressFileLZMA(sprPath);
+                    var layout = GetSpriteLayout(cat.SpriteType);
+                    int tWidth = layout.SpriteSizeX;
+                    int tHeight = layout.SpriteSizeY;
+                    int cols = layout.Cols;
+
+                    using var canvas = new SkiaSharp.SKCanvas(bmp);
+                    foreach (var id in sheetIds)
+                    {
+                        int tileIdx = (int)(id - cat.FirstSpriteid);
+                        int col = tileIdx % cols;
+                        int row = tileIdx / cols;
+                        canvas.Save();
+                        canvas.ClipRect(SkiaSharp.SKRect.Create(col * tWidth, row * tHeight, tWidth, tHeight));
+                        canvas.Clear(SkiaSharp.SKColors.Transparent);
+                        canvas.Restore();
+                    }
+
+                    string outPath = sprPath;
+                    LZMA.ExportLzmaFile(bmp, ref outPath);
+                    long sizeAfter = new System.IO.FileInfo(outPath).Length;
+                    Trace($"[HandleSprDelete] Sheet rewritten: {cat.File}, size after={sizeAfter}");
+                    sheetsRewritten++;
+                }
+                catch (Exception ex)
+                {
+                    Trace($"[HandleSprDelete] FAILED to rewrite sheet {cat.File}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            foreach (var id in ids)
+                MainWindow.SprLists.TryRemove((int)id, out _);
+            Trace($"[HandleSprDelete] Done. Sheets rewritten: {sheetsRewritten}/{affectedSheets.Count}");
+
+            // AllSprList is a plain List<T>, not ObservableCollection — removing from it does
+            // not notify the ListBox. Disconnect the binding, mutate both backing lists, then
+            // rebind to whichever source was active so the UI refreshes.
+            var prevSource = SprListView.ItemsSource;
+            SprListView.ItemsSource = null;
+            foreach (var s in selected)
+            {
                 MainWindow.AllSprList.Remove(s);
                 _sprFiltered.Remove(s);
             }
+
+            // After AllSprList shrank, any affected sheet whose full ID range no longer has
+            // a single ShowList entry is dead weight — delete the .bmp.lzma file, drop its
+            // catalog entry, and free every ID in its range from SprLists so the numbers
+            // come back into the pool for new imports.
+            int sheetsDeleted = 0;
+            var deletedSheets = new List<MainWindow.Catalog>();
+            foreach (var (cat, _) in affectedSheets)
+            {
+                bool anyLeft = MainWindow.AllSprList.Any(s => s.Id >= cat.FirstSpriteid && s.Id <= cat.LastSpriteid);
+                if (anyLeft) continue;
+
+                string sprPath = System.IO.Path.Combine(MainWindow._assetsPath, cat.File);
+                try
+                {
+                    if (System.IO.File.Exists(sprPath)) System.IO.File.Delete(sprPath);
+                    for (int id = cat.FirstSpriteid; id <= cat.LastSpriteid; id++)
+                        MainWindow.SprLists.TryRemove(id, out _);
+                    deletedSheets.Add(cat);
+                    sheetsDeleted++;
+                    Trace($"[HandleSprDelete] Deleted empty sheet {cat.File} (IDs {cat.FirstSpriteid}–{cat.LastSpriteid})");
+                }
+                catch (Exception ex)
+                {
+                    Trace($"[HandleSprDelete] FAILED to delete empty sheet {cat.File}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+            foreach (var cat in deletedSheets)
+                MainWindow.catalog.Remove(cat);
+
+            SprListView.ItemsSource = prevSource;
+
+            MainWindow.Log($"[HandleSprDelete] Deleted {ids.Count} sprite(s) across {sheetsRewritten} sheet(s). Removed {sheetsDeleted} empty sheet(s).");
         }
 
         private async void SprListView_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -4927,6 +5221,46 @@ namespace Assets_Editor
             }
             if (RecentXmlMenu.Items.Count == 0)
                 RecentXmlMenu.Items.Add(new MenuItem { Header = "(none)", IsEnabled = false });
+
+            RecentProficienciesMenu.Items.Clear();
+            foreach (var p in MainWindow.SettingsList.RecentProficiencies)
+            {
+                var mi = new MenuItem { Header = Path.GetFileName(p), Tag = p };
+                ToolTip.SetTip(mi, p);
+                mi.Click += (s, e) =>
+                {
+                    if (mi.Tag is string path && Proficiencies.Load(path))
+                    {
+                        MainWindow.AddRecentProficiencies(path);
+                        RefreshProficiencyName();
+                        StatusBar.Text = $"Loaded {Proficiencies.Entries.Count} proficiencies from {Path.GetFileName(path)}";
+                        RefreshRecentMenus();
+                    }
+                };
+                RecentProficienciesMenu.Items.Add(mi);
+            }
+            if (RecentProficienciesMenu.Items.Count == 0)
+                RecentProficienciesMenu.Items.Add(new MenuItem { Header = "(none)", IsEnabled = false });
+
+            RecentMonsterFoldersMenu.Items.Clear();
+            foreach (var p in MainWindow.SettingsList.RecentMonsterFolders)
+            {
+                var mi = new MenuItem { Header = Path.GetFileName(p.TrimEnd('/')), Tag = p };
+                ToolTip.SetTip(mi, p);
+                mi.Click += (s, e) =>
+                {
+                    if (mi.Tag is string path)
+                    {
+                        int n = MonsterRegistry.LoadFolder(path);
+                        MainWindow.AddRecentMonsterFolder(path);
+                        StatusBar.Text = $"Loaded {n} monsters from {Path.GetFileName(path.TrimEnd('/'))}";
+                        RefreshRecentMenus();
+                    }
+                };
+                RecentMonsterFoldersMenu.Items.Add(mi);
+            }
+            if (RecentMonsterFoldersMenu.Items.Count == 0)
+                RecentMonsterFoldersMenu.Items.Add(new MenuItem { Header = "(none)", IsEnabled = false });
         }
 
         private void OpenAppearanceDatPath(string path)
@@ -5311,6 +5645,132 @@ namespace Assets_Editor
         {
             var editor = new ItemsXmlEditor();
             editor.Show();
+        }
+
+        private async void LoadProficiencies_Click(object? sender, RoutedEventArgs e)
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select proficiencies.json",
+                FileTypeFilter = [new FilePickerFileType("proficiencies.json") { Patterns = ["*.json"] }]
+            });
+            if (files.Count == 0) return;
+
+            string path = files[0].Path.LocalPath;
+            if (Proficiencies.Load(path))
+            {
+                MainWindow.AddRecentProficiencies(path);
+                RefreshRecentMenus();
+                RefreshProficiencyName();
+                StatusBar.Text = $"Loaded {Proficiencies.Entries.Count} proficiencies";
+            }
+            else ErrorManager.ShowError("Failed to parse proficiencies.json");
+        }
+
+        private void EditProficiencies_Click(object? sender, RoutedEventArgs e)
+        {
+            var editor = new ProficienciesEditor();
+            editor.Closed += (_, _) => RefreshProficiencyName();
+            editor.Show();
+        }
+
+        private async void LoadMonsterFolder_Click(object? sender, RoutedEventArgs e)
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Pick the Canary monster/ folder",
+            });
+            if (folders.Count == 0) return;
+            string path = folders[0].Path.LocalPath;
+            int n = MonsterRegistry.LoadFolder(path);
+            MainWindow.AddRecentMonsterFolder(path);
+            RefreshRecentMenus();
+            StatusBar.Text = $"Loaded {n} monsters from {path}";
+        }
+
+        private void OpenMonsterEditor_Click(object? sender, RoutedEventArgs e)
+        {
+            var win = new MonsterEditor();
+            win.Show();
+        }
+
+        private async void PickProficiency_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!Proficiencies.IsLoaded)
+            {
+                ErrorManager.ShowInfo("Load a proficiencies.json first (File > Load proficiencies.json).");
+                return;
+            }
+
+            var dlg = new Window
+            {
+                Title = "Pick proficiency",
+                Width = 420, Height = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            };
+            var root = new Grid { RowDefinitions = new("Auto,*,Auto") };
+            var search = new TextBox { Watermark = "Filter by ID or name…", Margin = new(8) };
+            Grid.SetRow(search, 0);
+            var list = new ListBox { Margin = new(8, 0, 8, 0) };
+            Grid.SetRow(list, 1);
+            var btns = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                Margin = new(8), Spacing = 6,
+            };
+            var pickBtn = new Button { Content = "Select" };
+            var clearBtn = new Button { Content = "Clear (0)" };
+            var cancelBtn = new Button { Content = "Cancel" };
+            btns.Children.Add(clearBtn);
+            btns.Children.Add(cancelBtn);
+            btns.Children.Add(pickBtn);
+            Grid.SetRow(btns, 2);
+            root.Children.Add(search);
+            root.Children.Add(list);
+            root.Children.Add(btns);
+            dlg.Content = root;
+
+            void Refresh()
+            {
+                string? f = search.Text?.Trim();
+                IEnumerable<ProficiencyEntry> q = Proficiencies.Entries.OrderBy(x => x.ProficiencyId);
+                if (!string.IsNullOrEmpty(f))
+                    q = q.Where(x => x.ProficiencyId.ToString().Contains(f) ||
+                                     (x.Name ?? "").Contains(f, StringComparison.OrdinalIgnoreCase));
+                list.ItemsSource = q.Select(x => (object)x.Display).ToList();
+            }
+            Refresh();
+            search.TextChanged += (_, _) => Refresh();
+
+            uint? chosen = null;
+            pickBtn.Click += (_, _) =>
+            {
+                if (list.SelectedItem is string s)
+                {
+                    int colon = s.IndexOf(':');
+                    if (colon > 0 && uint.TryParse(s[..colon], out uint id)) chosen = id;
+                }
+                dlg.Close();
+            };
+            clearBtn.Click += (_, _) => { chosen = 0; dlg.Close(); };
+            cancelBtn.Click += (_, _) => dlg.Close();
+
+            await dlg.ShowDialog(this);
+            if (chosen.HasValue)
+            {
+                FlagProficiencyId.Value = chosen.Value;
+                FlagProficiency.IsChecked = chosen.Value > 0;
+                RefreshProficiencyName();
+            }
+        }
+
+        private void RefreshProficiencyName()
+        {
+            uint id = (uint)(FlagProficiencyId.Value ?? 0);
+            FlagProficiencyName.Text = id == 0
+                ? ""
+                : (Proficiencies.GetName(id) ?? "(not in loaded JSON)");
         }
 
         #endregion

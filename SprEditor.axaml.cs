@@ -87,7 +87,7 @@ namespace Assets_Editor
                 if (!ok) return;
 
                 foreach (int i in filled)
-                    SetTilePng(i, null);
+                    MarkTileDeleted(i);
                 ClearSelection();
                 SprStatusText.Text = $"Cleared {filled.Count} sprite(s). Click \U0001f4be to persist.";
                 e.Handled = true;
@@ -104,7 +104,7 @@ namespace Assets_Editor
                 $"Clear sprite from tile {idx}?");
             if (!confirm) return;
 
-            SetTilePng(idx, null);
+            MarkTileDeleted(idx);
             SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
             e.Handled = true;
         }
@@ -124,7 +124,7 @@ namespace Assets_Editor
             {
                 bool ok = await ConfirmHere("Delete sprite", $"Clear sprite from tile {idx}?");
                 if (!ok) return;
-                SetTilePng(idx, null);
+                MarkTileDeleted(idx);
                 SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
             };
             menu.Items.Add(deleteSingle);
@@ -141,7 +141,7 @@ namespace Assets_Editor
                 bool ok = await ConfirmHere("Delete sprites", $"Clear {filled.Count} selected sprite(s)?");
                 if (!ok) return;
                 foreach (int i in filled)
-                    SetTilePng(i, null);
+                    MarkTileDeleted(i);
                 ClearSelection();
                 SprStatusText.Text = $"Cleared {filled.Count} sprite(s). Click \U0001f4be to persist.";
             };
@@ -205,7 +205,7 @@ namespace Assets_Editor
                 if (!ok) return;
 
                 foreach (int i in filled)
-                    SetTilePng(i, null);
+                    MarkTileDeleted(i);
                 ClearSelection();
                 SprStatusText.Text = $"Cleared {filled.Count} sprite(s). Click \U0001f4be to persist.";
                 return;
@@ -224,7 +224,7 @@ namespace Assets_Editor
                 $"Clear sprite from tile {idx}?");
             if (!confirm) return;
 
-            SetTilePng(idx, null);
+            MarkTileDeleted(idx);
             SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
         }
 
@@ -251,6 +251,27 @@ namespace Assets_Editor
         private readonly System.Collections.Generic.HashSet<int> _selectedTiles = new();
         private int _lastClickedTile = -1; // anchor for Shift+Click range selection
 
+        // Tile indices the user has deleted since the last save. At save time these are
+        // translated to global sprite IDs and removed from SprLists + AllSprList so the
+        // sprite list view stops showing them. Re-filling a tile cancels its pending delete.
+        private readonly System.Collections.Generic.HashSet<int> _pendingTileDeletions = new();
+
+        // Helper: blanks the tile and records a pending deletion so the save flow can
+        // also remove the corresponding sprite ID from the global sprite list.
+        private void MarkTileDeleted(int idx)
+        {
+            SetTilePng(idx, null);
+            if (CurrentSheet != null)
+            {
+                _pendingTileDeletions.Add(idx);
+                MainWindow.Log($"[SprEditor] Marked tile {idx} for deletion (sheet {CurrentSheet.File}, spriteId={CurrentSheet.FirstSpriteid + idx}). Pending={_pendingTileDeletions.Count}");
+            }
+            else
+            {
+                MainWindow.Log($"[SprEditor] Tile {idx} cleared but NO CurrentSheet — delete will not be persisted.", "Warning");
+            }
+        }
+
         // ── Sheet grid in the viewer ──────────────────────────────────────────
 
         private void CreateNewSheetImg(int sprType, bool modify)
@@ -265,6 +286,7 @@ namespace Assets_Editor
 
             SheetWrap.Children.Clear();
             _tilePngs.Clear();
+            _pendingTileDeletions.Clear();
 
             int sprMaxW = DatEditor.SprSheetWidth;
             int sprMaxH = DatEditor.SprSheetHeight;
@@ -519,7 +541,31 @@ namespace Assets_Editor
                         MainWindow.SprLists[i] = null!;
                 }
 
-                SprStatusText.Text = $"Saved: {CurrentSheet.File} (IDs {CurrentSheet.FirstSpriteid}–{CurrentSheet.LastSpriteid}).";
+                // Drop tiles the user has deleted since the last save from SprLists + AllSprList
+                // so the sprite list view actually loses them instead of showing a blank slot.
+                int removedFromList = 0;
+                MainWindow.Log($"[SprEditor] ImportSheet_Click: pending deletions = {_pendingTileDeletions.Count}");
+                if (_pendingTileDeletions.Count > 0)
+                {
+                    var idsToRemove = new System.Collections.Generic.List<uint>();
+                    foreach (int tileIdx in _pendingTileDeletions)
+                    {
+                        int spriteId = CurrentSheet.FirstSpriteid + tileIdx;
+                        if (spriteId < CurrentSheet.FirstSpriteid || spriteId > CurrentSheet.LastSpriteid) continue;
+                        MainWindow.SprLists.TryRemove(spriteId, out _);
+                        idsToRemove.Add((uint)spriteId);
+                    }
+                    MainWindow.Log($"[SprEditor] Removing {idsToRemove.Count} sprite IDs from AllSprList (AllSprList count before: {MainWindow.AllSprList.Count}): {string.Join(",", idsToRemove)}");
+                    if (idsToRemove.Count > 0)
+                        _editor.SafeRemoveFromAllSprList(idsToRemove);
+                    MainWindow.Log($"[SprEditor] AllSprList count after: {MainWindow.AllSprList.Count}");
+                    removedFromList = idsToRemove.Count;
+                    _pendingTileDeletions.Clear();
+                }
+
+                SprStatusText.Text = removedFromList > 0
+                    ? $"Saved: {CurrentSheet.File} (IDs {CurrentSheet.FirstSpriteid}–{CurrentSheet.LastSpriteid}). Removed {removedFromList} sprite(s) from list."
+                    : $"Saved: {CurrentSheet.File} (IDs {CurrentSheet.FirstSpriteid}–{CurrentSheet.LastSpriteid}).";
             }
             catch (Exception ex)
             {
@@ -911,6 +957,7 @@ namespace Assets_Editor
             }
 
             _tilePngs[idx] = png;
+            _pendingTileDeletions.Remove(idx);
             using var ms = new MemoryStream(png);
             image.Source = new Avalonia.Media.Imaging.Bitmap(ms);
             border.Background = Brushes.Transparent;

@@ -10,11 +10,22 @@ namespace Assets_Editor;
 
 public static class ErrorManager
 {
-    private static Window? GetMainWindow()
+    private static Window? GetOwnerWindow()
     {
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            return desktop.MainWindow;
-        return null;
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+            return null;
+
+        // Prefer the window the user is actually looking at. DatEditor/SprEditor open as
+        // separate Window instances while MainWindow is hidden, and ShowWindowDialogAsync
+        // throws "Cannot show window with non-visible owner" if we pass the hidden root.
+        Window? best = null;
+        foreach (var w in desktop.Windows)
+        {
+            if (!w.IsVisible) continue;
+            if (w.IsActive) return w;
+            best = w;
+        }
+        return best ?? desktop.MainWindow;
     }
 
     public static void ShowInfo(string message)
@@ -39,14 +50,16 @@ public static class ErrorManager
         {
             var box = MessageBoxManager
                 .GetMessageBoxStandard(title, message, ButtonEnum.YesNo, Icon.Warning);
-            var window = GetMainWindow();
+            var window = GetOwnerWindow();
             var result = window != null
                 ? await box.ShowWindowDialogAsync(window)
                 : await box.ShowAsync();
             return result == ButtonResult.Yes;
         }
-        catch
+        catch (Exception ex)
         {
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} [ConfirmAsync] FAILED: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n"); } catch { }
             return false;
         }
     }
@@ -58,7 +71,7 @@ public static class ErrorManager
             var box = MessageBoxManager
                 .GetMessageBoxStandard(title, message, ButtonEnum.Ok, icon);
 
-            var window = GetMainWindow();
+            var window = GetOwnerWindow();
             if (window != null)
                 await box.ShowWindowDialogAsync(window);
             else

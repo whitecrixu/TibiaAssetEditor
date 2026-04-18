@@ -1,6 +1,94 @@
 # Changelog
 
-All notable changes to **Tibia Asset Editor By WhiteCrixu V1.0**.
+All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia Asset Editor*).
+
+---
+
+## V2.0 — MultiTool release
+
+Major expansion: the app is no longer just a DAT/sprite editor — it's a suite
+for Canary / OpenTibia server content. Renamed to **Tibia MultiTool Editor**.
+Brand new Monster Editor, Proficiencies Editor, and a redesigned hub-style
+MainWindow that hosts every tool. Modernised UI across every window.
+
+### New editors
+
+- **Monster Editor** (`MonsterEditor.axaml` + `MonsterData.cs`)
+  - Loads an entire Canary `monster/` folder recursively (`.lua` files).
+  - Typed editing across 6 tabs: Basic / Outfit / Flags / Bestiary /
+    Bosstiary / Raw Blocks.
+  - Raw blocks (loot / attacks / defenses / elements / immunities / voices /
+    light / events / changeTarget / strategiesTarget / summons) preserved
+    verbatim, no data loss on save.
+  - **Preview Lua** tab with live-regenerated output matching Canary style.
+  - **Auto-fill Bestiary / Bosstiary** — infers class from folder path
+    (`reptiles/` → Reptile → `BESTY_RACE_REPTILE`), stars from experience,
+    kill counts from stars, boss rarity from HP.
+  - Canary-style folder-scan registration — no `monsters.xml` needed.
+  - Outfit thumbnails rendered from the loaded DAT.
+
+- **Proficiencies Editor** (`ProficienciesEditor.axaml` + `Proficiencies.cs`)
+  - Full canary `proficiencies.json` editor (180+ proficiencies, 27k+ lines).
+  - Preserves field order and unknown keys (clean diffs).
+  - Typed perks with **smart field visibility** — each Type controls which
+    optional fields show (SkillId / AugmentType / SpellId / BestiaryId /
+    DamageType / Range).
+  - Value hints per type (`"0.05 = 5%"`, `"flat, e.g. 1"`, …).
+  - **Preset perk library** — ~35 one-click perks grouped by category
+    (Skill +1 / Crit / Leech+Gain / Augment / Bestiary-Element / Range / Other).
+  - **New-from-template** — 11 weapon skeletons (1H/2H Sword/Axe/Club,
+    Bow/Crossbow/Fist, Wand/Rod) with 7 bootstrap levels.
+  - **Level pill bar** — L1…L7 horizontal buttons with add/dup/del/move.
+  - DatEditor integration: Proficiency ID flag has a `…` picker that opens
+    a name-based list drawn from the loaded JSON.
+
+### Hub-style MainWindow
+
+- MainWindow stays open after Load Assets as the app dashboard.
+- **Tools** grid with six cards: DAT / Sprite / Monster / Proficiencies /
+  Items XML / OTB. DAT and Sprite unlock after load; the rest work standalone.
+- Stats card now shows **Sprites:** count alongside Items / Outfits / Effects
+  / Missiles, refreshed after load finishes.
+- Load Assets button shows live **%** next to its label.
+
+### Modern UI
+
+- **Theme** — switched from default `FluentTheme` to `Semi.Avalonia`:
+  rounded corners, better focus rings, stronger dark palette.
+- **Design tokens** in `Resources/Theme.axaml` — shared spacing scale,
+  radii, typography sizes, and named surfaces (`card`, `appbar`, `statusbar`,
+  `hero`, `spriteSlot`), plus button classes (`primary`, `tool`, `action`,
+  `icon`).
+- **Custom window chrome** with `ExtendClientAreaToDecorations` and
+  `TransparencyLevelHint="Mica,AcrylicBlur,Blur"` — Mica on Win11, acrylic
+  fallback elsewhere.
+- **Icon font** — `Projektanker.Icons.Avalonia.FontAwesome`; toolbar buttons
+  in the main editors now use vector glyphs instead of emoji.
+- **Density toggle** in Settings (Comfortable / Cozy / Compact) — live-
+  overrides spacing tokens, persisted in `Settings.json`.
+
+### Rename
+
+- **Tibia Asset Editor** → **Tibia MultiTool Editor** across every window
+  title, About dialog, `AssemblyName`, `Product`, `FileVersion` (`2.0.0`).
+- Namespace `Assets_Editor` kept as-is to avoid breaking protobuf bindings
+  and user `Settings.json` files.
+
+### Fixes / polish
+
+- **Flicker on virtualised lists** — cleared Semi's default brush
+  transitions on `ListBoxItem` / `Image` / `Border.spriteSlot` /
+  `ProgressBar` so sprite tiles stop shimmering during load and scroll.
+- **Primary-button hover flicker** — moved hover selector from
+  `:pointerover /template/ ContentPresenter` to `:pointerover` on the
+  Button itself, eliminating the dual-setter race with Semi transitions.
+- **Load Assets button preservation** — no longer replaces `Button.Content`
+  (which blew away the inner ProgressBar); updates only a named label so
+  the progress widget survives multiple loads.
+- **Recent-file menus** — added `RecentProficiencies` and
+  `RecentMonsterFolders` to `Settings.json`.
+
+---
 
 ## V1.0 — Initial cross-platform release
 

@@ -1,0 +1,219 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="https://github.com/projektanker/icons.avalonia"
+        x:Class="Assets_Editor.ProficienciesEditor"
+        Title="Proficiencies Editor"
+        Width="1180" Height="780"
+        WindowStartupLocation="CenterOwner"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        TransparencyLevelHint="Mica,AcrylicBlur,Blur">
+    <Window.Styles>
+        <Style Selector="Button.levelPill">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.levelPill.selected">
+            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Top toolbar -->
+        <Border Grid.Row="0" Classes="appbar">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Classes="tool" i:Attached.Icon="fa-folder-open" Content="Open proficiencies.json…" Click="Open_Click"/>
+                <Button Classes="tool primary" i:Attached.Icon="fa-floppy-disk" Content="Save" Click="Save_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-floppy-disk" Content="Save As…" Click="SaveAs_Click"/>
+                <Separator Width="1" Margin="4,0"/>
+                <Button Classes="tool" i:Attached.Icon="fa-plus"  Content="New Blank" Click="AddNew_Click"/>
+                <Button Classes="tool" x:Name="NewFromTemplateBtn" i:Attached.Icon="fa-wand-sparkles"
+                        Content="New From Template ▾" Click="NewFromTemplate_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-clone" Content="Duplicate" Click="Duplicate_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-trash" Content="Delete"    Click="Delete_Click"/>
+                <Separator Width="1" Margin="4,0"/>
+                <TextBlock x:Name="PathText" VerticalAlignment="Center" Classes="dim"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Split: list | editor -->
+        <Grid Grid.Row="1" ColumnDefinitions="340,*">
+            <!-- Left: proficiency list -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <TextBox Grid.Row="0" x:Name="SearchBox" Watermark="Search by ID or name…"
+                         Margin="6" TextChanged="SearchBox_TextChanged"/>
+                <ListBox Grid.Row="1" x:Name="List"
+                         SelectionChanged="List_SelectionChanged"
+                         Margin="6,0,6,6">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="2,4">
+                                <TextBlock Text="{Binding ProficiencyId}" FontSize="11" Opacity="0.6"/>
+                                <TextBlock Text="{Binding Name}" FontSize="13"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="300"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+
+            <!-- Right: editor form -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*" Margin="8">
+                <!-- Header -->
+                <Border Grid.Row="0" Classes="hero">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="HeaderText" Text="No selection"
+                                   FontWeight="SemiBold" FontSize="16"/>
+                        <TextBlock x:Name="HeaderHint" Classes="dim"
+                                   Text="Pick a proficiency from the list, or click ➕ New Blank / 🛠 Template."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Metadata grid -->
+                <Grid Grid.Row="1" Margin="0,8,0,4"
+                      ColumnDefinitions="100,*,20,100,120,20,100,120"
+                      RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="Name" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" x:Name="NameBox" TextChanged="NameBox_Changed"/>
+                    <TextBlock Grid.Column="3" Text="ID" VerticalAlignment="Center"/>
+                    <NumericUpDown Grid.Column="4" x:Name="IdBox" Minimum="0" Maximum="999999"
+                                   FormatString="0" ValueChanged="IdBox_Changed"/>
+                    <TextBlock Grid.Column="6" Text="Version" VerticalAlignment="Center"/>
+                    <NumericUpDown Grid.Column="7" x:Name="VersionBox" Minimum="0" Maximum="999"
+                                   FormatString="0" ValueChanged="VersionBox_Changed"/>
+                </Grid>
+
+                <!-- Levels bar -->
+                <Border Grid.Row="2" Classes="card" Margin="0,0,0,4">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="Levels:" VerticalAlignment="Center"
+                                   FontWeight="SemiBold" Margin="0,0,8,0"/>
+                        <ItemsControl Grid.Column="1" x:Name="LevelPills">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                            <Button Content="+" Click="AddLevel_Click"   ToolTip.Tip="Add level"        Width="32" Height="32"/>
+                            <Button Content="⧉" Click="DupLevel_Click"   ToolTip.Tip="Duplicate level" Width="32" Height="32"/>
+                            <Button Content="🗑" Click="DeleteLevel_Click" ToolTip.Tip="Delete level"   Width="32" Height="32"/>
+                            <Button Content="▲" Click="MoveLevelUp_Click"   ToolTip.Tip="Move level up"   Width="32" Height="32"/>
+                            <Button Content="▼" Click="MoveLevelDown_Click" ToolTip.Tip="Move level down" Width="32" Height="32"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Perks panel -->
+                <Grid Grid.Row="3" RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0" x:Name="PerksHeader" Text="Perks"
+                               FontWeight="SemiBold" Margin="0,4,0,4"/>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="PerksItems">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Classes="card" Margin="0,2">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="4">
+                                                <!-- Row A: Type + Value -->
+                                                <Grid ColumnDefinitions="60,*,20,60,140,*">
+                                                    <TextBlock Grid.Column="0" Text="Type" VerticalAlignment="Center" FontSize="11"/>
+                                                    <ComboBox  Grid.Column="1" ItemsSource="{Binding TypeChoices}"
+                                                               SelectedItem="{Binding SelectedTypeChoice, Mode=TwoWay}"
+                                                               HorizontalAlignment="Stretch" Height="28"/>
+                                                    <TextBlock Grid.Column="3" Text="Value" VerticalAlignment="Center" FontSize="11"/>
+                                                    <NumericUpDown Grid.Column="4" Value="{Binding Value, Mode=TwoWay}"
+                                                                   Minimum="-999999" Maximum="999999"
+                                                                   Increment="0.01" FormatString="0.####" Height="28"/>
+                                                    <TextBlock Grid.Column="5" Text="{Binding ValueHint}"
+                                                               VerticalAlignment="Center" Margin="6,0,0,0"
+                                                               FontSize="10" Opacity="0.55"/>
+                                                </Grid>
+
+                                                <!-- Row B: only the fields this Type consumes -->
+                                                <Grid ColumnDefinitions="60,*,20,60,*">
+                                                    <TextBlock Grid.Column="0" Text="Skill"
+                                                               VerticalAlignment="Center" FontSize="11"
+                                                               IsVisible="{Binding ShowSkill}"/>
+                                                    <ComboBox  Grid.Column="1" ItemsSource="{Binding SkillChoices}"
+                                                               SelectedItem="{Binding SelectedSkillChoice, Mode=TwoWay}"
+                                                               Height="28" IsVisible="{Binding ShowSkill}"/>
+                                                    <TextBlock Grid.Column="3" Text="DmgType"
+                                                               VerticalAlignment="Center" FontSize="11"
+                                                               IsVisible="{Binding ShowDamage}"/>
+                                                    <ComboBox  Grid.Column="4" ItemsSource="{Binding DamageChoices}"
+                                                               SelectedItem="{Binding SelectedDamageChoice, Mode=TwoWay}"
+                                                               Height="28" IsVisible="{Binding ShowDamage}"/>
+                                                </Grid>
+
+                                                <Grid ColumnDefinitions="60,*,20,60,*"
+                                                      IsVisible="{Binding ShowAugmentOrSpell}">
+                                                    <TextBlock Grid.Column="0" Text="Augment" VerticalAlignment="Center"
+                                                               FontSize="11" IsVisible="{Binding ShowAugment}"/>
+                                                    <ComboBox  Grid.Column="1" ItemsSource="{Binding AugmentChoices}"
+                                                               SelectedItem="{Binding SelectedAugmentChoice, Mode=TwoWay}"
+                                                               Height="28" IsVisible="{Binding ShowAugment}"/>
+                                                    <TextBlock Grid.Column="3" Text="Spell"
+                                                               VerticalAlignment="Center" FontSize="11"
+                                                               IsVisible="{Binding ShowSpell}"/>
+                                                    <NumericUpDown Grid.Column="4" Value="{Binding SpellIdValue, Mode=TwoWay}"
+                                                                   Minimum="0" Maximum="99999" FormatString="0"
+                                                                   Height="28" IsVisible="{Binding ShowSpell}"/>
+                                                </Grid>
+
+                                                <Grid ColumnDefinitions="60,*,20,60,*"
+                                                      IsVisible="{Binding ShowBestiaryOrRange}">
+                                                    <TextBlock Grid.Column="0" Text="Bestiary" VerticalAlignment="Center"
+                                                               FontSize="11" IsVisible="{Binding ShowBestiary}"/>
+                                                    <NumericUpDown Grid.Column="1" Value="{Binding BestiaryIdValue, Mode=TwoWay}"
+                                                                   Minimum="0" Maximum="99999" FormatString="0"
+                                                                   Height="28" IsVisible="{Binding ShowBestiary}"/>
+                                                    <TextBlock Grid.Column="3" Text="Range"
+                                                               VerticalAlignment="Center" FontSize="11"
+                                                               IsVisible="{Binding ShowRange}"/>
+                                                    <NumericUpDown Grid.Column="4" Value="{Binding RangeValue, Mode=TwoWay}"
+                                                                   Minimum="0" Maximum="20" FormatString="0"
+                                                                   Height="28" IsVisible="{Binding ShowRange}"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" Orientation="Vertical"
+                                                        Margin="8,0,0,0" Spacing="2">
+                                                <Button Content="🗑" Tag="{Binding}" Click="DeletePerk_Click"
+                                                        ToolTip.Tip="Delete perk"
+                                                        Width="28" Height="28" Padding="0"/>
+                                                <Button Content="▲" Tag="{Binding}" Click="MovePerkUp_Click"
+                                                        ToolTip.Tip="Move up"
+                                                        Width="28" Height="28" Padding="0"/>
+                                                <Button Content="▼" Tag="{Binding}" Click="MovePerkDown_Click"
+                                                        ToolTip.Tip="Move down"
+                                                        Width="28" Height="28" Padding="0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                        <Button Content="➕ Blank Perk" Click="AddPerk_Click"/>
+                        <Button x:Name="InsertPresetBtn" Content="📋 Insert Preset ▾"
+                                Click="InsertPreset_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- Status bar -->
+        <Border Grid.Row="2" Classes="statusbar">
+            <TextBlock x:Name="StatusText" Classes="dim" Text="Ready"/>
+        </Border>
+    </Grid>
+</Window>

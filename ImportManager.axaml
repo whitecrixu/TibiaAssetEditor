@@ -18,7 +18,7 @@
                     <ProgressBar x:Name="LoadProgress" Grid.Row="2" Minimum="0" Maximum="100" Value="0" Margin="50,0,50,5" Height="10"/>
                     <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,Auto" Margin="5,0,5,0">
                         <!-- Object List -->
-                        <Border Grid.Column="0" BorderThickness="1" BorderBrush="Gray" Margin="10,5,0,10">
+                        <Border Grid.Column="0" Classes="card" Margin="10,5,0,10">
                             <Grid RowDefinitions="45,*,40,45">
                                 <ComboBox Grid.Row="0" x:Name="ObjectMenu" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="ObjectMenuChanged">
                                     <ComboBoxItem Content="Outfits"/>
@@ -43,9 +43,9 @@
                             </Grid>
                         </Border>
                         <!-- Sprite List -->
-                        <Border Grid.Column="1" BorderThickness="1" BorderBrush="Gray" Width="225" Margin="10,5,0,10">
+                        <Border Grid.Column="1" Classes="card" Width="225" Margin="10,5,0,10">
                             <Grid RowDefinitions="Auto,*,40">
-                                <TextBlock Grid.Row="0" Text="Sprite List" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,5"/>
+                                <TextBlock Grid.Row="0" Classes="panelHeader" Text="Sprite List" HorizontalAlignment="Center"/>
                                 <ListBox Grid.Row="1" x:Name="SprListView" Margin="0,5,0,0">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
@@ -62,10 +62,10 @@
                             </Grid>
                         </Border>
                         <!-- OBD Import -->
-                        <Border Grid.Column="2" BorderThickness="1" BorderBrush="Gray" Width="300" Height="300" Margin="10,5,10,10" VerticalAlignment="Top">
+                        <Border Grid.Column="2" Classes="card" Width="300" Height="300" Margin="10,5,10,10" VerticalAlignment="Top">
                             <Grid RowDefinitions="Auto,150,50,50">
-                                <TextBlock Grid.Row="0" Text="Import OBD file" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,5"/>
-                                <Border Grid.Row="1" BorderThickness="1" BorderBrush="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,5,10,10">
+                                <TextBlock Grid.Row="0" Classes="panelHeader" Text="Import OBD File" HorizontalAlignment="Center"/>
+                                <Border Grid.Row="1" Classes="card" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,5,10,10">
                                     <Image x:Name="OBDImage" MinWidth="32" MinHeight="32"/>
                                 </Border>
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">

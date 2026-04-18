@@ -6,7 +6,7 @@
         xmlns:liveCharts="clr-namespace:LiveChartsCore.SkiaSharpView.Avalonia;assembly=LiveChartsCore.SkiaSharpView.Avalonia"
         mc:Ignorable="d"
         x:Class="Assets_Editor.LuaWindow"
-        Title="Lua Script Editor" Width="1200" Height="800">
+        Title="Tibia MultiTool Editor — Lua Script" Width="1220" Height="820">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="2*" MinWidth="300"/>
@@ -21,7 +21,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,10,10,5">
-                <TextBlock Text="📊 Data View" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock Classes="sectionTitle" Text="📊 Data View" VerticalAlignment="Center"/>
                 <Button x:Name="ExportCsvButton" Content="Export CSV" Margin="20,0,0,0" Click="ExportCsvButton_Click"/>
             </StackPanel>
             <TabControl Grid.Row="1" Margin="10,0,10,10">

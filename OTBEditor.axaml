@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         x:Class="Assets_Editor.OTBEditor"
-        Title="OTBEditor" Width="1220" Height="860">
+        Title="Tibia MultiTool Editor — OTB Editor" Width="1240" Height="880">
     <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -13,7 +13,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- Left: Item List -->
-        <Border Grid.Column="0" BorderThickness="1" BorderBrush="Gray" Margin="10,5,0,10">
+        <Border Grid.Column="0" Classes="card" Margin="10,5,0,10">
             <ListBox x:Name="ItemListView" Width="207" Margin="0,10,0,0" SelectionChanged="ItemListView_SelectionChanged">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
@@ -27,7 +27,7 @@
         </Border>
 
         <!-- Middle: Properties -->
-        <Border Grid.Column="1" BorderThickness="1" BorderBrush="Gray" Margin="5,5,10,10">
+        <Border Grid.Column="1" Classes="card" Margin="5,5,10,10">
             <Grid RowDefinitions="40,40,Auto">
                 <Menu Grid.Row="0">
                     <MenuItem Header="_File">
@@ -125,7 +125,7 @@
         </Border>
 
         <!-- Right: New Items List -->
-        <Border Grid.Column="2" BorderThickness="1" BorderBrush="Gray" Margin="0,5,10,10">
+        <Border Grid.Column="2" Classes="card" Margin="0,5,10,10">
             <ListBox x:Name="NewItemListView" Width="207" Margin="0,10,0,0">
                 <ListBox.ItemTemplate>
                     <DataTemplate>

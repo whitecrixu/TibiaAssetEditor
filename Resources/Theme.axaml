@@ -1,0 +1,214 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Design tokens + global control styles. Pulled in from App.axaml after
+        Semi.Avalonia so these selectors win. The goal is a single place where
+        spacing, radii, typography and card surfaces are defined — individual
+        windows should use the tokens/classes rather than re-specifying values.
+    -->
+    <Styles.Resources>
+        <!-- Spacing scale (4-point grid) -->
+        <x:Double x:Key="Spacing.Xs">4</x:Double>
+        <x:Double x:Key="Spacing.Sm">8</x:Double>
+        <x:Double x:Key="Spacing.Md">12</x:Double>
+        <x:Double x:Key="Spacing.Lg">16</x:Double>
+        <x:Double x:Key="Spacing.Xl">24</x:Double>
+
+        <!-- Corner radii -->
+        <CornerRadius x:Key="Radius.Sm">4</CornerRadius>
+        <CornerRadius x:Key="Radius.Md">8</CornerRadius>
+        <CornerRadius x:Key="Radius.Lg">12</CornerRadius>
+
+        <!-- Thicknesses built from spacing tokens, used as defaults -->
+        <Thickness x:Key="Inset.Sm">8</Thickness>
+        <Thickness x:Key="Inset.Md">12</Thickness>
+        <Thickness x:Key="Inset.Lg">16</Thickness>
+
+        <!-- Typography sizes -->
+        <x:Double x:Key="Font.Xs">11</x:Double>
+        <x:Double x:Key="Font.Sm">12</x:Double>
+        <x:Double x:Key="Font.Md">13</x:Double>
+        <x:Double x:Key="Font.Lg">15</x:Double>
+        <x:Double x:Key="Font.Xl">18</x:Double>
+        <x:Double x:Key="Font.H1">22</x:Double>
+    </Styles.Resources>
+
+    <!-- ═════════════  Global typography  ═════════════ -->
+    <Style Selector="Window">
+        <Setter Property="FontFamily" Value="Inter, Segoe UI, Helvetica, Arial, sans-serif"/>
+        <Setter Property="FontSize"   Value="{StaticResource Font.Md}"/>
+    </Style>
+
+    <!-- ═════════════  Surface primitives  ═════════════ -->
+
+    <!-- Card: the standard raised panel. Used everywhere a section of
+         content needs a subtle container (flag groups, tabs, previews). -->
+    <Style Selector="Border.card">
+        <Setter Property="Background"      Value="{DynamicResource SemiColorBackground1}"/>
+        <Setter Property="BorderBrush"     Value="{DynamicResource SemiColorBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius"    Value="{StaticResource Radius.Md}"/>
+        <Setter Property="Padding"         Value="{StaticResource Inset.Md}"/>
+    </Style>
+
+    <!-- AppBar: top toolbar in each editor window. Flat, bottom border only.
+         Top padding includes space for the OS title-bar buttons that float
+         above the extended client area. -->
+    <Style Selector="Border.appbar">
+        <Setter Property="Background"      Value="{DynamicResource SemiColorBackground0}"/>
+        <Setter Property="BorderBrush"     Value="{DynamicResource SemiColorBorder}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Padding"         Value="12,30,12,8"/>
+    </Style>
+
+    <!-- StatusBar: bottom info strip. Same pattern, flipped border. -->
+    <Style Selector="Border.statusbar">
+        <Setter Property="Background"      Value="{DynamicResource SemiColorBackground0}"/>
+        <Setter Property="BorderBrush"     Value="{DynamicResource SemiColorBorder}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        <Setter Property="Padding"         Value="12,6"/>
+    </Style>
+
+    <!-- Hero: the big header band that summarises the current selection
+         (monster/proficiency/item). A slightly tinted card. -->
+    <Style Selector="Border.hero">
+        <Setter Property="Background"      Value="{DynamicResource SemiColorFillTertiary}"/>
+        <Setter Property="BorderBrush"     Value="{DynamicResource SemiColorBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius"    Value="{StaticResource Radius.Md}"/>
+        <Setter Property="Padding"         Value="{StaticResource Inset.Md}"/>
+    </Style>
+
+    <!-- Sprite slot: 1:1 container for outfit/item thumbnails -->
+    <Style Selector="Border.spriteSlot">
+        <Setter Property="Background"      Value="{DynamicResource SemiColorFillTertiary}"/>
+        <Setter Property="CornerRadius"    Value="{StaticResource Radius.Sm}"/>
+    </Style>
+
+    <!-- ═════════════  Typography  ═════════════ -->
+    <Style Selector="TextBlock.panelHeader">
+        <Setter Property="FontSize"     Value="{StaticResource Font.Sm}"/>
+        <Setter Property="FontWeight"   Value="SemiBold"/>
+        <Setter Property="Foreground"   Value="{DynamicResource SemiColorTextSecondary}"/>
+        <Setter Property="Margin"       Value="4,12,0,6"/>
+    </Style>
+    <Style Selector="TextBlock.sectionTitle">
+        <Setter Property="FontSize"     Value="{StaticResource Font.Lg}"/>
+        <Setter Property="FontWeight"   Value="SemiBold"/>
+        <Setter Property="Margin"       Value="0,0,0,4"/>
+    </Style>
+    <Style Selector="TextBlock.dim">
+        <Setter Property="Foreground"   Value="{DynamicResource SemiColorTextSecondary}"/>
+        <Setter Property="FontSize"     Value="{StaticResource Font.Xs}"/>
+    </Style>
+    <Style Selector="TextBlock.mono">
+        <Setter Property="FontFamily"   Value="monospace, Consolas, Menlo, monospace"/>
+    </Style>
+
+    <!-- ═════════════  Buttons  ═════════════ -->
+    <Style Selector="Button">
+        <Setter Property="MinHeight"    Value="30"/>
+        <Setter Property="Padding"      Value="10,4"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Sm}"/>
+    </Style>
+    <!-- Subdued / icon-only — for +/⧉/🗑/▲/▼ row buttons where compactness
+         matters more than label visibility. -->
+    <Style Selector="Button.icon">
+        <Setter Property="MinHeight"    Value="28"/>
+        <Setter Property="MinWidth"     Value="28"/>
+        <Setter Property="Padding"      Value="0"/>
+    </Style>
+    <Style Selector="Button.tool">
+        <Setter Property="MinHeight"    Value="28"/>
+        <Setter Property="Padding"      Value="8,3"/>
+    </Style>
+    <!-- "Action" = compact actions under list panels: + Add / ⧉ Dup / 🗑 Del. -->
+    <Style Selector="Button.action">
+        <Setter Property="MinHeight"    Value="28"/>
+        <Setter Property="Padding"      Value="8,3"/>
+        <Setter Property="FontSize"     Value="{StaticResource Font.Xs}"/>
+    </Style>
+    <!-- Primary CTA: solid accent background. Use sparingly — one per view.
+         Hover selectors target the Button itself (not the inner ContentPresenter)
+         so we only write one Background setter per state; otherwise Semi's own
+         ContentPresenter transitions fight with ours and the button visibly
+         flickers when the pointer moves across it. Transitions explicitly
+         cleared for the same reason. -->
+    <Style Selector="Button.primary">
+        <Setter Property="Background"   Value="{DynamicResource SemiColorPrimary}"/>
+        <Setter Property="Foreground"   Value="White"/>
+        <Setter Property="FontWeight"   Value="SemiBold"/>
+        <Setter Property="Transitions">
+            <Transitions/>
+        </Setter>
+    </Style>
+    <Style Selector="Button.primary:pointerover">
+        <Setter Property="Background"   Value="{DynamicResource SemiColorPrimaryHover}"/>
+    </Style>
+    <Style Selector="Button.primary:pressed">
+        <Setter Property="Background"   Value="{DynamicResource SemiColorPrimaryActive}"/>
+    </Style>
+
+    <!-- ═════════════  Inputs  ═════════════ -->
+    <Style Selector="TextBox">
+        <Setter Property="MinHeight"    Value="30"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Sm}"/>
+    </Style>
+    <Style Selector="ComboBox">
+        <Setter Property="MinHeight"    Value="30"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Sm}"/>
+    </Style>
+    <Style Selector="NumericUpDown">
+        <Setter Property="MinHeight"    Value="30"/>
+    </Style>
+    <Style Selector="CheckBox.flag">
+        <Setter Property="MinWidth"     Value="140"/>
+        <Setter Property="Margin"       Value="2,2"/>
+        <Setter Property="FontSize"     Value="{StaticResource Font.Xs}"/>
+    </Style>
+
+    <!-- ═════════════  Lists  ═════════════ -->
+    <Style Selector="ListBox">
+        <Setter Property="Padding"      Value="4"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Sm}"/>
+    </Style>
+    <Style Selector="ListBoxItem">
+        <Setter Property="Padding"      Value="6,4"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Sm}"/>
+        <Setter Property="Margin"       Value="0,1"/>
+    </Style>
+
+    <!-- ═════════════  Tabs  ═════════════ -->
+    <Style Selector="TabItem">
+        <Setter Property="FontSize"     Value="{StaticResource Font.Md}"/>
+        <Setter Property="Padding"      Value="12,8"/>
+    </Style>
+
+    <!-- ═════════════  Anti-flicker  ═════════════
+         Semi.Avalonia ships with brush transitions on ListBoxItem / Border
+         backgrounds. In virtualised lists that recycle containers during
+         sprite loading (DatEditor + ItemsXmlEditor + MonsterEditor etc.),
+         these short animations overlap and look like every tile flickers.
+         Override them with empty transition collections — item colours still
+         change, they just don't animate. -->
+    <Style Selector="ListBoxItem">
+        <Setter Property="Transitions">
+            <Transitions/>
+        </Setter>
+    </Style>
+    <Style Selector="Border.spriteSlot">
+        <Setter Property="Transitions">
+            <Transitions/>
+        </Setter>
+    </Style>
+    <Style Selector="Image">
+        <Setter Property="Transitions">
+            <Transitions/>
+        </Setter>
+    </Style>
+    <Style Selector="ProgressBar">
+        <Setter Property="Transitions">
+            <Transitions/>
+        </Setter>
+    </Style>
+</Styles>

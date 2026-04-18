@@ -33,3 +33,6 @@ obj/Debug/net9.0/Appearances.cs
 *.tmp
 *.bak
 *.log
+
+# Local agent / scratch state — not for the repo
+.claude/

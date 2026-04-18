@@ -1,12 +1,18 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Assets_Editor.LogView"
-        Title="LogView" Height="450" Width="800">
-    <DataGrid x:Name="LogListView" AutoGenerateColumns="False" IsReadOnly="True">
-        <DataGrid.Columns>
-            <DataGridTextColumn Header="Time" Binding="{Binding Timestamp}"/>
-            <DataGridTextColumn Header="Level" Binding="{Binding Level}"/>
-            <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
-        </DataGrid.Columns>
-    </DataGrid>
+        Title="Log" Height="480" Width="860">
+    <Grid RowDefinitions="Auto,*" Margin="12">
+        <TextBlock Grid.Row="0" Classes="sectionTitle" Text="Application log" Margin="0,0,0,8"/>
+        <Border Grid.Row="1" Classes="card" Padding="0">
+            <DataGrid x:Name="LogListView" AutoGenerateColumns="False" IsReadOnly="True"
+                      GridLinesVisibility="Horizontal">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Time"    Binding="{Binding Timestamp}" Width="140"/>
+                    <DataGridTextColumn Header="Level"   Binding="{Binding Level}"     Width="80"/>
+                    <DataGridTextColumn Header="Message" Binding="{Binding Message}"   Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
 </Window>
