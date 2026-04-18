@@ -1,11 +1,42 @@
-# Tibia Asset Editor By WhiteCrixu V1.0
+# Tibia MultiTool Editor By WhiteCrixu
 
-Cross-platform editor for the MMORPG **Tibia** asset files (`appearances.dat`,
-sprite sheets, `items.xml`, `items.otb`).
+Cross-platform suite for **Tibia / Canary** server content — `appearances.dat`,
+sprite sheets, `items.xml`, `items.otb`, **monsters** (`.lua`) and
+**proficiencies** (`proficiencies.json`). Formerly *Tibia Asset Editor*.
 
-Linux/macOS/Windows port of the original Windows WPF editor. Built on
-**.NET 9.0 + Avalonia 11**, using SkiaSharp for image work and Magick.NET for
-GIF/APNG handling.
+Linux / macOS / Windows port of the original Windows WPF editor, rebuilt on
+**.NET 9.0 + Avalonia 11** with **Semi.Avalonia** theming, SkiaSharp for image
+work and Magick.NET for GIF/APNG handling.
+
+## What's new in v2.0
+
+Major release. The app is no longer just a DAT/sprite editor — it's a full
+dashboard for Canary / OpenTibia server content, with two brand-new editors,
+a hub-style MainWindow, and a modern UI.
+
+- **Monster Editor** — recursive `.lua` folder loader, 6-tab typed editor
+  (Basic / Outfit / Flags / Bestiary / Bosstiary / Raw Blocks), live Lua
+  preview, auto-fill Bestiary & Bosstiary from folder path + experience + HP,
+  outfit thumbnails from the loaded DAT. No `monsters.xml` needed — modern
+  Canary scans the folder.
+- **Proficiencies Editor** — full `proficiencies.json` editor (180+ entries,
+  27k+ lines) with typed perks, smart field visibility per Type, value hints,
+  ~35 preset perks, 11 weapon-category templates, and an L1…L7 level pill
+  bar. DatEditor's Proficiency ID flag gets a `…` picker wired to it.
+- **Hub MainWindow** — no longer auto-hides after Load Assets; stays as the
+  dashboard with a 6-card Tools grid (DAT / Sprite / Monster / Proficiencies
+  / Items XML / OTB). Sprites count visible alongside Items/Outfits/Effects/
+  Missiles. Load Assets button shows live **%**.
+- **Modern UI** — [`Semi.Avalonia`](https://github.com/irihitech/Semi.Avalonia)
+  theme, custom window chrome with `TransparencyLevelHint="Mica,AcrylicBlur,Blur"`,
+  FontAwesome vector icons on toolbars, Comfortable/Cozy/Compact density
+  toggle, shared design tokens in `Resources/Theme.axaml`.
+- **Renamed** from Tibia Asset Editor → **Tibia MultiTool Editor**
+  (`AssemblyName` / `Product` / `FileVersion` = 2.0.0). Namespace kept as
+  `Assets_Editor` to avoid breaking protobuf bindings and user settings.
+
+See the full entry and fix list in [`CHANGELOG.md`](CHANGELOG.md) or the
+[v2.0 GitHub release](https://github.com/whitecrixu/TibiaAssetEditor/releases/tag/v2.0).
 
 ## Features
 
@@ -81,13 +112,18 @@ import/export only).
 
 ## Architecture
 
-- **`MainWindow`** — preset/version selection, routes into the editor stack.
+- **`MainWindow`** — hub dashboard: preset/version selection, Load Assets,
+  6-card Tools grid that opens each editor.
 - **`DatEditor`** — primary appearance editor for modern (protobuf) clients.
 - **`LegacyDatEditor`** — pre-protobuf clients with hand-rolled `.dat`
   structures.
 - **`OTBEditor`** — server-side `items.otb` editor (binary tree).
 - **`SprEditor`** — sprite sheet viewer / batch tools.
 - **`ItemsXmlEditor`** — OpenTibia `items.xml` editor.
+- **`MonsterEditor`** + **`MonsterData.cs`** — Canary monster `.lua` folder
+  loader, typed editor, Lua generator, auto-fill Bestiary/Bosstiary.
+- **`ProficienciesEditor`** + **`Proficiencies.cs`** — Canary
+  `proficiencies.json` editor with typed perks, presets and templates.
 - **`Sprite.cs`** — sprite decode/encode + SkiaSharp bitmap conversion.
 - **`LZMA.cs`** — sprite sheet (BMP-like) compression.
 - **`OBD/ObdDecoder.cs`** — `.obd` legacy bundle import/export.
@@ -95,6 +131,9 @@ import/export only).
   `assets.json` + sha256 rewrite.
 - **`TemplateLibrary.cs`** — reusable appearance templates.
 - **`ItemsXml.cs`** — items.xml load/save with typed `ItemEntry` model.
+- **`Resources/Theme.axaml`** — design tokens (spacing, radii, typography)
+  + shared control classes (`card`, `appbar`, `statusbar`, `hero`,
+  `spriteSlot`, `primary`, `tool`, `action`, `icon`).
 
 See `CHANGELOG.md` for the full feature list.
 
