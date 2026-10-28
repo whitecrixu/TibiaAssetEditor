@@ -83,7 +83,7 @@ namespace Assets_Editor
 
                 bool ok = await ConfirmHere(
                     "Delete sprites",
-                    $"Clear {filled.Count} selected sprite(s)?");
+                    $"Clear {filled.Count} selected sprite(s)?" + TileUsageWarning(filled));
                 if (!ok) return;
 
                 foreach (int i in filled)
@@ -101,7 +101,7 @@ namespace Assets_Editor
 
             bool confirm = await ConfirmHere(
                 "Delete sprite",
-                $"Clear sprite from tile {idx}?");
+                $"Clear sprite from tile {idx}?" + TileUsageWarning(new[] { idx }));
             if (!confirm) return;
 
             MarkTileDeleted(idx);
@@ -122,7 +122,7 @@ namespace Assets_Editor
             var deleteSingle = new MenuItem { Header = $"Usu\u0144 sprite (tile {idx})", IsEnabled = hasTile };
             deleteSingle.Click += async (_, _) =>
             {
-                bool ok = await ConfirmHere("Delete sprite", $"Clear sprite from tile {idx}?");
+                bool ok = await ConfirmHere("Delete sprite", $"Clear sprite from tile {idx}?" + TileUsageWarning(new[] { idx }));
                 if (!ok) return;
                 MarkTileDeleted(idx);
                 SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
@@ -138,7 +138,7 @@ namespace Assets_Editor
             deleteSelected.Click += async (_, _) =>
             {
                 var filled = _selectedTiles.Where(i => _tilePngs.ContainsKey(i)).ToList();
-                bool ok = await ConfirmHere("Delete sprites", $"Clear {filled.Count} selected sprite(s)?");
+                bool ok = await ConfirmHere("Delete sprites", $"Clear {filled.Count} selected sprite(s)?" + TileUsageWarning(filled));
                 if (!ok) return;
                 foreach (int i in filled)
                     MarkTileDeleted(i);
@@ -201,7 +201,7 @@ namespace Assets_Editor
 
                 bool ok = await ConfirmHere(
                     "Delete sprites",
-                    $"Clear {filled.Count} selected sprite(s)?");
+                    $"Clear {filled.Count} selected sprite(s)?" + TileUsageWarning(filled));
                 if (!ok) return;
 
                 foreach (int i in filled)
@@ -221,11 +221,20 @@ namespace Assets_Editor
 
             bool confirm = await ConfirmHere(
                 "Delete sprite",
-                $"Clear sprite from tile {idx}?");
+                $"Clear sprite from tile {idx}?" + TileUsageWarning(new[] { idx }));
             if (!confirm) return;
 
             MarkTileDeleted(idx);
             SprStatusText.Text = $"Cleared tile {idx}. Click \U0001f4be to persist.";
+        }
+
+        // Appearances using the sprites behind these tile indices of the current sheet,
+        // formatted for a confirm dialog ("" when unused or no sheet is open).
+        private string TileUsageWarning(System.Collections.Generic.IEnumerable<int> tileIdxs)
+        {
+            if (CurrentSheet == null) return "";
+            var sheet = CurrentSheet;
+            return DatEditor.SpriteUsageWarning(tileIdxs.Select(i => (uint)(sheet.FirstSpriteid + i)));
         }
 
         // Show confirm dialog parented to this SprEditor window (not MainWindow).
@@ -495,9 +504,7 @@ namespace Assets_Editor
                 // available sprite-ID range and update MainWindow.SprLists / AllSprList.
                 if (CurrentSheet == null)
                 {
-                    int firstId = 1;
-                    if (MainWindow.catalog.Any(c => c.Type == "sprite"))
-                        firstId = MainWindow.catalog.Where(c => c.Type == "sprite").Max(c => c.LastSpriteid) + 1;
+                    int firstId = NextFreeSpriteId();
 
                     int tileCount = layout.Cols * layout.Rows;
                     int lastId = firstId + tileCount - 1;
@@ -510,7 +517,7 @@ namespace Assets_Editor
                     string hash = Convert.ToHexString(sha.ComputeHash(pixels)).ToLowerInvariant();
                     string sheetFilename = $"sprites-{hash}.bmp.lzma";
 
-                    CurrentSheet = new Catalog
+                    var newSheet = new Catalog
                     {
                         Type = "sprite",
                         File = sheetFilename,
@@ -518,21 +525,25 @@ namespace Assets_Editor
                         FirstSpriteid = firstId,
                         LastSpriteid = lastId,
                     };
-                    MainWindow.catalog.Add(CurrentSheet);
-                    SaveCatalog();
 
-                    for (int i = firstId; i <= lastId; i++)
-                    {
-                        MainWindow.SprLists[i] = null!;
-                        MainWindow.AllSprList.Add(new ShowList { Id = (uint)i });
-                    }
+                    // Sheet file first, catalog second: the catalog must never point at a
+                    // file that isn't on disk.
+                    string newPath = Path.Combine(MainWindow._assetsPath, newSheet.File);
+                    LZMA.ExportLzmaFile(sheetBmp, ref newPath);
+                    MainWindow.catalog.Add(newSheet);
+                    SaveCatalog();
+                    CurrentSheet = newSheet;
+
+                    RegisterNewSpriteIds(firstId, lastId);
 
                     AddToSheetsList(CurrentSheet);
                     SprStatusText.Text = $"New sheet registered: {sheetFilename} (IDs {firstId}–{lastId}).";
                 }
-
-                string outPath = Path.Combine(MainWindow._assetsPath, CurrentSheet.File);
-                LZMA.ExportLzmaFile(sheetBmp, ref outPath);
+                else
+                {
+                    string outPath = Path.Combine(MainWindow._assetsPath, CurrentSheet.File);
+                    LZMA.ExportLzmaFile(sheetBmp, ref outPath);
+                }
 
                 // Invalidate cached SprLists entries so they reload next time
                 for (int i = CurrentSheet.FirstSpriteid; i <= CurrentSheet.LastSpriteid; i++)
@@ -647,10 +658,8 @@ namespace Assets_Editor
                     sheetBmp = srcBmp.Resize(new SKImageInfo(DatEditor.SprSheetWidth, DatEditor.SprSheetHeight,
                         SKColorType.Bgra8888, SKAlphaType.Premul), SKFilterQuality.High);
 
-                // Determine next available sprite ID
-                int firstId = 1;
-                if (MainWindow.catalog.Any(c => c.Type == "sprite"))
-                    firstId = MainWindow.catalog.Where(c => c.Type == "sprite").Max(c => c.LastSpriteid) + 1;
+                // Determine next available sprite ID (above catalog ranges and in-memory sprites)
+                int firstId = NextFreeSpriteId();
 
                 int sprType = 0; // 32x32
                 var layout = DatEditor.GetSpriteLayout(sprType);
@@ -678,12 +687,8 @@ namespace Assets_Editor
                 // Save updated catalog-content.json
                 SaveCatalog();
 
-                // Update SprLists and AllSprList
-                for (int i = firstId; i <= lastId; i++)
-                    MainWindow.SprLists[i] = null!;
-
-                for (int i = MainWindow.AllSprList.Count; i <= lastId; i++)
-                    MainWindow.AllSprList.Add(new ShowList { Id = (uint)i });
+                // Update SprLists and AllSprList with exactly the new ids
+                RegisterNewSpriteIds(firstId, lastId);
 
                 SprStatusText.Text = $"Imported as {sheetFilename} (IDs {firstId}–{lastId})";
 
@@ -698,21 +703,37 @@ namespace Assets_Editor
             }
         }
 
+        // First sprite id above every id in use — catalog ranges *and* sprites that only
+        // live in memory (imported but not compiled into a sheet yet).
+        private static int NextFreeSpriteId()
+        {
+            int max = 0;
+            foreach (var c in MainWindow.catalog)
+                if (c.Type == "sprite" && c.LastSpriteid != int.MinValue && c.LastSpriteid > max)
+                    max = c.LastSpriteid;
+            foreach (var k in MainWindow.SprLists.Keys)
+                if (k > max) max = k;
+            return max + 1;
+        }
+
+        // Mark [firstId, lastId] as lazily loadable from their sheet and add them to the
+        // global sprite list (only ids not already listed).
+        private static void RegisterNewSpriteIds(int firstId, int lastId)
+        {
+            var listed = new System.Collections.Generic.HashSet<uint>(MainWindow.AllSprList.Select(s => s.Id));
+            for (int i = firstId; i <= lastId; i++)
+            {
+                MainWindow.SprLists[i] = null!;
+                if (listed.Add((uint)i))
+                    MainWindow.AllSprList.Add(new ShowList { Id = (uint)i });
+            }
+        }
+
         private void SaveCatalog()
         {
-            string catalogPath = Path.Combine(MainWindow._assetsPath, "catalog-content.json");
-            // Tibia's catalog uses lowercase field names (type/file/spriteType/…).
-            var settings = new JsonSerializerSettings
-            {
-                NullValueHandling = NullValueHandling.Ignore,
-                DefaultValueHandling = DefaultValueHandling.Ignore,
-                ContractResolver = new Newtonsoft.Json.Serialization.DefaultContractResolver
-                {
-                    NamingStrategy = new Newtonsoft.Json.Serialization.CamelCaseNamingStrategy(),
-                },
-            };
-            string json = JsonConvert.SerializeObject(MainWindow.catalog, Formatting.Indented, settings);
-            File.WriteAllText(catalogPath, json);
+            // Tibia's catalog uses ALL-lowercase field names (type/file/spritetype/…);
+            // CatalogWriter is the only place that serializes it.
+            CatalogWriter.Write(MainWindow._assetsPath, MainWindow.catalog);
         }
 
         private void AddToSheetsList(Catalog cat)
@@ -734,7 +755,10 @@ namespace Assets_Editor
                 });
                 SheetsList.ItemsSource = CustomSheetsList;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                MainWindow.Log($"[SprEditor] Could not load sheet preview {cat.File}: {ex.Message}", "Warning");
+            }
         }
 
         // ── Sheet list buttons ────────────────────────────────────────────────
@@ -786,30 +810,41 @@ namespace Assets_Editor
                 return;
             }
 
+            var idsToRemove = new System.Collections.Generic.List<uint>();
+            for (int id = cat.FirstSpriteid; id <= cat.LastSpriteid; id++)
+                idsToRemove.Add((uint)id);
+
             bool ok = await ConfirmHere(
                 "Delete sheet",
-                $"Delete sheet {cat.File}?\nSprite IDs {cat.FirstSpriteid}–{cat.LastSpriteid} will be removed.\n\nThis cannot be undone!");
+                $"Delete sheet {cat.File}?\nSprite IDs {cat.FirstSpriteid}–{cat.LastSpriteid} will be removed.\n\n" +
+                "The sheet file is kept once as <sheet>-orig." +
+                DatEditor.SpriteUsageWarning(idsToRemove));
             if (!ok) return;
 
             try
             {
-                // 1. Remove sprite IDs from SprLists and AllSprList
-                var idsToRemove = new System.Collections.Generic.List<uint>();
-                for (int id = cat.FirstSpriteid; id <= cat.LastSpriteid; id++)
-                {
-                    MainWindow.SprLists.TryRemove(id, out _);
-                    idsToRemove.Add((uint)id);
-                }
-                _editor.SafeRemoveFromAllSprList(idsToRemove);
-
-                // 2. Delete the .bmp.lzma file from disk
+                // 1. Catalog on disk first: if this fails nothing has been deleted yet.
                 string sprPath = Path.Combine(MainWindow._assetsPath, cat.File);
-                if (File.Exists(sprPath))
-                    File.Delete(sprPath);
-
-                // 3. Remove from catalog and save
+                int catIndex = MainWindow.catalog.IndexOf(cat);
                 MainWindow.catalog.Remove(cat);
-                SaveCatalog();
+                try { SaveCatalog(); }
+                catch
+                {
+                    if (catIndex >= 0) MainWindow.catalog.Insert(catIndex, cat);
+                    throw;
+                }
+
+                // 2. Delete the .bmp.lzma file from disk (after a one-time backup)
+                if (File.Exists(sprPath))
+                {
+                    CatalogWriter.BackupOnce(sprPath);
+                    File.Delete(sprPath);
+                }
+
+                // 3. Remove sprite IDs from SprLists and AllSprList
+                foreach (var id in idsToRemove)
+                    MainWindow.SprLists.TryRemove((int)id, out _);
+                _editor.SafeRemoveFromAllSprList(idsToRemove);
 
                 // 4. Remove from the UI sheets list
                 if (showList != null)
@@ -828,6 +863,7 @@ namespace Assets_Editor
             }
             catch (Exception ex)
             {
+                MainWindow.Log($"[SprEditor] Delete sheet {cat.File} failed: {ex.GetType().Name}: {ex.Message}", "Error");
                 SprStatusText.Text = $"Delete failed: {ex.Message}";
             }
         }
@@ -1153,9 +1189,10 @@ namespace Assets_Editor
                     await File.WriteAllBytesAsync(outPath, png);
                     exported++;
                 }
-                catch
+                catch (Exception ex)
                 {
                     failed++;
+                    MainWindow.Log($"[SprEditor] Export sprite {id} failed: {ex.Message}", "Error");
                 }
             }
 
@@ -1175,35 +1212,26 @@ namespace Assets_Editor
                 return;
             }
 
+            var rangeIds = new System.Collections.Generic.List<uint>();
+            for (int id = from; id <= to; id++) rangeIds.Add((uint)id);
+
             bool ok = await ConfirmHere(
                 "Delete sprite range",
-                $"Delete sprites {from}\u2013{to} ({to - from + 1} sprites)?\n\nThis clears them from their sheets and removes from SprLists. Cannot be undone!");
+                $"Delete sprites {from}\u2013{to} ({to - from + 1} sprites)?\n\nThis clears them from their sheets and removes from SprLists. " +
+                "Each changed sheet is kept once as <sheet>-orig." +
+                DatEditor.SpriteUsageWarning(rangeIds));
             if (!ok) return;
 
-            int deleted = 0;
-
-            // Group sprite IDs by their catalog sheet so we can blank them out in bulk.
-            var affectedSheets = new System.Collections.Generic.HashSet<Catalog>();
-
-            var idsToRemove = new System.Collections.Generic.List<uint>();
-
-            for (int id = from; id <= to; id++)
-            {
-                var cat = MainWindow.catalog.Find(c =>
-                    c.Type == "sprite" && id >= c.FirstSpriteid && id <= c.LastSpriteid);
-
-                if (cat != null)
-                    affectedSheets.Add(cat);
-
-                MainWindow.SprLists.TryRemove(id, out _);
-                idsToRemove.Add((uint)id);
-                deleted++;
-            }
-
-            // Safely remove from AllSprList via DatEditor (disconnects binding first).
-            _editor.SafeRemoveFromAllSprList(idsToRemove);
+            // Sheets whose id range overlaps [from, to] (one pass over the catalog).
+            var affectedSheets = MainWindow.catalog
+                .Where(c => c.Type == "sprite" && c.FirstSpriteid != int.MinValue
+                            && c.FirstSpriteid <= to && c.LastSpriteid >= from)
+                .ToList();
 
             // For each affected sheet: decompress, blank out the deleted tiles, re-save.
+            // Ids of a sheet that fails stay in memory so memory and disk don't diverge.
+            var keepIds = new System.Collections.Generic.HashSet<uint>();
+            int failedSheets = 0;
             foreach (var cat in affectedSheets)
             {
                 string sprPath = Path.Combine(MainWindow._assetsPath, cat.File);
@@ -1217,29 +1245,46 @@ namespace Assets_Editor
                     int tHeight = layout.SpriteSizeY;
                     int cols = layout.Cols;
 
-                    using var canvas = new SKCanvas(bmp);
-                    for (int id = Math.Max(from, cat.FirstSpriteid); id <= Math.Min(to, cat.LastSpriteid); id++)
+                    using (var canvas = new SKCanvas(bmp))
                     {
-                        int tileIdx = id - cat.FirstSpriteid;
-                        int col = tileIdx % cols;
-                        int row = tileIdx / cols;
-                        canvas.Save();
-                        canvas.ClipRect(SKRect.Create(col * tWidth, row * tHeight, tWidth, tHeight));
-                        canvas.Clear(SKColors.Transparent);
-                        canvas.Restore();
+                        for (int id = Math.Max(from, cat.FirstSpriteid); id <= Math.Min(to, cat.LastSpriteid); id++)
+                        {
+                            int tileIdx = id - cat.FirstSpriteid;
+                            int col = tileIdx % cols;
+                            int row = tileIdx / cols;
+                            canvas.Save();
+                            canvas.ClipRect(SKRect.Create(col * tWidth, row * tHeight, tWidth, tHeight));
+                            canvas.Clear(SKColors.Transparent);
+                            canvas.Restore();
+                        }
                     }
 
                     string outPath = sprPath;
                     LZMA.ExportLzmaFile(bmp, ref outPath);
                 }
-                catch { /* sheet rewrite failed — sprites already removed from cache */ }
+                catch (Exception ex)
+                {
+                    failedSheets++;
+                    for (int id = Math.Max(from, cat.FirstSpriteid); id <= Math.Min(to, cat.LastSpriteid); id++)
+                        keepIds.Add((uint)id);
+                    MainWindow.Log($"[SprEditor] Delete range: rewriting sheet {cat.File} failed, its sprites were kept: {ex.Message}", "Error");
+                }
             }
+
+            var idsToRemove = rangeIds.Where(id => !keepIds.Contains(id)).ToList();
+            foreach (var id in idsToRemove)
+                MainWindow.SprLists.TryRemove((int)id, out _);
+            int deleted = idsToRemove.Count;
+
+            // Safely remove from AllSprList via DatEditor (disconnects binding first).
+            _editor.SafeRemoveFromAllSprList(idsToRemove);
 
             // If the currently edited sheet is affected, reload the viewer.
             if (CurrentSheet != null && affectedSheets.Contains(CurrentSheet))
                 CreateNewSheetImg(CurrentSheet.SpriteType, true);
 
-            SprStatusText.Text = $"Deleted {deleted} sprite(s) in range {from}\u2013{to}. Affected {affectedSheets.Count} sheet(s).";
+            SprStatusText.Text = $"Deleted {deleted} sprite(s) in range {from}\u2013{to}. Affected {affectedSheets.Count} sheet(s)."
+                               + (failedSheets > 0 ? $" {failedSheets} sheet(s) could not be rewritten — see log." : "");
         }
 
         // ── Batch PNG downscale (e.g. 64×64 → 32×32) ─────────────────────────
@@ -1326,9 +1371,10 @@ namespace Assets_Editor
                         data.SaveTo(fs);
                     done++;
                 }
-                catch
+                catch (Exception ex)
                 {
                     failed++;
+                    MainWindow.Log($"[SprEditor] Downscale {Path.GetFileName(path)} failed: {ex.Message}", "Error");
                 }
             }
 

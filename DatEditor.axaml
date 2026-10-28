@@ -134,8 +134,8 @@
                                   ToolTip.Tip="Check for broken sprites, duplicate IDs, missing flags"/>
                         <MenuItem Header="🔄 Sync items.xml ↔ DAT…" Click="SyncItemsXmlDat_Click"
                                   ToolTip.Tip="Find items in XML without DAT entries and vice-versa"/>
-                        <MenuItem Header="📦 Repack Sheets…" Click="RepackSheets_Click"
-                                  ToolTip.Tip="Remove empty slots from sprite sheets and repack"/>
+                        <MenuItem Header="📦 Repack Sheets (analysis only)…" Click="RepackSheets_Click"
+                                  ToolTip.Tip="Report how many sprite ids/sheets are unused. Does not modify anything (repacking is not implemented)."/>
                         <MenuItem Header="🔁 Deduplicate Sprites…" Click="DeduplicateSprites_Click"
                                   ToolTip.Tip="Find identical sprites (by SHA256), remap references to a single canonical ID, free up space"/>
                         <MenuItem Header="🔗 Sprite References…" Click="SpriteReferences_Click"
@@ -500,7 +500,7 @@
                             <Grid ColumnDefinitions="115,160,20,115,160" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                                 <!-- Row 0: Ground speed -->
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Ground Speed" VerticalAlignment="Center" FontSize="11"/>
-                                <NumericUpDown x:Name="FlagGroundSpeed" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="1000" Value="0" Height="28"/>
+                                <NumericUpDown x:Name="FlagGroundSpeed" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28"/>
                                 <!-- Row 0: Hook type -->
                                 <TextBlock Grid.Row="0" Grid.Column="3" Text="Hook Type" VerticalAlignment="Center" FontSize="11"/>
                                 <ComboBox x:Name="FlagHookType" Grid.Row="0" Grid.Column="4" SelectedIndex="-1" Height="28">
@@ -510,31 +510,31 @@
 
                                 <!-- Row 1: Write max / WriteOnce max -->
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Write MaxLen" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagWriteMaxLen" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1024" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagWriteMaxLen" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="1" Grid.Column="3" Text="WriteOnce Len" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagWriteOnceMaxLen" Grid.Row="1" Grid.Column="4" Minimum="0" Maximum="1024" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagWriteOnceMaxLen" Grid.Row="1" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
 
                                 <!-- Row 2: Light -->
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Light Bright" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagLightBrightness" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="10" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagLightBrightness" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="2" Grid.Column="3" Text="Light Color" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
                                 <StackPanel Grid.Row="2" Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
-                                    <NumericUpDown x:Name="FlagLightColor" Minimum="0" Maximum="215" Value="0" Height="28" Width="130"/>
+                                    <NumericUpDown x:Name="FlagLightColor" Minimum="0" Maximum="4294967295" Value="0" Height="28" Width="130"/>
                                     <Border x:Name="LightColorSwatch" Width="20" Height="20" CornerRadius="3" BorderThickness="1" BorderBrush="Gray"/>
                                 </StackPanel>
 
                                 <!-- Row 3: Shift -->
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Shift X" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagShiftX" Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="32" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagShiftX" Grid.Row="3" Grid.Column="1" Minimum="-2147483648" Maximum="2147483647" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="3" Grid.Column="3" Text="Shift Y" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagShiftY" Grid.Row="3" Grid.Column="4" Minimum="0" Maximum="32" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagShiftY" Grid.Row="3" Grid.Column="4" Minimum="-2147483648" Maximum="2147483647" Value="0" Height="28" Margin="0,4,0,0"/>
 
                                 <!-- Row 4: Elevation / Automap -->
                                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Elevation" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagElevation" Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="32" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagElevation" Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="4" Grid.Column="3" Text="Automap Color" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
                                 <StackPanel Grid.Row="4" Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
-                                    <NumericUpDown x:Name="FlagAutomapColor" Minimum="0" Maximum="215" Value="0" Height="28" Width="130"/>
+                                    <NumericUpDown x:Name="FlagAutomapColor" Minimum="0" Maximum="4294967295" Value="0" Height="28" Width="130"/>
                                     <Border x:Name="AutomapColorSwatch" Width="20" Height="20" CornerRadius="3" BorderThickness="1" BorderBrush="Gray"/>
                                 </StackPanel>
 
@@ -573,32 +573,32 @@
                                     <ComboBoxItem Content="Highlight"/>
                                 </ComboBox>
                                 <TextBlock Grid.Row="6" Grid.Column="3" Text="Transparency" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagTransparencyLevel" Grid.Row="6" Grid.Column="4" Minimum="0" Maximum="255" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagTransparencyLevel" Grid.Row="6" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
 
                                 <!-- Row 7: Cyclopedia / ChangedToExpire -->
                                 <TextBlock Grid.Row="7" Grid.Column="0" Text="Cyclopedia ID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagCyclopediaId" Grid.Row="7" Grid.Column="1" Minimum="0" Maximum="999999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagCyclopediaId" Grid.Row="7" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="7" Grid.Column="3" Text="ExpireFormerID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagChangedToExpireId" Grid.Row="7" Grid.Column="4" Minimum="0" Maximum="999999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagChangedToExpireId" Grid.Row="7" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
 
                                 <!-- Row 8: UpgradeClassification / MinimumLevel -->
                                 <TextBlock Grid.Row="8" Grid.Column="0" Text="UpgradeClass" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagUpgradeClassAmount" Grid.Row="8" Grid.Column="1" Minimum="0" Maximum="999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagUpgradeClassAmount" Grid.Row="8" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="8" Grid.Column="3" Text="Min Level" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagMinimumLevel" Grid.Row="8" Grid.Column="4" Minimum="0" Maximum="99999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagMinimumLevel" Grid.Row="8" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
 
                                 <!-- Row 9: SkillWheel Gem -->
                                 <TextBlock Grid.Row="9" Grid.Column="0" Text="Gem Quality" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagGemQualityId" Grid.Row="9" Grid.Column="1" Minimum="0" Maximum="999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagGemQualityId" Grid.Row="9" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="9" Grid.Column="3" Text="Gem Vocation" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagGemVocationId" Grid.Row="9" Grid.Column="4" Minimum="0" Maximum="999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagGemVocationId" Grid.Row="9" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
 
                                 <!-- Row 10: Imbueable / Proficiency -->
                                 <TextBlock Grid.Row="10" Grid.Column="0" Text="Imbue Slots" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                <NumericUpDown x:Name="FlagImbueSlotCount" Grid.Row="10" Grid.Column="1" Minimum="0" Maximum="10" Value="0" Height="28" Margin="0,4,0,0"/>
+                                <NumericUpDown x:Name="FlagImbueSlotCount" Grid.Row="10" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 <TextBlock Grid.Row="10" Grid.Column="3" Text="Proficiency ID" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
                                 <StackPanel Grid.Row="10" Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,4,0,0">
-                                    <NumericUpDown x:Name="FlagProficiencyId" Minimum="0" Maximum="999999" Value="0" Height="28" Width="130"/>
+                                    <NumericUpDown x:Name="FlagProficiencyId" Minimum="0" Maximum="4294967295" Value="0" Height="28" Width="130"/>
                                     <Button x:Name="FlagProficiencyPickBtn" Content="…" Width="28" Height="28" Padding="0"
                                             ToolTip.Tip="Pick proficiency by name (from loaded proficiencies.json)"
                                             Click="PickProficiency_Click"/>
@@ -652,13 +652,16 @@
                                         <ComboBoxItem Content="PremScrolls"/>
                                         <ComboBoxItem Content="TibiaCoins"/>
                                         <ComboBoxItem Content="CreatureProducts"/>
+                                        <ComboBoxItem Content="Quiver"/>
+                                        <ComboBoxItem Content="SoulCores"/>
+                                        <ComboBoxItem Content="FistWeapons"/>
                                     </ComboBox>
                                     <TextBlock Grid.Row="0" Grid.Column="3" Text="Trade As" VerticalAlignment="Center" FontSize="11"/>
-                                    <NumericUpDown x:Name="FlagMarketTrade" Grid.Row="0" Grid.Column="4" Minimum="0" Maximum="999999" Value="0" Height="28"/>
+                                    <NumericUpDown x:Name="FlagMarketTrade" Grid.Row="0" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28"/>
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Show As" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                    <NumericUpDown x:Name="FlagMarketShow" Grid.Row="1" Grid.Column="4" Minimum="0" Maximum="999999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                    <NumericUpDown x:Name="FlagMarketShow" Grid.Row="1" Grid.Column="4" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                     <TextBlock Grid.Row="1" Grid.Column="3" Text="Min Lvl" VerticalAlignment="Center" FontSize="11" Margin="0,4,0,0"/>
-                                    <NumericUpDown x:Name="FlagMarketLevel" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="9999" Value="0" Height="28" Margin="0,4,0,0"/>
+                                    <NumericUpDown x:Name="FlagMarketLevel" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="4294967295" Value="0" Height="28" Margin="0,4,0,0"/>
                                 </Grid>
                                 <TextBlock Text="Market Professions" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,2"/>
                                 <WrapPanel>
@@ -668,6 +671,7 @@
                                     <CheckBox x:Name="FlagProfPaladin"   Content="Paladin"  FontSize="11" Margin="2"/>
                                     <CheckBox x:Name="FlagProfSorcerer"  Content="Sorcerer" FontSize="11" Margin="2"/>
                                     <CheckBox x:Name="FlagProfDruid"     Content="Druid"    FontSize="11" Margin="2"/>
+                                    <CheckBox x:Name="FlagProfMonk"      Content="Monk"     FontSize="11" Margin="2"/>
                                     <CheckBox x:Name="FlagProfPromoted"  Content="Promoted" FontSize="11" Margin="2"/>
                                 </WrapPanel>
                             </StackPanel>

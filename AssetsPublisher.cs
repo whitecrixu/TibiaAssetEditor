@@ -27,6 +27,11 @@ namespace Assets_Editor;
 //      and upserts the corresponding assets.json entry (packedhash/packedsize, and
 //      unpackedhash/unpackedsize for .dat files).
 //   4. Recomputes sha256(assets.json) and writes assets.json.sha256.
+//   5. Only after every new file is in place, removes the stale appearances-*.dat(.lzma).
+//
+// All writes go through CatalogWriter (temp file + atomic move, one-time "<file>-orig"
+// backup of anything overwritten or deleted), so an interrupted publish never leaves the
+// client with a catalog pointing at a file that no longer exists.
 public static class AssetsPublisher
 {
     public sealed record Result(string NewAppearancesFile, int FilesHashed, string TibiaRoot);
@@ -62,13 +67,15 @@ public static class AssetsPublisher
             string newDatName = $"appearances-{newUnpackedHash}.dat";
             string newDatPath = Path.Combine(assetsPath, newDatName);
 
-            progress?.Invoke($"Writing {newDatName}…");
-            File.WriteAllBytes(newDatPath, datBytes);
+            // Remember the stale appearances files now; they are removed only at the very end.
+            var staleFiles = Directory.GetFiles(assetsPath, "appearances-*.dat")
+                .Where(f => !string.Equals(Path.GetFileName(f), newDatName, StringComparison.Ordinal))
+                .Concat(Directory.GetFiles(assetsPath, "appearances-*.dat.lzma")
+                    .Where(f => !string.Equals(Path.GetFileName(f), newDatName + ".lzma", StringComparison.Ordinal)))
+                .ToList();
 
-            // Remove any stale appearances-*.dat that doesn't match the new one.
-            foreach (var stale in Directory.GetFiles(assetsPath, "appearances-*.dat"))
-                if (!string.Equals(Path.GetFileName(stale), newDatName, StringComparison.Ordinal))
-                    TryDelete(stale);
+            progress?.Invoke($"Writing {newDatName}…");
+            CatalogWriter.WriteAllBytesAtomic(newDatPath, datBytes);
 
             // Produce the .dat.lzma sibling so the url entry references a real file
             // (the client updater uses it, and we need packedhash/packedsize for assets.json).
@@ -76,9 +83,6 @@ public static class AssetsPublisher
             progress?.Invoke($"Compressing {newDatName}.lzma…");
             using (var inMs = new MemoryStream(datBytes))
                 LZMA.CompressFileLZMA(inMs, newDatLzmaPath);
-            foreach (var stale in Directory.GetFiles(assetsPath, "appearances-*.dat.lzma"))
-                if (!string.Equals(Path.GetFileName(stale), newDatName + ".lzma", StringComparison.Ordinal))
-                    TryDelete(stale);
 
             // ── Update catalog-content.json ──────────────────────────────────
             progress?.Invoke("Updating catalog-content.json…");
@@ -91,21 +95,11 @@ public static class AssetsPublisher
             {
                 MainWindow.catalog.Insert(0, new MainWindow.Catalog { Type = "appearances", File = newDatName });
             }
-            string catalogPath = Path.Combine(assetsPath, "catalog-content.json");
+            string catalogPath = Path.Combine(assetsPath, CatalogWriter.CatalogFileName);
             string catalogLzmaPath = catalogPath + ".lzma";
-            // Tibia's catalog-content.json uses ALL-LOWERCASE property names
-            // (type/file/spritetype/firstspriteid/lastspriteid/…). The parser is
-            // case-sensitive: camelCase or PascalCase silently breaks sprite
-            // resolution and the client renders no graphics after login.
-            var catalogSettings = new Newtonsoft.Json.JsonSerializerSettings
-            {
-                NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
-                DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
-                ContractResolver = new LowercasePropertyResolver(),
-            };
-            byte[] catalogBytes = System.Text.Encoding.UTF8.GetBytes(
-                Newtonsoft.Json.JsonConvert.SerializeObject(MainWindow.catalog, Newtonsoft.Json.Formatting.Indented, catalogSettings));
-            File.WriteAllBytes(catalogPath, catalogBytes);
+            // CatalogWriter emits ALL-LOWERCASE property names (type/file/spritetype/…);
+            // Tibia's parser is case-sensitive.
+            byte[] catalogBytes = CatalogWriter.Write(assetsPath, MainWindow.catalog);
 
             progress?.Invoke("Compressing catalog-content.json.lzma…");
             using (var inMs = new MemoryStream(catalogBytes))
@@ -231,11 +225,18 @@ public static class AssetsPublisher
             // Tibia's assets.json is compact (no pretty-printing). Match that exactly so
             // the size/hash is stable between runs.
             string newAssetsJson = root.ToString(Newtonsoft.Json.Formatting.None);
-            File.WriteAllText(assetsJsonPath, newAssetsJson);
+            byte[] newAssetsJsonBytes = new System.Text.UTF8Encoding(false).GetBytes(newAssetsJson);
+            CatalogWriter.WriteAllBytesAtomic(assetsJsonPath, newAssetsJsonBytes);
 
             progress?.Invoke("Writing assets.json.sha256…");
-            string assetsHash = Sha256Hex(System.Text.Encoding.UTF8.GetBytes(newAssetsJson));
-            File.WriteAllText(assetsShaPath, assetsHash);
+            string assetsHash = Sha256Hex(newAssetsJsonBytes);
+            CatalogWriter.WriteAllBytesAtomic(assetsShaPath, System.Text.Encoding.ASCII.GetBytes(assetsHash));
+
+            // Everything new is on disk — now it is safe to drop the old appearances files
+            // (each keeps a one-time "-orig" copy).
+            progress?.Invoke("Removing stale appearances files…");
+            foreach (var stale in staleFiles)
+                TryDelete(stale);
 
             return new Result(newDatName, hashed, tibiaRoot);
         });
@@ -249,11 +250,15 @@ public static class AssetsPublisher
 
     private static void TryDelete(string path)
     {
-        try { File.Delete(path); } catch { }
-    }
-
-    private class LowercasePropertyResolver : Newtonsoft.Json.Serialization.DefaultContractResolver
-    {
-        protected override string ResolvePropertyName(string propertyName) => propertyName.ToLower();
+        try
+        {
+            CatalogWriter.BackupOnce(path);
+            File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            // Leaving a stale file behind is harmless (nothing references it any more).
+            MainWindow.Log($"Publish: could not remove stale {Path.GetFileName(path)}: {ex.Message}", "Warning");
+        }
     }
 }

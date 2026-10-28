@@ -92,8 +92,10 @@ namespace Assets_Editor
         private int _animFrameCount = 1;
 
         // Undo/Redo stacks — store snapshots of (AppearanceId, cloned Appearance)
-        private readonly Stack<(uint id, Appearance snapshot)> _undoStack = new();
-        private readonly Stack<(uint id, Appearance snapshot)> _redoStack = new();
+        // Entries remember the category (ObjectMenu index) so an undo after a tab switch
+        // restores into the collection the snapshot came from, not the active tab.
+        private readonly Stack<(int category, uint id, Appearance snapshot)> _undoStack = new();
+        private readonly Stack<(int category, uint id, Appearance snapshot)> _redoStack = new();
 
         // Revert snapshot — captured when an appearance is selected, restored on Ctrl+R
         private Appearance? _revertSnapshot;
@@ -176,6 +178,7 @@ namespace Assets_Editor
             FlagProfPaladin.IsCheckedChanged += (s, e) => FlagParam_Changed(s, e);
             FlagProfSorcerer.IsCheckedChanged += (s, e) => FlagParam_Changed(s, e);
             FlagProfDruid.IsCheckedChanged += (s, e) => FlagParam_Changed(s, e);
+            FlagProfMonk.IsCheckedChanged += (s, e) => FlagParam_Changed(s, e);
             FlagProfPromoted.IsCheckedChanged += (s, e) => FlagParam_Changed(s, e);
             // Vocation restriction checkboxes
             FlagRestrictVocAny.IsCheckedChanged += (s, e) => FlagParam_Changed(s, e);
@@ -222,20 +225,8 @@ namespace Assets_Editor
         /// </summary>
         public void SafeRemoveFromAllSprList(System.Collections.Generic.IEnumerable<uint> idsToRemove)
         {
-            var idSet = new System.Collections.Generic.HashSet<uint>(idsToRemove);
-            if (idSet.Count == 0) return;
-
-            // Disconnect binding to prevent index-out-of-range during removal
-            SprListView.ItemsSource = null;
-
-            for (int i = MainWindow.AllSprList.Count - 1; i >= 0; i--)
-            {
-                if (idSet.Contains(MainWindow.AllSprList[i].Id))
-                    MainWindow.AllSprList.RemoveAt(i);
-            }
-
-            // Reconnect
-            SprListView.ItemsSource = MainWindow.AllSprList;
+            // Disconnects the binding while removing to prevent index-out-of-range.
+            RemoveSpritesFromLists(new System.Collections.Generic.HashSet<uint>(idsToRemove));
         }
 
         private void UpdateShowList(int selection, uint? preserveId = null)
@@ -349,7 +340,7 @@ namespace Assets_Editor
                     _ => null
                 };
             }
-            catch { }
+            catch (Exception ex) { MainWindow.Log($"Lookup of appearance {selected.Id} failed: {ex.Message}", "Error"); }
 
             if (appearance == null) return;
 
@@ -377,8 +368,10 @@ namespace Assets_Editor
 
         private void LoadAppearanceFlags(Appearance appearance)
         {
-            var flags = appearance.Flags;
-            if (flags == null) return;
+            // An appearance without a flags message still has to reset the panel,
+            // otherwise the previous object's flags stay on screen and get copied
+            // onto this one on the first edit.
+            var flags = appearance.Flags ?? new AppearanceFlags();
 
             _suppressFlagApply = true;
             try { LoadAppearanceFlagsInner(flags); }
@@ -410,7 +403,7 @@ namespace Assets_Editor
             FlagUnsight.IsChecked = flags.Unsight;
             FlagAvoidBlock.IsChecked = flags.Avoid;
             FlagNoMoveAnimation.IsChecked = flags.NoMovementAnimation;
-            FlagTake.IsChecked = flags.HasTake;
+            FlagTake.IsChecked = flags.HasTake && flags.Take;
             FlagHangable.IsChecked = flags.HasHang && flags.Hang;
             FlagHook.IsChecked = flags.Hook != null;
             FlagRotate.IsChecked = flags.Rotate;
@@ -424,16 +417,16 @@ namespace Assets_Editor
             FlagAutomap.IsChecked = flags.Automap != null;
             FlagLensHelp.IsChecked = flags.Lenshelp != null;
             FlagFullBank.IsChecked = flags.Fullbank;
-            FlagIgnoreLook.IsChecked = flags.HasIgnoreLook;
-            FlagClothes.IsChecked = flags.Clothes != null && flags.Clothes.HasSlot;
+            FlagIgnoreLook.IsChecked = flags.HasIgnoreLook && flags.IgnoreLook;
+            FlagClothes.IsChecked = flags.Clothes != null;
             FlagDefaultAction.IsChecked = flags.DefaultAction != null;
             FlagMarket.IsChecked = flags.Market != null;
             FlagWrap.IsChecked = flags.Wrap;
             FlagUnwrap.IsChecked = flags.Unwrap;
-            FlagTopEffect.IsChecked = flags.HasTopeffect;
-            FlagDecoItemKit.IsChecked = flags.HasDecoItemKit;
+            FlagTopEffect.IsChecked = flags.HasTopeffect && flags.Topeffect;
+            FlagDecoItemKit.IsChecked = flags.HasDecoItemKit && flags.DecoItemKit;
             FlagCorpse.IsChecked = flags.Corpse;
-            FlagPlayerCorpse.IsChecked = flags.HasPlayerCorpse;
+            FlagPlayerCorpse.IsChecked = flags.HasPlayerCorpse && flags.PlayerCorpse;
             FlagShowOffSocket.IsChecked = flags.ShowOffSocket;
             FlagReportable.IsChecked = flags.Reportable;
             FlagReverseAddonE.IsChecked = flags.ReverseAddonsEast;
@@ -445,50 +438,51 @@ namespace Assets_Editor
             FlagExpire.IsChecked = flags.Expire;
             FlagExpireStop.IsChecked = flags.Expirestop;
             FlagCyclopedia.IsChecked = flags.Cyclopediaitem != null;
-            FlagAmmo.IsChecked = flags.HasAmmo;
+            FlagAmmo.IsChecked = flags.HasAmmo && flags.Ammo;
             FlagNPC.IsChecked = flags.Npcsaledata.Count > 0;
             FlagSkillWheelGem.IsChecked = flags.SkillwheelGem != null;
-            FlagDualWielding.IsChecked = flags.HasDualWielding;
+            FlagDualWielding.IsChecked = flags.HasDualWielding && flags.DualWielding;
             FlagImbueable.IsChecked = flags.Imbueable != null;
             FlagProficiency.IsChecked = flags.Proficiency != null;
             FlagTransparency.IsChecked = flags.Transparencylevel != null;
             FlagChangedToExpire.IsChecked = flags.Changedtoexpire != null;
             FlagUpgradeClass.IsChecked = flags.Upgradeclassification != null;
 
-            // Flag parameters
-            FlagGroundSpeed.Value = flags.Bank != null && flags.Bank.HasWaypoints ? (int)flags.Bank.Waypoints : 0;
-            FlagHookType.SelectedIndex = flags.Hook != null && flags.Hook.HasDirection ? (int)flags.Hook.Direction - 1 : -1;
-            FlagWriteMaxLen.Value = flags.Write != null && flags.Write.HasMaxTextLength ? (int)flags.Write.MaxTextLength : 0;
-            FlagWriteOnceMaxLen.Value = flags.WriteOnce != null && flags.WriteOnce.HasMaxTextLengthOnce ? (int)flags.WriteOnce.MaxTextLengthOnce : 0;
-            FlagLightBrightness.Value = flags.Light != null && flags.Light.HasBrightness ? (int)flags.Light.Brightness : 0;
-            FlagLightColor.Value = flags.Light != null && flags.Light.HasColor ? (int)flags.Light.Color : 0;
-            FlagShiftX.Value = flags.Shift != null && flags.Shift.HasX ? (int)flags.Shift.X : 0;
-            FlagShiftY.Value = flags.Shift != null && flags.Shift.HasY ? (int)flags.Shift.Y : 0;
-            FlagElevation.Value = flags.Height != null && flags.Height.HasElevation ? (int)flags.Height.Elevation : 0;
-            FlagAutomapColor.Value = flags.Automap != null && flags.Automap.HasColor ? (int)flags.Automap.Color : 0;
-            FlagLensHelpId.SelectedIndex = flags.Lenshelp != null ? Math.Max(-1, (int)flags.Lenshelp.Id - 1100) : -1;
-            FlagClothesSlot.SelectedIndex = flags.Clothes != null && flags.Clothes.HasSlot ? (int)flags.Clothes.Slot : -1;
-            FlagDefaultActionType.SelectedIndex = flags.DefaultAction != null && flags.DefaultAction.HasAction ? (int)flags.DefaultAction.Action : -1;
-            FlagTransparencyLevel.Value = flags.Transparencylevel != null && flags.Transparencylevel.HasLevel ? (int)flags.Transparencylevel.Level : 0;
-            FlagCyclopediaId.Value = flags.Cyclopediaitem != null && flags.Cyclopediaitem.HasCyclopediaType ? (int)flags.Cyclopediaitem.CyclopediaType : 0;
-            FlagChangedToExpireId.Value = flags.Changedtoexpire != null && flags.Changedtoexpire.HasFormerObjectTypeid ? (int)flags.Changedtoexpire.FormerObjectTypeid : 0;
-            FlagUpgradeClassAmount.Value = flags.Upgradeclassification != null && flags.Upgradeclassification.HasUpgradeClassification ? (int)flags.Upgradeclassification.UpgradeClassification : 0;
-            FlagMinimumLevel.Value = flags.HasMinimumLevel ? (int)flags.MinimumLevel : 0;
-            FlagGemQualityId.Value = flags.SkillwheelGem != null && flags.SkillwheelGem.HasGemQualityId ? (int)flags.SkillwheelGem.GemQualityId : 0;
-            FlagGemVocationId.Value = flags.SkillwheelGem != null && flags.SkillwheelGem.HasVocationId ? (int)flags.SkillwheelGem.VocationId : 0;
-            FlagImbueSlotCount.Value = flags.Imbueable != null && flags.Imbueable.HasSlotCount ? (int)flags.Imbueable.SlotCount : 0;
-            FlagProficiencyId.Value = flags.Proficiency != null && flags.Proficiency.HasProficiencyId ? (int)flags.Proficiency.ProficiencyId : 0;
-            FlagWeaponType.SelectedIndex = flags.HasWeaponType ? (int)flags.WeaponType : 0;
+            // Flag parameters. Values are assigned as uint/int (no int cast) so that
+            // anything the proto can hold survives the round trip through the UI.
+            FlagGroundSpeed.Value = flags.Bank?.Waypoints ?? 0;
+            FlagHookType.SelectedIndex = flags.Hook != null && flags.Hook.HasDirection ? ComboIndex(FlagHookType, (int)flags.Hook.Direction - 1) : -1;
+            FlagWriteMaxLen.Value = flags.Write?.MaxTextLength ?? 0;
+            FlagWriteOnceMaxLen.Value = flags.WriteOnce?.MaxTextLengthOnce ?? 0;
+            FlagLightBrightness.Value = flags.Light?.Brightness ?? 0;
+            FlagLightColor.Value = flags.Light?.Color ?? 0;
+            FlagShiftX.Value = flags.Shift?.X ?? 0;
+            FlagShiftY.Value = flags.Shift?.Y ?? 0;
+            FlagElevation.Value = flags.Height?.Elevation ?? 0;
+            FlagAutomapColor.Value = flags.Automap?.Color ?? 0;
+            FlagLensHelpId.SelectedIndex = flags.Lenshelp != null && flags.Lenshelp.HasId ? ComboIndex(FlagLensHelpId, (int)flags.Lenshelp.Id - 1100) : -1;
+            FlagClothesSlot.SelectedIndex = flags.Clothes != null && flags.Clothes.HasSlot ? ComboIndex(FlagClothesSlot, (int)flags.Clothes.Slot) : -1;
+            FlagDefaultActionType.SelectedIndex = flags.DefaultAction != null && flags.DefaultAction.HasAction ? ComboIndex(FlagDefaultActionType, (int)flags.DefaultAction.Action) : -1;
+            FlagTransparencyLevel.Value = flags.Transparencylevel?.Level ?? 0;
+            FlagCyclopediaId.Value = flags.Cyclopediaitem?.CyclopediaType ?? 0;
+            FlagChangedToExpireId.Value = flags.Changedtoexpire?.FormerObjectTypeid ?? 0;
+            FlagUpgradeClassAmount.Value = flags.Upgradeclassification?.UpgradeClassification ?? 0;
+            FlagMinimumLevel.Value = flags.MinimumLevel;
+            FlagGemQualityId.Value = flags.SkillwheelGem?.GemQualityId ?? 0;
+            FlagGemVocationId.Value = flags.SkillwheelGem?.VocationId ?? 0;
+            FlagImbueSlotCount.Value = flags.Imbueable?.SlotCount ?? 0;
+            FlagProficiencyId.Value = flags.Proficiency?.ProficiencyId ?? 0;
+            FlagWeaponType.SelectedIndex = flags.HasWeaponType ? ComboIndex(FlagWeaponType, (int)flags.WeaponType) : 0;
 
             // Market
-            FlagMarketCategory.SelectedIndex = flags.Market != null && flags.Market.HasCategory ? (int)flags.Market.Category - 1 : -1;
-            FlagMarketTrade.Value = flags.Market != null && flags.Market.HasTradeAsObjectId ? (int)flags.Market.TradeAsObjectId : 0;
-            FlagMarketShow.Value = flags.Market != null && flags.Market.HasShowAsObjectId ? (int)flags.Market.ShowAsObjectId : 0;
-            FlagMarketLevel.Value = flags.Market != null && flags.Market.HasMinimumLevel ? (int)flags.Market.MinimumLevel : 0;
+            FlagMarketCategory.SelectedIndex = flags.Market != null && flags.Market.HasCategory ? ComboIndex(FlagMarketCategory, (int)flags.Market.Category - 1) : -1;
+            FlagMarketTrade.Value = flags.Market?.TradeAsObjectId ?? 0;
+            FlagMarketShow.Value = flags.Market?.ShowAsObjectId ?? 0;
+            FlagMarketLevel.Value = flags.Market?.MinimumLevel ?? 0;
             FlagProfAny.IsChecked = false; FlagProfNone.IsChecked = false;
             FlagProfKnight.IsChecked = false; FlagProfPaladin.IsChecked = false;
             FlagProfSorcerer.IsChecked = false; FlagProfDruid.IsChecked = false;
-            FlagProfPromoted.IsChecked = false;
+            FlagProfMonk.IsChecked = false; FlagProfPromoted.IsChecked = false;
             if (flags.Market != null)
             {
                 foreach (var p in flags.Market.RestrictToVocation)
@@ -499,6 +493,7 @@ namespace Assets_Editor
                     else if (p == VOCATION.Paladin) FlagProfPaladin.IsChecked = true;
                     else if (p == VOCATION.Sorcerer) FlagProfSorcerer.IsChecked = true;
                     else if (p == VOCATION.Druid) FlagProfDruid.IsChecked = true;
+                    else if (p == VOCATION.Monk) FlagProfMonk.IsChecked = true;
                     else if (p == VOCATION.Promoted) FlagProfPromoted.IsChecked = true;
                 }
             }
@@ -518,6 +513,7 @@ namespace Assets_Editor
                     else if (p == VOCATION.Paladin) FlagRestrictVocPaladin.IsChecked = true;
                     else if (p == VOCATION.Sorcerer) FlagRestrictVocSorcerer.IsChecked = true;
                     else if (p == VOCATION.Druid) FlagRestrictVocDruid.IsChecked = true;
+                    else if (p == VOCATION.Monk) FlagRestrictVocMonk.IsChecked = true;
                     else if (p == VOCATION.Promoted) FlagRestrictVocPromoted.IsChecked = true;
                 }
             }
@@ -668,7 +664,7 @@ namespace Assets_Editor
 
                 SprPreviewImage.Source = Utils.SKBitmapToAvaloniaBitmap(composite);
             }
-            catch { }
+            catch (Exception ex) { MainWindow.Log($"Preview of appearance {appearance.Id} failed: {ex.Message}", "Warning"); }
         }
 
         private void SprCanvasGuide_Changed(object? sender, RoutedEventArgs e)
@@ -720,11 +716,11 @@ namespace Assets_Editor
 
         private void UpdateColorSwatches()
         {
-            int lightVal = (int)(FlagLightColor.Value ?? 0);
+            int lightVal = (int)Math.Min(FlagLightColor.Value ?? 0, 215);
             var lc = Utils.Get8Bit(lightVal);
             LightColorSwatch.Background = new Avalonia.Media.SolidColorBrush(lc);
 
-            int automapVal = (int)(FlagAutomapColor.Value ?? 0);
+            int automapVal = (int)Math.Min(FlagAutomapColor.Value ?? 0, 215);
             var ac = Utils.Get8Bit(automapVal);
             AutomapColorSwatch.Background = new Avalonia.Media.SolidColorBrush(ac);
         }
@@ -803,26 +799,34 @@ namespace Assets_Editor
             if (folders.Count > 0 && MainWindow.appearances != null)
             {
                 string exportPath = folders[0].Path.LocalPath;
-                await Task.Run(() =>
+                var appearances = MainWindow.appearances;
+                int failed;
+                try
                 {
-                    try
+                    failed = await Task.Run(() =>
                     {
-                        foreach (var item in MainWindow.appearances.Object)
-                            ImageExporter.SaveItemAsGIF(exportPath, item);
-                        foreach (var outfit in MainWindow.appearances.Outfit)
-                            ImageExporter.SaveOutfitAsImages(exportPath, outfit);
-                        foreach (var effect in MainWindow.appearances.Effect)
-                            ImageExporter.SaveEffectAsGIF(exportPath, effect);
-                        foreach (var missile in MainWindow.appearances.Missile)
-                            ImageExporter.SaveMissileAsGIF(exportPath, missile);
-                    }
-                    catch (Exception ex)
-                    {
-                        Dispatcher.UIThread.InvokeAsync(() =>
-                            ErrorManager.ShowError($"Export failed: {ex.Message}"));
-                    }
-                });
-                ErrorManager.ShowInfo("Export completed!");
+                        int f = 0;
+                        foreach (var item in appearances.Object)
+                            f += ImageExporter.SaveItemAsGIF(exportPath, item);
+                        foreach (var outfit in appearances.Outfit)
+                            f += ImageExporter.SaveOutfitAsImages(exportPath, outfit);
+                        foreach (var effect in appearances.Effect)
+                            f += ImageExporter.SaveEffectAsGIF(exportPath, effect);
+                        foreach (var missile in appearances.Missile)
+                            f += ImageExporter.SaveMissileAsGIF(exportPath, missile);
+                        return f;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MainWindow.Log($"Export images failed: {ex.GetType().Name}: {ex.Message}", "Error");
+                    ErrorManager.ShowError($"Export failed: {ex.Message}");
+                    return;
+                }
+                if (failed > 0)
+                    ErrorManager.ShowWarning($"Export finished, but {failed} image(s) could not be exported. See the log for details.");
+                else
+                    ErrorManager.ShowInfo("Export completed!");
             }
         }
 
@@ -840,7 +844,8 @@ namespace Assets_Editor
             }
 
             // Make sure any unsaved flag edits are baked into the appearance before we serialize.
-            try { ApplyFlagsToAppearance(CurrentObjectAppearance); } catch { /* not fatal */ }
+            try { ApplyFlagsToAppearance(CurrentObjectAppearance); }
+            catch (Exception ex) { MainWindow.Log($"Applying flag edits failed: {ex.Message}", "Error"); }
 
             try
             {
@@ -979,8 +984,9 @@ namespace Assets_Editor
 
                         if (objectSprList.TryGetValue(legacyId, out var tileStream) && tileStream != null)
                         {
-                            tileStream.Position = 0;
-                            using var tileBmp = SKBitmap.Decode(tileStream);
+                            // Decode from bytes: SKBitmap.Decode(Stream) disposes the stream, and
+                            // the same legacy sprite id can appear in several frames.
+                            using var tileBmp = SKBitmap.Decode(tileStream.ToArray());
                             if (tileBmp != null)
                             {
                                 canvas.DrawBitmap(tileBmp,
@@ -1063,15 +1069,16 @@ namespace Assets_Editor
         private uint? _lastImportedId;
 
         // Add an appearance to the right protobuf collection + lookup + UI ShowList,
-        // assigning a fresh id if the incoming one collides. Returns false for unknown types.
+        // assigning a fresh id (max id + 1, collections aren't guaranteed sorted) if the
+        // incoming one collides. Returns false for unknown types.
         private bool InsertAppearance(Appearance appearance)
         {
             var appearances = MainWindow.appearances!;
             switch (appearance.AppearanceType)
             {
                 case APPEARANCE_TYPE.AppearanceOutfit:
-                    if (appearance.Id == 0 || appearances.Outfit.Any(a => a.Id == appearance.Id))
-                        appearance.Id = appearances.Outfit.Count > 0 ? appearances.Outfit[^1].Id + 1u : 1u;
+                    if (appearance.Id == 0 || _outfitLookup.ContainsKey(appearance.Id))
+                        appearance.Id = NextFreeId(appearances.Outfit);
                     appearances.Outfit.Add(appearance);
                     _outfitLookup[appearance.Id] = appearance;
                     ThingsOutfit.Add(new ShowList { Id = appearance.Id });
@@ -1080,8 +1087,8 @@ namespace Assets_Editor
                     return true;
 
                 case APPEARANCE_TYPE.AppearanceObject:
-                    if (appearance.Id < 100 || appearances.Object.Any(a => a.Id == appearance.Id))
-                        appearance.Id = appearances.Object.Count > 0 ? appearances.Object[^1].Id + 1u : 100u;
+                    if (appearance.Id < 100 || _itemLookup.ContainsKey(appearance.Id))
+                        appearance.Id = Math.Max(100u, NextFreeId(appearances.Object));
                     if (appearance.Flags?.Market != null)
                     {
                         if (appearance.Flags.Market.HasTradeAsObjectId) appearance.Flags.Market.TradeAsObjectId = appearance.Id;
@@ -1097,8 +1104,8 @@ namespace Assets_Editor
                     return true;
 
                 case APPEARANCE_TYPE.AppearanceEffect:
-                    if (appearance.Id == 0 || appearances.Effect.Any(a => a.Id == appearance.Id))
-                        appearance.Id = appearances.Effect.Count > 0 ? appearances.Effect[^1].Id + 1u : 1u;
+                    if (appearance.Id == 0 || _effectLookup.ContainsKey(appearance.Id))
+                        appearance.Id = NextFreeId(appearances.Effect);
                     appearances.Effect.Add(appearance);
                     _effectLookup[appearance.Id] = appearance;
                     ThingsEffect.Add(new ShowList { Id = appearance.Id });
@@ -1107,8 +1114,8 @@ namespace Assets_Editor
                     return true;
 
                 case APPEARANCE_TYPE.AppearanceMissile:
-                    if (appearance.Id == 0 || appearances.Missile.Any(a => a.Id == appearance.Id))
-                        appearance.Id = appearances.Missile.Count > 0 ? appearances.Missile[^1].Id + 1u : 1u;
+                    if (appearance.Id == 0 || _missileLookup.ContainsKey(appearance.Id))
+                        appearance.Id = NextFreeId(appearances.Missile);
                     appearances.Missile.Add(appearance);
                     _missileLookup[appearance.Id] = appearance;
                     ThingsMissile.Add(new ShowList { Id = appearance.Id });
@@ -1236,7 +1243,8 @@ namespace Assets_Editor
             // included when that appearance is part of the selection.
             if (CurrentObjectAppearance != null)
             {
-                try { ApplyFlagsToAppearance(CurrentObjectAppearance); } catch { /* not fatal */ }
+                try { ApplyFlagsToAppearance(CurrentObjectAppearance); }
+                catch (Exception ex) { MainWindow.Log($"Applying flag edits failed: {ex.Message}", "Error"); }
             }
 
             string suggestedName = sources.Count == 1
@@ -1421,7 +1429,8 @@ namespace Assets_Editor
             if (CurrentObjectAppearance != null &&
                 CurrentObjectAppearance.Id >= fromId && CurrentObjectAppearance.Id <= toId)
             {
-                try { ApplyFlagsToAppearance(CurrentObjectAppearance); } catch { /* not fatal */ }
+                try { ApplyFlagsToAppearance(CurrentObjectAppearance); }
+                catch (Exception ex) { MainWindow.Log($"Applying flag edits failed: {ex.Message}", "Error"); }
             }
 
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -1746,6 +1755,11 @@ namespace Assets_Editor
                 list.Add((i, streams[i].png));
             }
 
+            // Sheets can only hold the sizes in SpriteSizes; anything else would be packed
+            // at its real size but registered with the wrong spriteType. Refuse up front,
+            // before any sheet is written.
+            EnsureKnownSpriteSizes(groups.Keys);
+
             // Pick the first free sprite id above the current maximum.
             uint nextId = 1;
             foreach (var c in MainWindow.catalog)
@@ -1760,7 +1774,6 @@ namespace Assets_Editor
                 var items = kv.Value;
 
                 int spriteType = SpriteSizes.FindIndex(s => s.Width == size.w && s.Height == size.h);
-                if (spriteType < 0) spriteType = 0; // unknown size → fall back to 32×32 layout
 
                 int cols = Math.Max(1, SprSheetWidth / size.w);
                 int rows = Math.Max(1, SprSheetHeight / size.h);
@@ -1826,6 +1839,19 @@ namespace Assets_Editor
             }
 
             return result;
+        }
+
+        // Throws if any (w, h) is not a Tibia sprite size (see SpriteSizes).
+        private static void EnsureKnownSpriteSizes(IEnumerable<(int w, int h)> sizes)
+        {
+            var unknown = sizes.Where(sz => SpriteSizes.FindIndex(s => s.Width == sz.w && s.Height == sz.h) < 0)
+                               .Select(sz => $"{sz.w}×{sz.h}")
+                               .ToList();
+            if (unknown.Count == 0) return;
+            throw new InvalidOperationException(
+                $"Unsupported sprite size(s): {string.Join(", ", unknown)}.\n" +
+                "Tibia sprite sheets only hold sprites whose width and height are each one of " +
+                "32, 64, 96, 128, 192 or 384 px. Resize the image(s) and try again.");
         }
 
         private SprEditor? _sprEditor;
@@ -1933,10 +1959,13 @@ namespace Assets_Editor
 
         private static Appearance? _copiedFlagsSource;
 
-        private Google.Protobuf.Collections.RepeatedField<Appearance>? GetCurrentCollection()
+        private Google.Protobuf.Collections.RepeatedField<Appearance>? GetCurrentCollection() =>
+            GetCollection(ObjectMenu.SelectedIndex);
+
+        private static Google.Protobuf.Collections.RepeatedField<Appearance>? GetCollection(int category)
         {
             if (MainWindow.appearances == null) return null;
-            return ObjectMenu.SelectedIndex switch
+            return category switch
             {
                 0 => MainWindow.appearances.Outfit,
                 1 => MainWindow.appearances.Object,
@@ -1955,7 +1984,9 @@ namespace Assets_Editor
             _ => ThingsOutfit
         };
 
-        private Dictionary<uint, Appearance> GetCurrentLookup() => ObjectMenu.SelectedIndex switch
+        private Dictionary<uint, Appearance> GetCurrentLookup() => GetLookup(ObjectMenu.SelectedIndex);
+
+        private Dictionary<uint, Appearance> GetLookup(int category) => category switch
         {
             0 => _outfitLookup,
             1 => _itemLookup,
@@ -2140,7 +2171,7 @@ namespace Assets_Editor
             if (_copiedFlagsSource == null) { ErrorManager.ShowInfo("No flags copied yet."); return; }
             try
             {
-                CurrentObjectAppearance.Flags = _copiedFlagsSource.Flags.Clone();
+                CurrentObjectAppearance.Flags = _copiedFlagsSource.Flags?.Clone();
                 LoadAppearanceFlags(CurrentObjectAppearance);
                 ErrorManager.ShowInfo("Flags pasted.");
             }
@@ -2176,199 +2207,291 @@ namespace Assets_Editor
 
         // Map UI checkbox state back onto the protobuf flags object. Called before save/clone
         // and whenever a flag checkbox toggles (if auto-apply is on).
+        //
+        // Sub-messages are mutated field by field instead of being rebuilt, so fields the UI
+        // does not show (Shift A/B, Market name/vocation, …) survive, and an unset field is
+        // only written when the UI moves it away from its default. Combo boxes that show -1
+        // (value outside the list) leave the stored value untouched.
         private bool _suppressFlagApply;
         private void ApplyFlagsToAppearance(Appearance appearance)
         {
-            if (appearance.Flags == null) appearance.Flags = new AppearanceFlags();
-            var flags = appearance.Flags;
+            var flags = appearance.Flags ?? new AppearanceFlags();
 
             // Name / Description
-            if (!string.IsNullOrWhiteSpace(FlagName.Text)) appearance.Name = FlagName.Text;
-            else appearance.ClearName();
-            if (!string.IsNullOrWhiteSpace(FlagDescription.Text)) appearance.Description = FlagDescription.Text;
-            else appearance.ClearDescription();
+            string name = FlagName.Text ?? "";
+            if (name != (appearance.HasName ? appearance.Name : ""))
+            {
+                if (!string.IsNullOrWhiteSpace(name)) appearance.Name = name;
+                else appearance.ClearName();
+            }
+            string description = FlagDescription.Text ?? "";
+            if (description != (appearance.HasDescription ? appearance.Description : ""))
+            {
+                if (!string.IsNullOrWhiteSpace(description)) appearance.Description = description;
+                else appearance.ClearDescription();
+            }
 
             // Ground
-            flags.Bank = FlagGround.IsChecked == true
-                ? new AppearanceFlagBank { Waypoints = (uint)(FlagGroundSpeed.Value ?? 0) }
-                : null;
+            if (FlagGround.IsChecked == true)
+            {
+                flags.Bank ??= new AppearanceFlagBank();
+                if (UiUInt(FlagGroundSpeed, flags.Bank.HasWaypoints, out uint v)) flags.Bank.Waypoints = v;
+            }
+            else flags.Bank = null;
 
-            if (FlagClip.IsChecked     == true) flags.Clip = true;     else flags.ClearClip();
-            if (FlagTop.IsChecked      == true) flags.Top = true;      else flags.ClearTop();
-            if (FlagBottom.IsChecked   == true) flags.Bottom = true;   else flags.ClearBottom();
-            if (FlagContainer.IsChecked== true) flags.Container = true;else flags.ClearContainer();
-            if (FlagStackable.IsChecked== true) flags.Cumulative = true;else flags.ClearCumulative();
-            if (FlagUsable.IsChecked   == true) flags.Usable = true;   else flags.ClearUsable();
-            if (FlagForceUse.IsChecked == true) flags.Forceuse = true; else flags.ClearForceuse();
-            if (FlagMultiuse.IsChecked == true) flags.Multiuse = true; else flags.ClearMultiuse();
-
+            SyncBool(FlagClip, flags.Clip, () => flags.Clip = true, flags.ClearClip);
+            SyncBool(FlagTop, flags.Top, () => flags.Top = true, flags.ClearTop);
+            SyncBool(FlagBottom, flags.Bottom, () => flags.Bottom = true, flags.ClearBottom);
+            SyncBool(FlagContainer, flags.Container, () => flags.Container = true, flags.ClearContainer);
+            SyncBool(FlagStackable, flags.Cumulative, () => flags.Cumulative = true, flags.ClearCumulative);
+            SyncBool(FlagUsable, flags.Usable, () => flags.Usable = true, flags.ClearUsable);
+            SyncBool(FlagForceUse, flags.Forceuse, () => flags.Forceuse = true, flags.ClearForceuse);
+            SyncBool(FlagMultiuse, flags.Multiuse, () => flags.Multiuse = true, flags.ClearMultiuse);
             // Write
-            flags.Write = FlagWriteable.IsChecked == true
-                ? new AppearanceFlagWrite { MaxTextLength = (uint)(FlagWriteMaxLen.Value ?? 0) }
-                : null;
-            flags.WriteOnce = FlagWriteOnce.IsChecked == true
-                ? new AppearanceFlagWriteOnce { MaxTextLengthOnce = (uint)(FlagWriteOnceMaxLen.Value ?? 0) }
-                : null;
+            if (FlagWriteable.IsChecked == true)
+            {
+                flags.Write ??= new AppearanceFlagWrite();
+                if (UiUInt(FlagWriteMaxLen, flags.Write.HasMaxTextLength, out uint v)) flags.Write.MaxTextLength = v;
+            }
+            else flags.Write = null;
+            if (FlagWriteOnce.IsChecked == true)
+            {
+                flags.WriteOnce ??= new AppearanceFlagWriteOnce();
+                if (UiUInt(FlagWriteOnceMaxLen, flags.WriteOnce.HasMaxTextLengthOnce, out uint v)) flags.WriteOnce.MaxTextLengthOnce = v;
+            }
+            else flags.WriteOnce = null;
 
-            if (FlagLiquidPool.IsChecked      == true) flags.Liquidpool = true;      else flags.ClearLiquidpool();
-            if (FlagLiquidContainer.IsChecked == true) flags.Liquidcontainer = true; else flags.ClearLiquidcontainer();
-            if (FlagImpassable.IsChecked      == true) flags.Unpass = true;          else flags.ClearUnpass();
-            if (FlagUnmovable.IsChecked       == true) flags.Unmove = true;          else flags.ClearUnmove();
-            if (FlagUnsight.IsChecked         == true) flags.Unsight = true;         else flags.ClearUnsight();
-            if (FlagAvoidBlock.IsChecked      == true) flags.Avoid = true;           else flags.ClearAvoid();
-            if (FlagNoMoveAnimation.IsChecked == true) flags.NoMovementAnimation = true; else flags.ClearNoMovementAnimation();
-            if (FlagTake.IsChecked            == true) flags.Take = true;            else flags.ClearTake();
-
-            if (FlagHangable.IsChecked == true) flags.Hang = true; else flags.ClearHang();
-
+            SyncBool(FlagLiquidPool, flags.Liquidpool, () => flags.Liquidpool = true, flags.ClearLiquidpool);
+            SyncBool(FlagLiquidContainer, flags.Liquidcontainer, () => flags.Liquidcontainer = true, flags.ClearLiquidcontainer);
+            SyncBool(FlagImpassable, flags.Unpass, () => flags.Unpass = true, flags.ClearUnpass);
+            SyncBool(FlagUnmovable, flags.Unmove, () => flags.Unmove = true, flags.ClearUnmove);
+            SyncBool(FlagUnsight, flags.Unsight, () => flags.Unsight = true, flags.ClearUnsight);
+            SyncBool(FlagAvoidBlock, flags.Avoid, () => flags.Avoid = true, flags.ClearAvoid);
+            SyncBool(FlagNoMoveAnimation, flags.NoMovementAnimation, () => flags.NoMovementAnimation = true, flags.ClearNoMovementAnimation);
+            SyncBool(FlagTake, flags.Take, () => flags.Take = true, flags.ClearTake);
+            SyncBool(FlagHangable, flags.Hang, () => flags.Hang = true, flags.ClearHang);
             // Hook
-            flags.Hook = FlagHook.IsChecked == true
-                ? new AppearanceFlagHook { Direction = (HOOK_TYPE)(FlagHookType.SelectedIndex + 1) }
-                : null;
+            if (FlagHook.IsChecked == true)
+            {
+                flags.Hook ??= new AppearanceFlagHook();
+                if (FlagHookType.SelectedIndex >= 0) flags.Hook.Direction = (HOOK_TYPE)(FlagHookType.SelectedIndex + 1);
+            }
+            else flags.Hook = null;
 
-            if (FlagRotate.IsChecked == true) flags.Rotate = true; else flags.ClearRotate();
-
+            SyncBool(FlagRotate, flags.Rotate, () => flags.Rotate = true, flags.ClearRotate);
             // Light
-            flags.Light = FlagLight.IsChecked == true
-                ? new AppearanceFlagLight { Brightness = (uint)(FlagLightBrightness.Value ?? 0), Color = (uint)(FlagLightColor.Value ?? 0) }
-                : null;
+            if (FlagLight.IsChecked == true)
+            {
+                flags.Light ??= new AppearanceFlagLight();
+                if (UiUInt(FlagLightBrightness, flags.Light.HasBrightness, out uint b)) flags.Light.Brightness = b;
+                if (UiUInt(FlagLightColor, flags.Light.HasColor, out uint c)) flags.Light.Color = c;
+            }
+            else flags.Light = null;
 
-            if (FlagDontHide.IsChecked     == true) flags.DontHide = true;     else flags.ClearDontHide();
-            if (FlagTranslucent.IsChecked  == true) flags.Translucent = true;  else flags.ClearTranslucent();
-
-            // Shift
-            flags.Shift = FlagShift.IsChecked == true
-                ? new AppearanceFlagShift { X = (int)(FlagShiftX.Value ?? 0), Y = (int)(FlagShiftY.Value ?? 0) }
-                : null;
+            SyncBool(FlagDontHide, flags.DontHide, () => flags.DontHide = true, flags.ClearDontHide);
+            SyncBool(FlagTranslucent, flags.Translucent, () => flags.Translucent = true, flags.ClearTranslucent);
+            // Shift (A/B have no UI and are preserved)
+            if (FlagShift.IsChecked == true)
+            {
+                flags.Shift ??= new AppearanceFlagShift();
+                if (UiInt(FlagShiftX, flags.Shift.HasX, out int x)) flags.Shift.X = x;
+                if (UiInt(FlagShiftY, flags.Shift.HasY, out int y)) flags.Shift.Y = y;
+            }
+            else flags.Shift = null;
 
             // Height
-            flags.Height = FlagHeight.IsChecked == true
-                ? new AppearanceFlagHeight { Elevation = (uint)(FlagElevation.Value ?? 0) }
-                : null;
+            if (FlagHeight.IsChecked == true)
+            {
+                flags.Height ??= new AppearanceFlagHeight();
+                if (UiUInt(FlagElevation, flags.Height.HasElevation, out uint v)) flags.Height.Elevation = v;
+            }
+            else flags.Height = null;
 
-            if (FlagLyingCorpse.IsChecked  == true) flags.LyingObject = true;  else flags.ClearLyingObject();
-            if (FlagAnimateAlways.IsChecked== true) flags.AnimateAlways = true;else flags.ClearAnimateAlways();
-
+            SyncBool(FlagLyingCorpse, flags.LyingObject, () => flags.LyingObject = true, flags.ClearLyingObject);
+            SyncBool(FlagAnimateAlways, flags.AnimateAlways, () => flags.AnimateAlways = true, flags.ClearAnimateAlways);
             // Automap
-            flags.Automap = FlagAutomap.IsChecked == true
-                ? new AppearanceFlagAutomap { Color = (uint)(FlagAutomapColor.Value ?? 0) }
-                : null;
+            if (FlagAutomap.IsChecked == true)
+            {
+                flags.Automap ??= new AppearanceFlagAutomap();
+                if (UiUInt(FlagAutomapColor, flags.Automap.HasColor, out uint v)) flags.Automap.Color = v;
+            }
+            else flags.Automap = null;
 
             // LensHelp
-            flags.Lenshelp = FlagLensHelp.IsChecked == true
-                ? new AppearanceFlagLenshelp { Id = (uint)(FlagLensHelpId.SelectedIndex + 1100) }
-                : null;
+            if (FlagLensHelp.IsChecked == true)
+            {
+                flags.Lenshelp ??= new AppearanceFlagLenshelp();
+                if (FlagLensHelpId.SelectedIndex >= 0) flags.Lenshelp.Id = (uint)(FlagLensHelpId.SelectedIndex + 1100);
+            }
+            else flags.Lenshelp = null;
 
-            if (FlagFullBank.IsChecked     == true) flags.Fullbank = true;     else flags.ClearFullbank();
-            if (FlagIgnoreLook.IsChecked   == true) flags.IgnoreLook = true;   else flags.ClearIgnoreLook();
-
+            SyncBool(FlagFullBank, flags.Fullbank, () => flags.Fullbank = true, flags.ClearFullbank);
+            SyncBool(FlagIgnoreLook, flags.IgnoreLook, () => flags.IgnoreLook = true, flags.ClearIgnoreLook);
             // Clothes
-            flags.Clothes = FlagClothes.IsChecked == true
-                ? new AppearanceFlagClothes { Slot = (uint)FlagClothesSlot.SelectedIndex }
-                : null;
+            if (FlagClothes.IsChecked == true)
+            {
+                flags.Clothes ??= new AppearanceFlagClothes();
+                if (FlagClothesSlot.SelectedIndex >= 0) flags.Clothes.Slot = (uint)FlagClothesSlot.SelectedIndex;
+            }
+            else flags.Clothes = null;
 
             // DefaultAction
-            flags.DefaultAction = FlagDefaultAction.IsChecked == true
-                ? new AppearanceFlagDefaultAction { Action = (PLAYER_ACTION)FlagDefaultActionType.SelectedIndex }
-                : null;
+            if (FlagDefaultAction.IsChecked == true)
+            {
+                flags.DefaultAction ??= new AppearanceFlagDefaultAction();
+                if (FlagDefaultActionType.SelectedIndex >= 0) flags.DefaultAction.Action = (PLAYER_ACTION)FlagDefaultActionType.SelectedIndex;
+            }
+            else flags.DefaultAction = null;
 
-            // Market
+            // Market (name / vocation have no UI and are preserved)
             if (FlagMarket.IsChecked == true)
             {
-                flags.Market = new AppearanceFlagMarket
-                {
-                    Category = (ITEM_CATEGORY)(FlagMarketCategory.SelectedIndex + 1),
-                    TradeAsObjectId = (uint)(FlagMarketTrade.Value ?? 0),
-                    ShowAsObjectId = (uint)(FlagMarketShow.Value ?? 0),
-                    MinimumLevel = (uint)(FlagMarketLevel.Value ?? 0),
-                };
-                flags.Market.RestrictToVocation.Clear();
-                if (FlagProfAny.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.Any);
-                if (FlagProfNone.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.None);
-                if (FlagProfKnight.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.Knight);
-                if (FlagProfPaladin.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.Paladin);
-                if (FlagProfSorcerer.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.Sorcerer);
-                if (FlagProfDruid.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.Druid);
-                if (FlagProfPromoted.IsChecked == true) flags.Market.RestrictToVocation.Add(VOCATION.Promoted);
+                var market = flags.Market ??= new AppearanceFlagMarket();
+                if (FlagMarketCategory.SelectedIndex >= 0) market.Category = (ITEM_CATEGORY)(FlagMarketCategory.SelectedIndex + 1);
+                if (UiUInt(FlagMarketTrade, market.HasTradeAsObjectId, out uint trade)) market.TradeAsObjectId = trade;
+                if (UiUInt(FlagMarketShow, market.HasShowAsObjectId, out uint show)) market.ShowAsObjectId = show;
+                if (UiUInt(FlagMarketLevel, market.HasMinimumLevel, out uint level)) market.MinimumLevel = level;
+                SyncVocations(market.RestrictToVocation,
+                    (FlagProfAny, VOCATION.Any), (FlagProfNone, VOCATION.None),
+                    (FlagProfKnight, VOCATION.Knight), (FlagProfPaladin, VOCATION.Paladin),
+                    (FlagProfSorcerer, VOCATION.Sorcerer), (FlagProfDruid, VOCATION.Druid),
+                    (FlagProfMonk, VOCATION.Monk), (FlagProfPromoted, VOCATION.Promoted));
             }
             else
                 flags.Market = null;
 
-            if (FlagWrap.IsChecked         == true) flags.Wrap = true;         else flags.ClearWrap();
-            if (FlagUnwrap.IsChecked       == true) flags.Unwrap = true;       else flags.ClearUnwrap();
-            if (FlagTopEffect.IsChecked    == true) flags.Topeffect = true;    else flags.ClearTopeffect();
-            if (FlagDecoItemKit.IsChecked  == true) flags.DecoItemKit = true;  else flags.ClearDecoItemKit();
-
+            SyncBool(FlagWrap, flags.Wrap, () => flags.Wrap = true, flags.ClearWrap);
+            SyncBool(FlagUnwrap, flags.Unwrap, () => flags.Unwrap = true, flags.ClearUnwrap);
+            SyncBool(FlagTopEffect, flags.Topeffect, () => flags.Topeffect = true, flags.ClearTopeffect);
+            SyncBool(FlagDecoItemKit, flags.DecoItemKit, () => flags.DecoItemKit = true, flags.ClearDecoItemKit);
             // ChangedToExpire
-            flags.Changedtoexpire = FlagChangedToExpire.IsChecked == true
-                ? new AppearanceFlagChangedToExpire { FormerObjectTypeid = (uint)(FlagChangedToExpireId.Value ?? 0) }
-                : null;
+            if (FlagChangedToExpire.IsChecked == true)
+            {
+                flags.Changedtoexpire ??= new AppearanceFlagChangedToExpire();
+                if (UiUInt(FlagChangedToExpireId, flags.Changedtoexpire.HasFormerObjectTypeid, out uint v)) flags.Changedtoexpire.FormerObjectTypeid = v;
+            }
+            else flags.Changedtoexpire = null;
 
-            if (FlagCorpse.IsChecked       == true) flags.Corpse = true;       else flags.ClearCorpse();
-            if (FlagPlayerCorpse.IsChecked == true) flags.PlayerCorpse = true; else flags.ClearPlayerCorpse();
-            if (FlagShowOffSocket.IsChecked== true) flags.ShowOffSocket = true; else flags.ClearShowOffSocket();
-            if (FlagReportable.IsChecked   == true) flags.Reportable = true;   else flags.ClearReportable();
-            if (FlagReverseAddonE.IsChecked== true) flags.ReverseAddonsEast = true;  else flags.ClearReverseAddonsEast();
-            if (FlagReverseAddonW.IsChecked== true) flags.ReverseAddonsWest = true;  else flags.ClearReverseAddonsWest();
-            if (FlagReverseAddonN.IsChecked== true) flags.ReverseAddonsNorth = true; else flags.ClearReverseAddonsNorth();
-            if (FlagReverseAddonS.IsChecked== true) flags.ReverseAddonsSouth = true; else flags.ClearReverseAddonsSouth();
-            if (FlagWearOut.IsChecked      == true) flags.Wearout = true;      else flags.ClearWearout();
-            if (FlagClockExpire.IsChecked  == true) flags.Clockexpire = true;  else flags.ClearClockexpire();
-            if (FlagExpire.IsChecked       == true) flags.Expire = true;       else flags.ClearExpire();
-            if (FlagExpireStop.IsChecked   == true) flags.Expirestop = true;   else flags.ClearExpirestop();
-
+            SyncBool(FlagCorpse, flags.Corpse, () => flags.Corpse = true, flags.ClearCorpse);
+            SyncBool(FlagPlayerCorpse, flags.PlayerCorpse, () => flags.PlayerCorpse = true, flags.ClearPlayerCorpse);
+            SyncBool(FlagShowOffSocket, flags.ShowOffSocket, () => flags.ShowOffSocket = true, flags.ClearShowOffSocket);
+            SyncBool(FlagReportable, flags.Reportable, () => flags.Reportable = true, flags.ClearReportable);
+            SyncBool(FlagReverseAddonE, flags.ReverseAddonsEast, () => flags.ReverseAddonsEast = true, flags.ClearReverseAddonsEast);
+            SyncBool(FlagReverseAddonW, flags.ReverseAddonsWest, () => flags.ReverseAddonsWest = true, flags.ClearReverseAddonsWest);
+            SyncBool(FlagReverseAddonN, flags.ReverseAddonsNorth, () => flags.ReverseAddonsNorth = true, flags.ClearReverseAddonsNorth);
+            SyncBool(FlagReverseAddonS, flags.ReverseAddonsSouth, () => flags.ReverseAddonsSouth = true, flags.ClearReverseAddonsSouth);
+            SyncBool(FlagWearOut, flags.Wearout, () => flags.Wearout = true, flags.ClearWearout);
+            SyncBool(FlagClockExpire, flags.Clockexpire, () => flags.Clockexpire = true, flags.ClearClockexpire);
+            SyncBool(FlagExpire, flags.Expire, () => flags.Expire = true, flags.ClearExpire);
+            SyncBool(FlagExpireStop, flags.Expirestop, () => flags.Expirestop = true, flags.ClearExpirestop);
             // UpgradeClassification
-            flags.Upgradeclassification = FlagUpgradeClass.IsChecked == true
-                ? new AppearanceFlagUpgradeClassification { UpgradeClassification = (uint)(FlagUpgradeClassAmount.Value ?? 0) }
-                : null;
+            if (FlagUpgradeClass.IsChecked == true)
+            {
+                flags.Upgradeclassification ??= new AppearanceFlagUpgradeClassification();
+                if (UiUInt(FlagUpgradeClassAmount, flags.Upgradeclassification.HasUpgradeClassification, out uint v)) flags.Upgradeclassification.UpgradeClassification = v;
+            }
+            else flags.Upgradeclassification = null;
 
             // Cyclopedia
-            flags.Cyclopediaitem = FlagCyclopedia.IsChecked == true
-                ? new AppearanceFlagCyclopedia { CyclopediaType = (uint)(FlagCyclopediaId.Value ?? 0) }
-                : null;
+            if (FlagCyclopedia.IsChecked == true)
+            {
+                flags.Cyclopediaitem ??= new AppearanceFlagCyclopedia();
+                if (UiUInt(FlagCyclopediaId, flags.Cyclopediaitem.HasCyclopediaType, out uint v)) flags.Cyclopediaitem.CyclopediaType = v;
+            }
+            else flags.Cyclopediaitem = null;
 
-            if (FlagAmmo.IsChecked == true) flags.Ammo = true; else flags.ClearAmmo();
-
+            SyncBool(FlagAmmo, flags.Ammo, () => flags.Ammo = true, flags.ClearAmmo);
             // SkillWheel Gem
-            flags.SkillwheelGem = FlagSkillWheelGem.IsChecked == true
-                ? new AppearanceFlagSkillWheelGem { GemQualityId = (uint)(FlagGemQualityId.Value ?? 0), VocationId = (uint)(FlagGemVocationId.Value ?? 0) }
-                : null;
+            if (FlagSkillWheelGem.IsChecked == true)
+            {
+                flags.SkillwheelGem ??= new AppearanceFlagSkillWheelGem();
+                if (UiUInt(FlagGemQualityId, flags.SkillwheelGem.HasGemQualityId, out uint q)) flags.SkillwheelGem.GemQualityId = q;
+                if (UiUInt(FlagGemVocationId, flags.SkillwheelGem.HasVocationId, out uint voc)) flags.SkillwheelGem.VocationId = voc;
+            }
+            else flags.SkillwheelGem = null;
 
-            if (FlagDualWielding.IsChecked == true) flags.DualWielding = true; else flags.ClearDualWielding();
-
+            SyncBool(FlagDualWielding, flags.DualWielding, () => flags.DualWielding = true, flags.ClearDualWielding);
             // Imbueable
-            flags.Imbueable = FlagImbueable.IsChecked == true
-                ? new AppearanceFlagImbueable { SlotCount = (uint)(FlagImbueSlotCount.Value ?? 0) }
-                : null;
+            if (FlagImbueable.IsChecked == true)
+            {
+                flags.Imbueable ??= new AppearanceFlagImbueable();
+                if (UiUInt(FlagImbueSlotCount, flags.Imbueable.HasSlotCount, out uint v)) flags.Imbueable.SlotCount = v;
+            }
+            else flags.Imbueable = null;
 
             // Proficiency
-            flags.Proficiency = FlagProficiency.IsChecked == true
-                ? new AppearanceFlagProficiency { ProficiencyId = (uint)(FlagProficiencyId.Value ?? 0) }
-                : null;
+            if (FlagProficiency.IsChecked == true)
+            {
+                flags.Proficiency ??= new AppearanceFlagProficiency();
+                if (UiUInt(FlagProficiencyId, flags.Proficiency.HasProficiencyId, out uint v)) flags.Proficiency.ProficiencyId = v;
+            }
+            else flags.Proficiency = null;
 
             // Transparency
-            flags.Transparencylevel = FlagTransparency.IsChecked == true
-                ? new AppearanceFlagTransparencyLevel { Level = (uint)(FlagTransparencyLevel.Value ?? 0) }
-                : null;
+            if (FlagTransparency.IsChecked == true)
+            {
+                flags.Transparencylevel ??= new AppearanceFlagTransparencyLevel();
+                if (UiUInt(FlagTransparencyLevel, flags.Transparencylevel.HasLevel, out uint v)) flags.Transparencylevel.Level = v;
+            }
+            else flags.Transparencylevel = null;
 
             // Minimum level
-            if ((FlagMinimumLevel.Value ?? 0) > 0) flags.MinimumLevel = (uint)(FlagMinimumLevel.Value ?? 0);
-            else if (flags.HasMinimumLevel) flags.ClearMinimumLevel();
+            if (UiUInt(FlagMinimumLevel, flags.HasMinimumLevel, out uint minLevel)) flags.MinimumLevel = minLevel;
 
-            // Weapon type
+            // Weapon type: index 0 ("None") clears a real weapon type but keeps an explicit NOWEAPON.
             if (FlagWeaponType.SelectedIndex > 0) flags.WeaponType = (WEAPON_TYPE)FlagWeaponType.SelectedIndex;
-            else if (flags.HasWeaponType) flags.ClearWeaponType();
+            else if (FlagWeaponType.SelectedIndex == 0 && flags.HasWeaponType && (int)flags.WeaponType != 0) flags.ClearWeaponType();
 
             // Vocation restriction (item-level)
-            flags.RestrictToVocation.Clear();
-            if (FlagRestrictVocAny.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Any);
-            if (FlagRestrictVocNone.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.None);
-            if (FlagRestrictVocKnight.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Knight);
-            if (FlagRestrictVocPaladin.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Paladin);
-            if (FlagRestrictVocSorcerer.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Sorcerer);
-            if (FlagRestrictVocDruid.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Druid);
-            if (FlagRestrictVocMonk.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Druid);
-            if (FlagRestrictVocPromoted.IsChecked == true) flags.RestrictToVocation.Add(VOCATION.Promoted);
+            SyncVocations(flags.RestrictToVocation,
+                (FlagRestrictVocAny, VOCATION.Any), (FlagRestrictVocNone, VOCATION.None),
+                (FlagRestrictVocKnight, VOCATION.Knight), (FlagRestrictVocPaladin, VOCATION.Paladin),
+                (FlagRestrictVocSorcerer, VOCATION.Sorcerer), (FlagRestrictVocDruid, VOCATION.Druid),
+                (FlagRestrictVocMonk, VOCATION.Monk), (FlagRestrictVocPromoted, VOCATION.Promoted));
+
+            // Don't attach an empty flags message to an appearance that had none.
+            if (appearance.Flags == null && flags.CalculateSize() > 0) appearance.Flags = flags;
+        }
+
+        // Only touch a bool flag when the checkbox disagrees with the stored value, so an
+        // explicit "false" in the file survives a round trip.
+        private static void SyncBool(CheckBox box, bool current, Action set, Action clear)
+        {
+            bool want = box.IsChecked == true;
+            if (want == current) return;
+            if (want) set(); else clear();
+        }
+
+        // True when the UI value should be written: the field is already present, or the
+        // user moved it away from the default 0 (an unset field stays unset otherwise).
+        private static bool UiUInt(NumericUpDown box, bool has, out uint value)
+        {
+            value = (uint)Math.Clamp(box.Value ?? 0, uint.MinValue, uint.MaxValue);
+            return has || value != 0;
+        }
+
+        private static bool UiInt(NumericUpDown box, bool has, out int value)
+        {
+            value = (int)Math.Clamp(box.Value ?? 0, int.MinValue, int.MaxValue);
+            return has || value != 0;
+        }
+
+        // Selected index if it fits the combo box, -1 otherwise (value is then kept as-is).
+        private static int ComboIndex(ComboBox box, int index) =>
+            index >= 0 && index < box.ItemCount ? index : -1;
+
+        // Add/remove only the vocations whose checkbox disagrees with the stored list, so
+        // the original order (and any value without a checkbox) is preserved.
+        private static void SyncVocations(Google.Protobuf.Collections.RepeatedField<VOCATION> list,
+                                          params (CheckBox box, VOCATION voc)[] map)
+        {
+            foreach (var (box, voc) in map)
+            {
+                bool want = box.IsChecked == true;
+                bool has = list.Contains(voc);
+                if (want && !has) list.Add(voc);
+                else if (!want && has) while (list.Remove(voc)) { }
+            }
         }
 
         // Push current state to undo stack before a mutation. Deduplicates rapid changes
@@ -2376,29 +2499,41 @@ namespace Assets_Editor
         private void PushUndo()
         {
             if (CurrentObjectAppearance == null) return;
-            if (_undoStack.Count > 0 && _undoStack.Peek().id == CurrentObjectAppearance.Id)
+            int category = ObjectMenu.SelectedIndex;
+            if (_undoStack.Count > 0 && _undoStack.Peek().category == category && _undoStack.Peek().id == CurrentObjectAppearance.Id)
             {
                 // Already have a snapshot for this object — don't spam
                 return;
             }
-            _undoStack.Push((CurrentObjectAppearance.Id, CurrentObjectAppearance.Clone()));
+            _undoStack.Push((category, CurrentObjectAppearance.Id, CurrentObjectAppearance.Clone()));
             _redoStack.Clear();
             if (_undoStack.Count > 100) // cap memory
             {
-                var temp = new Stack<(uint, Appearance)>(_undoStack.Reverse().Skip(_undoStack.Count - 100));
+                var temp = new Stack<(int, uint, Appearance)>(_undoStack.Reverse().Skip(_undoStack.Count - 100));
                 _undoStack.Clear();
                 foreach (var item in temp.Reverse()) _undoStack.Push(item);
             }
         }
 
-        private void Undo()
-        {
-            if (_undoStack.Count == 0 || CurrentObjectAppearance == null) return;
-            _redoStack.Push((CurrentObjectAppearance.Id, CurrentObjectAppearance.Clone()));
-            var (id, snapshot) = _undoStack.Pop();
+        private void Undo() => StepHistory(_undoStack, _redoStack, "Undo");
+        private void Redo() => StepHistory(_redoStack, _undoStack, "Redo");
 
-            // Restore the snapshot into the collection
-            var collection = GetCurrentCollection();
+        // Pop a snapshot from `from`, push the object's current state onto `to`, and put the
+        // snapshot back into the collection/lookup of the category it was taken from.
+        private void StepHistory(Stack<(int category, uint id, Appearance snapshot)> from,
+                                 Stack<(int category, uint id, Appearance snapshot)> to, string label)
+        {
+            if (from.Count == 0) return;
+            var (category, id, snapshot) = from.Pop();
+            var lookup = GetLookup(category);
+            if (lookup.TryGetValue(id, out var current))
+            {
+                if (category == ObjectMenu.SelectedIndex && ReferenceEquals(current, CurrentObjectAppearance))
+                    ApplyFlagsToAppearance(current);
+                to.Push((category, id, current.Clone()));
+            }
+
+            var collection = GetCollection(category);
             if (collection != null)
             {
                 for (int i = 0; i < collection.Count; i++)
@@ -2406,48 +2541,28 @@ namespace Assets_Editor
                     if (collection[i].Id == id) { collection[i] = snapshot; break; }
                 }
             }
-            GetCurrentLookup()[id] = snapshot;
-            CurrentObjectAppearance = snapshot;
-            CurrentFlags = snapshot.Flags;
-            _suppressFlagApply = true;
-            try
-            {
-                LoadAppearanceFlags(snapshot);
-                LoadSpriteInfo(snapshot);
-                LoadAppearanceSpritesList(snapshot);
-                UpdatePreview(snapshot);
-            }
-            finally { _suppressFlagApply = false; }
-            StatusBar.Text = "Undo applied.";
-        }
+            lookup[id] = snapshot;
 
-        private void Redo()
-        {
-            if (_redoStack.Count == 0 || CurrentObjectAppearance == null) return;
-            _undoStack.Push((CurrentObjectAppearance.Id, CurrentObjectAppearance.Clone()));
-            var (id, snapshot) = _redoStack.Pop();
-
-            var collection = GetCurrentCollection();
-            if (collection != null)
+            if (category == ObjectMenu.SelectedIndex && CurrentObjectAppearance?.Id == id)
             {
-                for (int i = 0; i < collection.Count; i++)
+                CurrentObjectAppearance = snapshot;
+                CurrentFlags = snapshot.Flags;
+                _suppressFlagApply = true;
+                try
                 {
-                    if (collection[i].Id == id) { collection[i] = snapshot; break; }
+                    LoadAppearanceFlags(snapshot);
+                    LoadSpriteInfo(snapshot);
+                    LoadAppearanceSpritesList(snapshot);
+                    UpdatePreview(snapshot);
                 }
+                finally { _suppressFlagApply = false; }
+                StatusBar.Text = $"{label} applied.";
             }
-            GetCurrentLookup()[id] = snapshot;
-            CurrentObjectAppearance = snapshot;
-            CurrentFlags = snapshot.Flags;
-            _suppressFlagApply = true;
-            try
+            else
             {
-                LoadAppearanceFlags(snapshot);
-                LoadSpriteInfo(snapshot);
-                LoadAppearanceSpritesList(snapshot);
-                UpdatePreview(snapshot);
+                string kind = category switch { 0 => "outfit", 1 => "item", 2 => "effect", 3 => "missile", _ => "appearance" };
+                StatusBar.Text = $"{label} applied to {kind} {id}.";
             }
-            finally { _suppressFlagApply = false; }
-            StatusBar.Text = "Redo applied.";
         }
 
         // Generic handler wired to every flag CheckBox's IsCheckedChanged in XAML.
@@ -2727,7 +2842,7 @@ namespace Assets_Editor
                         showList.SizeLabel = $"{w}×{h}";
                 }
             }
-            catch { }
+            catch (Exception ex) { MainWindow.Log($"Could not load sprite {id}: {ex.Message}", "Warning"); }
         }
 
         // AppSprListView container events — load/unload sprite images inline
@@ -3018,20 +3133,15 @@ namespace Assets_Editor
             if (string.IsNullOrEmpty(MainWindow._assetsPath)) return;
             try
             {
-                string catalogPath = Path.Combine(MainWindow._assetsPath, "catalog-content.json");
-                var settings = new Newtonsoft.Json.JsonSerializerSettings
-                {
-                    NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
-                    DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
-                    ContractResolver = new LowercaseContractResolver(),
-                };
-                string json = Newtonsoft.Json.JsonConvert.SerializeObject(
-                    MainWindow.catalog, Newtonsoft.Json.Formatting.Indented, settings);
-                File.WriteAllText(catalogPath, json);
+                CatalogWriter.Write(MainWindow._assetsPath, MainWindow.catalog);
             }
             catch (Exception ex)
             {
+                // The new sheets are already on disk; without the catalog they are invisible
+                // to the client and to the next load, so make this loud.
                 MainWindow.Log($"SaveCatalogToDisk failed: {ex.Message}", "Error");
+                ErrorManager.ShowError($"Could not write catalog-content.json: {ex.Message}\n\n" +
+                                       "New sprite sheets were written but are not registered yet. Use Compile to retry.");
             }
         }
 
@@ -3120,7 +3230,7 @@ namespace Assets_Editor
                 if (stream != null)
                     slot.Image = Utils.MemoryStreamToBitmap(stream);
             }
-            catch { }
+            catch (Exception ex) { MainWindow.Log($"Could not load sprite {sprPick.Id}: {ex.Message}", "Warning"); }
 
             UpdatePreview(CurrentObjectAppearance);
             ErrorManager.ShowInfo($"Slot now references sprite {sprPick.Id}.");
@@ -3170,18 +3280,6 @@ namespace Assets_Editor
 
         private void Window_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
         {
-            if (e.Key == Avalonia.Input.Key.Delete)
-            {
-                try
-                {
-                    var ownerLb = FindOwningListBox(e.Source);
-                    string ownerName = ownerLb == SprListView ? "SprListView" : ownerLb == AppSprListView ? "AppSprListView" : ownerLb == ObjListView ? "ObjListView" : ownerLb?.Name ?? "<null>";
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
-                        $"{DateTime.Now:HH:mm:ss.fff} [Window_KeyDown] Delete pressed, owner={ownerName}, source={e.Source?.GetType().Name}\n");
-                }
-                catch { }
-            }
-
             // Undo: Ctrl+Z
             if (e.Key == Avalonia.Input.Key.Z && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control))
             {
@@ -3201,8 +3299,6 @@ namespace Assets_Editor
             if (e.Key != Avalonia.Input.Key.Delete) return;
 
             var owner = FindOwningListBox(e.Source);
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
-                $"{DateTime.Now:HH:mm:ss.fff} [Window_KeyDown] Dispatching. owner==SprListView: {owner == SprListView}, owner==AppSprListView: {owner == AppSprListView}\n"); } catch { }
             if (owner == SprListView)     { _ = SafeHandleSprDelete();    e.Handled = true; return; }
             if (owner == AppSprListView)  { _ = HandleAppSprDelete(); e.Handled = true; return; }
         }
@@ -3212,9 +3308,8 @@ namespace Assets_Editor
             try { await HandleSprDelete(); }
             catch (Exception ex)
             {
-                try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
-                    $"{DateTime.Now:HH:mm:ss.fff} [SafeHandleSprDelete] EXCEPTION: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n"); } catch { }
-                MainWindow.Log($"[HandleSprDelete] Exception: {ex.Message}", "Error");
+                MainWindow.Log($"[HandleSprDelete] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}", "Error");
+                ErrorManager.ShowError($"Delete failed: {ex.Message}");
             }
         }
 
@@ -3228,14 +3323,7 @@ namespace Assets_Editor
                 ErrorManager.ShowInfo("Zaznacz sprite'y w panelu \"Sprites\" po prawej, a następnie użyj tej opcji.");
                 return;
             }
-            // Menu click is an explicit intent — skip the (currently broken) confirm dialog.
-            try { await HandleSprDelete(skipConfirm: true); }
-            catch (Exception ex)
-            {
-                try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
-                    $"{DateTime.Now:HH:mm:ss.fff} [DeleteSelectedSprites_Click] EXCEPTION: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n"); } catch { }
-                ErrorManager.ShowError($"Delete failed: {ex.Message}");
-            }
+            await SafeHandleSprDelete();
         }
 
         // Menu → Edit → Usuń wszystkie puste sprite'y. Scans every sprite sheet, finds
@@ -3252,12 +3340,11 @@ namespace Assets_Editor
 
             // Pre-filter: only bother decompressing sheets that actually have an AllSprList
             // entry in their ID range. With many thousands of sheets, this skips most of them.
-            var idToShowList = MainWindow.AllSprList
-                .GroupBy(s => s.Id)
-                .ToDictionary(g => g.Key, g => g.First());
+            var idToShowList = new Dictionary<uint, ShowList>();
+            foreach (var s in MainWindow.AllSprList)
+                idToShowList.TryAdd(s.Id, s);
             var sheetsToScan = MainWindow.catalog
-                .Where(c => c.Type == "sprite"
-                            && MainWindow.AllSprList.Any(s => s.Id >= c.FirstSpriteid && s.Id <= c.LastSpriteid))
+                .Where(c => c.Type == "sprite" && AnyIdInRange(idToShowList, c.FirstSpriteid, c.LastSpriteid))
                 .ToList();
 
             if (sheetsToScan.Count == 0)
@@ -3269,6 +3356,7 @@ namespace Assets_Editor
             if (StatusBar != null) StatusBar.Text = $"Skanowanie pustych sprite'ów… 0/{sheetsToScan.Count}";
 
             int scanned = 0;
+            var failedSheets = new System.Collections.Concurrent.ConcurrentBag<string>();
             var empty = await System.Threading.Tasks.Task.Run(() =>
             {
                 var result = new System.Collections.Concurrent.ConcurrentBag<ShowList>();
@@ -3303,7 +3391,7 @@ namespace Assets_Editor
                                 result.Add(sl);
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { failedSheets.Add($"{cat.File}: {ex.Message}"); }
                     finally { bmp?.Dispose(); }
 
                     int done = System.Threading.Interlocked.Increment(ref scanned);
@@ -3319,22 +3407,37 @@ namespace Assets_Editor
                 return result.ToList();
             });
 
+            foreach (var f in failedSheets)
+                MainWindow.Log($"[DeleteAllEmptySprites] Could not scan sheet {f}", "Warning");
+
             if (empty.Count == 0)
             {
-                ErrorManager.ShowInfo("Nie znaleziono pustych sprite'ów.");
+                ErrorManager.ShowInfo("Nie znaleziono pustych sprite'ów." +
+                    (failedSheets.IsEmpty ? "" : $"\n\n{failedSheets.Count} sheet(s) could not be read — see the log."));
                 if (StatusBar != null) StatusBar.Text = "Ready";
                 return;
             }
 
-            try { await HandleSprDelete(skipConfirm: true, overrideSelection: empty); }
+            int deleted;
+            try { deleted = await HandleSprDelete(overrideSelection: empty); }
             catch (Exception ex)
             {
+                MainWindow.Log($"[DeleteAllEmptySprites] {ex.GetType().Name}: {ex.Message}", "Error");
                 ErrorManager.ShowError($"Delete empty failed: {ex.Message}");
                 return;
             }
+            if (deleted == 0) { if (StatusBar != null) StatusBar.Text = "Ready"; return; }
 
-            ErrorManager.ShowInfo($"Usunięto {empty.Count} pustych sprite'ów.");
-            if (StatusBar != null) StatusBar.Text = $"Usunięto {empty.Count} pustych sprite'ów.";
+            ErrorManager.ShowInfo($"Usunięto {deleted} pustych sprite'ów.");
+            if (StatusBar != null) StatusBar.Text = $"Usunięto {deleted} pustych sprite'ów.";
+        }
+
+        private static bool AnyIdInRange(Dictionary<uint, ShowList> ids, int first, int last)
+        {
+            if (first == int.MinValue || last < first) return false;
+            for (long id = first; id <= last; id++)
+                if (ids.ContainsKey((uint)id)) return true;
+            return false;
         }
 
         private static bool IsTileFullyTransparent(SkiaSharp.SKBitmap sheet, int x0, int y0, int w, int h)
@@ -3364,72 +3467,122 @@ namespace Assets_Editor
             AppSprRemove_Click(this, new RoutedEventArgs());
         }
 
-        private async System.Threading.Tasks.Task HandleSprDelete(bool skipConfirm = false, List<ShowList>? overrideSelection = null)
+        // For each sprite id in `ids`, the appearances that reference it (one walk over
+        // every category). Used to warn before a delete leaves dangling sprite ids.
+        internal static List<(string kind, uint appId)> FindAppearancesUsingSprites(HashSet<uint> ids)
         {
-            string debugLog = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log");
-            void Trace(string msg)
+            var users = new List<(string kind, uint appId)>();
+            if (MainWindow.appearances == null || ids.Count == 0) return users;
+            foreach (var (kind, col) in new[] { ("outfit", MainWindow.appearances.Outfit), ("item", MainWindow.appearances.Object),
+                                                ("effect", MainWindow.appearances.Effect), ("missile", MainWindow.appearances.Missile) })
             {
-                try { System.IO.File.AppendAllText(debugLog, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n"); } catch { }
-                MainWindow.Log(msg);
+                foreach (var a in col)
+                {
+                    bool uses = false;
+                    foreach (var fg in a.FrameGroup)
+                    {
+                        if (fg.SpriteInfo == null) continue;
+                        foreach (var sid in fg.SpriteInfo.SpriteId)
+                            if (ids.Contains(sid)) { uses = true; break; }
+                        if (uses) break;
+                    }
+                    if (uses) users.Add((kind, a.Id));
+                }
             }
+            return users;
+        }
 
+        // Confirmation-dialog paragraph listing the appearances that still use sprites about
+        // to be deleted (count + first few ids); empty when nothing references them.
+        internal static string SpriteUsageWarning(List<(string kind, uint appId)> users)
+        {
+            if (users.Count == 0) return "";
+            return $"\n\nWARNING: {users.Count} appearance(s) still use these sprites and will show blank tiles:\n  " +
+                   string.Join(", ", users.Take(8).Select(u => $"{u.kind} {u.appId}")) +
+                   (users.Count > 8 ? $", … (+{users.Count - 8} more)" : "");
+        }
+
+        internal static string SpriteUsageWarning(IEnumerable<uint> spriteIds) =>
+            SpriteUsageWarning(FindAppearancesUsingSprites(new HashSet<uint>(spriteIds)));
+
+        // Remove sprite ids from AllSprList and the filtered view in O(n), with the list
+        // binding disconnected (AllSprList is a plain List<T> and doesn't notify).
+        private void RemoveSpritesFromLists(HashSet<uint> idSet)
+        {
+            if (idSet.Count == 0) return;
+            var prevSource = SprListView.ItemsSource;
+            SprListView.ItemsSource = null;
+
+            MainWindow.AllSprList.RemoveAll(s => idSet.Contains(s.Id));
+            bool wasFiltered = ReferenceEquals(prevSource, _sprFiltered);
+            _sprFiltered = new ObservableCollection<ShowList>(_sprFiltered.Where(s => !idSet.Contains(s.Id)));
+
+            SprListView.ItemsSource = wasFiltered ? _sprFiltered : prevSource ?? MainWindow.AllSprList;
+        }
+
+        // Deletes the selected (or given) sprites: blanks their tiles in the sheets on disk,
+        // drops them from memory, removes sheets that end up with no sprite at all and
+        // saves the catalog. Always asks for confirmation, and lists the appearances that
+        // still reference the sprites. Returns the number of sprites deleted.
+        private async System.Threading.Tasks.Task<int> HandleSprDelete(List<ShowList>? overrideSelection = null)
+        {
             var selected = overrideSelection ?? (SprListView.SelectedItems?.Cast<ShowList>().ToList() ?? []);
-            Trace($"[HandleSprDelete] Entered. Selected count: {selected.Count}, SelectedItems null: {SprListView.SelectedItems == null}, skipConfirm={skipConfirm}");
-            if (selected.Count == 0)
-            {
-                Trace("[HandleSprDelete] Early return: no selection");
-                return;
-            }
+            if (selected.Count == 0) return 0;
 
-            if (!skipConfirm)
-            {
-                string preview = selected.Count == 1
-                    ? $"sprite ID {selected[0].Id}"
-                    : $"{selected.Count} sprite IDs ({selected.Min(s => s.Id)}…{selected.Max(s => s.Id)})";
-                bool ok = await ErrorManager.ConfirmAsync(
-                    "Delete sprites",
-                    $"Delete {preview} permanently?\n\n" +
-                    "Tiles will be blanked out in their sprite sheets on disk and the IDs removed " +
-                    "from the browser. Cannot be undone!");
-                Trace($"[HandleSprDelete] Confirm result: {ok}");
-                if (!ok) return;
-            }
+            var idSet = new HashSet<uint>(selected.Select(s => s.Id));
+            var users = FindAppearancesUsingSprites(idSet);
 
-            var ids = selected.Select(s => s.Id).ToList();
-            Trace($"[HandleSprDelete] Start: {ids.Count} IDs, assetsPath={MainWindow._assetsPath}");
+            string preview = idSet.Count == 1
+                ? $"sprite ID {idSet.First()}"
+                : $"{idSet.Count} sprite IDs ({idSet.Min()}…{idSet.Max()})";
+            string usage = SpriteUsageWarning(users);
+            bool ok = await ErrorManager.ConfirmAsync(
+                "Delete sprites",
+                $"Delete {preview} permanently?\n\n" +
+                "Tiles will be blanked out in their sprite sheets on disk and the IDs removed " +
+                "from the browser. The first time a sheet is changed its original is kept as <sheet>-orig." +
+                usage);
+            if (!ok) return 0;
+
+            MainWindow.Log($"[HandleSprDelete] Deleting {idSet.Count} sprite id(s), {users.Count} appearance(s) reference them.");
 
             // Group IDs by the catalog sheet they belong to so we only decompress + rewrite
             // each affected sheet once, regardless of how many IDs were selected in it.
+            var ranges = MainWindow.catalog
+                .Where(c => c.Type == "sprite" && c.FirstSpriteid != int.MinValue && c.LastSpriteid != int.MinValue)
+                .OrderBy(c => c.FirstSpriteid)
+                .ToList();
             var affectedSheets = new Dictionary<MainWindow.Catalog, List<uint>>();
-            foreach (var id in ids)
+            var removable = new HashSet<uint>();
+            foreach (var id in idSet)
             {
-                var cat = MainWindow.catalog.Find(c =>
-                    c.Type == "sprite" && id >= c.FirstSpriteid && id <= c.LastSpriteid);
+                var cat = FindSheetForSprite(ranges, (int)id);
                 if (cat == null)
                 {
-                    Trace($"[HandleSprDelete] ID {id}: no catalog sheet found");
+                    // Not in any sheet (never compiled) — memory-only removal.
+                    removable.Add(id);
                     continue;
                 }
                 if (!affectedSheets.TryGetValue(cat, out var list))
                     affectedSheets[cat] = list = new List<uint>();
                 list.Add(id);
             }
-            Trace($"[HandleSprDelete] Grouped into {affectedSheets.Count} sheets");
 
             // Blank the tile pixels in each affected sheet and re-save to disk so Compile /
-            // Publish carries the deletion through to the client. Then drop the IDs from the
-            // in-memory caches and finally remove the UI entries with a proper binding reset.
+            // Publish carries the deletion through to the client. A sheet that fails keeps its
+            // ids in memory too, so memory and disk don't diverge.
             int sheetsRewritten = 0;
+            var failures = new List<string>();
+            var failedSheets = new HashSet<MainWindow.Catalog>();
             foreach (var (cat, sheetIds) in affectedSheets)
             {
                 string sprPath = System.IO.Path.Combine(MainWindow._assetsPath, cat.File);
                 if (!System.IO.File.Exists(sprPath))
                 {
-                    Trace($"[HandleSprDelete] Sheet not found on disk: {sprPath}");
+                    MainWindow.Log($"[HandleSprDelete] Sheet not found on disk: {sprPath}", "Warning");
+                    removable.UnionWith(sheetIds);
                     continue;
                 }
-                long sizeBefore = new System.IO.FileInfo(sprPath).Length;
-                Trace($"[HandleSprDelete] Rewriting sheet {cat.File} ({sheetIds.Count} tiles), size before={sizeBefore}");
                 try
                 {
                     using SkiaSharp.SKBitmap bmp = LZMA.DecompressFileLZMA(sprPath);
@@ -3438,77 +3591,83 @@ namespace Assets_Editor
                     int tHeight = layout.SpriteSizeY;
                     int cols = layout.Cols;
 
-                    using var canvas = new SkiaSharp.SKCanvas(bmp);
-                    foreach (var id in sheetIds)
+                    using (var canvas = new SkiaSharp.SKCanvas(bmp))
                     {
-                        int tileIdx = (int)(id - cat.FirstSpriteid);
-                        int col = tileIdx % cols;
-                        int row = tileIdx / cols;
-                        canvas.Save();
-                        canvas.ClipRect(SkiaSharp.SKRect.Create(col * tWidth, row * tHeight, tWidth, tHeight));
-                        canvas.Clear(SkiaSharp.SKColors.Transparent);
-                        canvas.Restore();
+                        foreach (var id in sheetIds)
+                        {
+                            int tileIdx = (int)(id - cat.FirstSpriteid);
+                            int col = tileIdx % cols;
+                            int row = tileIdx / cols;
+                            canvas.Save();
+                            canvas.ClipRect(SkiaSharp.SKRect.Create(col * tWidth, row * tHeight, tWidth, tHeight));
+                            canvas.Clear(SkiaSharp.SKColors.Transparent);
+                            canvas.Restore();
+                        }
                     }
 
+                    // ExportLzmaFile writes atomically and keeps a one-time "<sheet>-orig".
                     string outPath = sprPath;
                     LZMA.ExportLzmaFile(bmp, ref outPath);
-                    long sizeAfter = new System.IO.FileInfo(outPath).Length;
-                    Trace($"[HandleSprDelete] Sheet rewritten: {cat.File}, size after={sizeAfter}");
+                    removable.UnionWith(sheetIds);
                     sheetsRewritten++;
                 }
                 catch (Exception ex)
                 {
-                    Trace($"[HandleSprDelete] FAILED to rewrite sheet {cat.File}: {ex.GetType().Name}: {ex.Message}");
+                    failedSheets.Add(cat);
+                    failures.Add($"{cat.File}: {ex.Message}");
+                    MainWindow.Log($"[HandleSprDelete] Failed to rewrite sheet {cat.File}: {ex.GetType().Name}: {ex.Message}", "Error");
                 }
             }
 
-            foreach (var id in ids)
+            foreach (var id in removable)
                 MainWindow.SprLists.TryRemove((int)id, out _);
-            Trace($"[HandleSprDelete] Done. Sheets rewritten: {sheetsRewritten}/{affectedSheets.Count}");
-
-            // AllSprList is a plain List<T>, not ObservableCollection — removing from it does
-            // not notify the ListBox. Disconnect the binding, mutate both backing lists, then
-            // rebind to whichever source was active so the UI refreshes.
-            var prevSource = SprListView.ItemsSource;
-            SprListView.ItemsSource = null;
-            foreach (var s in selected)
-            {
-                MainWindow.AllSprList.Remove(s);
-                _sprFiltered.Remove(s);
-            }
+            RemoveSpritesFromLists(removable);
 
             // After AllSprList shrank, any affected sheet whose full ID range no longer has
-            // a single ShowList entry is dead weight — delete the .bmp.lzma file, drop its
-            // catalog entry, and free every ID in its range from SprLists so the numbers
-            // come back into the pool for new imports.
-            int sheetsDeleted = 0;
-            var deletedSheets = new List<MainWindow.Catalog>();
-            foreach (var (cat, _) in affectedSheets)
+            // a single ShowList entry is dead weight — delete the .bmp.lzma file (after a
+            // one-time backup), drop its catalog entry, and free every ID in its range from
+            // SprLists so the numbers come back into the pool for new imports.
+            var remaining = new HashSet<uint>(MainWindow.AllSprList.Select(s => s.Id));
+            var deletedSheets = new HashSet<MainWindow.Catalog>();
+            foreach (var cat in affectedSheets.Keys)
             {
-                bool anyLeft = MainWindow.AllSprList.Any(s => s.Id >= cat.FirstSpriteid && s.Id <= cat.LastSpriteid);
+                if (failedSheets.Contains(cat)) continue;
+                bool anyLeft = false;
+                for (long id = cat.FirstSpriteid; id <= cat.LastSpriteid && !anyLeft; id++)
+                    anyLeft = remaining.Contains((uint)id);
                 if (anyLeft) continue;
 
                 string sprPath = System.IO.Path.Combine(MainWindow._assetsPath, cat.File);
                 try
                 {
-                    if (System.IO.File.Exists(sprPath)) System.IO.File.Delete(sprPath);
+                    if (System.IO.File.Exists(sprPath))
+                    {
+                        CatalogWriter.BackupOnce(sprPath);
+                        System.IO.File.Delete(sprPath);
+                    }
                     for (int id = cat.FirstSpriteid; id <= cat.LastSpriteid; id++)
                         MainWindow.SprLists.TryRemove(id, out _);
                     deletedSheets.Add(cat);
-                    sheetsDeleted++;
-                    Trace($"[HandleSprDelete] Deleted empty sheet {cat.File} (IDs {cat.FirstSpriteid}–{cat.LastSpriteid})");
+                    MainWindow.Log($"[HandleSprDelete] Deleted empty sheet {cat.File} (IDs {cat.FirstSpriteid}–{cat.LastSpriteid})");
                 }
                 catch (Exception ex)
                 {
-                    Trace($"[HandleSprDelete] FAILED to delete empty sheet {cat.File}: {ex.GetType().Name}: {ex.Message}");
+                    failures.Add($"{cat.File}: {ex.Message}");
+                    MainWindow.Log($"[HandleSprDelete] Failed to delete empty sheet {cat.File}: {ex.GetType().Name}: {ex.Message}", "Error");
                 }
             }
-            foreach (var cat in deletedSheets)
-                MainWindow.catalog.Remove(cat);
+            if (deletedSheets.Count > 0)
+            {
+                MainWindow.catalog.RemoveAll(c => deletedSheets.Contains(c));
+                // The sheet files are gone — the catalog on disk must stop pointing at them.
+                SaveCatalogToDisk();
+            }
 
-            SprListView.ItemsSource = prevSource;
-
-            MainWindow.Log($"[HandleSprDelete] Deleted {ids.Count} sprite(s) across {sheetsRewritten} sheet(s). Removed {sheetsDeleted} empty sheet(s).");
+            MainWindow.Log($"[HandleSprDelete] Deleted {removable.Count} sprite(s) across {sheetsRewritten} sheet(s). Removed {deletedSheets.Count} empty sheet(s).");
+            if (failures.Count > 0)
+                ErrorManager.ShowError($"{failures.Count} sheet(s) could not be updated; their sprites were kept:\n" +
+                                       string.Join("\n", failures.Take(5)) + (failures.Count > 5 ? "\n…" : ""));
+            return removable.Count;
         }
 
         private async void SprListView_KeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -3581,7 +3740,7 @@ namespace Assets_Editor
                 if (stream != null)
                     SprPreviewImage.Source = Utils.MemoryStreamToBitmap(stream);
             }
-            catch { }
+            catch (Exception ex) { MainWindow.Log($"Could not load sprite {id}: {ex.Message}", "Warning"); }
         }
 
         // Reorder: move selected sprite one position to the left (only within same frame group)
@@ -3721,9 +3880,10 @@ namespace Assets_Editor
                         }
                         System.Threading.Interlocked.Increment(ref exported);
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         System.Threading.Interlocked.Increment(ref failed);
+                        MainWindow.Log($"Batch export of {category} {appearance.Id} failed: {ex.Message}", "Error");
                     }
                 }
             });
@@ -3903,7 +4063,9 @@ namespace Assets_Editor
 
             try
             {
-                string catalogPath = System.IO.Path.Combine(MainWindow._assetsPath, "catalog-content.json");
+                string catalogPath = System.IO.Path.Combine(MainWindow._assetsPath, CatalogWriter.CatalogFileName);
+                // "-bak" = state before this compile (Windows behaviour); "-orig" = the
+                // untouched client file, kept once and never overwritten (CatalogWriter).
                 System.IO.File.Copy(catalogPath, catalogPath + "-bak", true);
                 System.IO.File.Copy(MainWindow._datPath, MainWindow._datPath + "-bak", true);
 
@@ -3911,22 +4073,8 @@ namespace Assets_Editor
                 // for orphan sprites, so the catalog must be serialized afterwards.
                 int sheetsRewritten = RewriteDirtySheets();
 
-                var catalogSettings = new Newtonsoft.Json.JsonSerializerSettings
-                {
-                    NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore,
-                    DefaultValueHandling = Newtonsoft.Json.DefaultValueHandling.Ignore,
-                    ContractResolver = new LowercaseContractResolver(),
-                };
-                string catalogJson = Newtonsoft.Json.JsonConvert.SerializeObject(
-                    MainWindow.catalog, Newtonsoft.Json.Formatting.Indented, catalogSettings);
-                System.IO.File.WriteAllText(catalogPath, catalogJson);
-
-                using (var fs = new System.IO.FileStream(
-                    MainWindow._datPath, System.IO.FileMode.Create,
-                    System.IO.FileAccess.Write, System.IO.FileShare.None))
-                {
-                    MainWindow.appearances.WriteTo(fs);
-                }
+                CatalogWriter.Write(MainWindow._assetsPath, MainWindow.catalog);
+                CatalogWriter.WriteAllBytesAtomic(MainWindow._datPath, MainWindow.appearances.ToByteArray());
 
                 if (StatusBar != null)
                     StatusBar.Text = $"Compiled → {System.IO.Path.GetFileName(MainWindow._datPath)}  ({DateTime.Now:HH:mm:ss})";
@@ -3938,7 +4086,7 @@ namespace Assets_Editor
                     $"Compiled successfully.\n\n" +
                     $"appearances: {System.IO.Path.GetFileName(MainWindow._datPath)}\n" +
                     $"catalog-content.json updated{sheetsMsg}\n" +
-                    $"Backups: *-bak");
+                    $"Backups: *-bak (previous compile), *-orig (untouched original)");
             }
             catch (Exception ex)
             {
@@ -3947,183 +4095,244 @@ namespace Assets_Editor
             }
         }
 
-        private class LowercaseContractResolver : Newtonsoft.Json.Serialization.DefaultContractResolver
-        {
-            protected override string ResolvePropertyName(string propertyName) => propertyName.ToLower();
-        }
-
         // Rewrite every sprite sheet that contains at least one dirty (imported) sprite,
         // and create new sheets for orphan sprites (newly allocated IDs not in any sheet).
+        //
+        // Everything that can fail on input (unreadable existing sheet, unsupported sprite
+        // size) is checked before the first byte is written, and throws instead of writing
+        // a blank sheet over real data. DirtySpriteIds is only cleared on success.
         private int RewriteDirtySheets()
         {
             if (MainWindow.DirtySpriteIds.Count == 0) return 0;
 
             // Partition dirty IDs into "belongs to existing sheet" vs "orphan" (new ID).
+            // Sprite catalog ranges sorted by first id → binary search per dirty id.
+            var ranges = MainWindow.catalog
+                .Where(c => c.Type == "sprite" && c.FirstSpriteid != int.MinValue && c.LastSpriteid != int.MinValue)
+                .OrderBy(c => c.FirstSpriteid)
+                .ToList();
             var sheetToDirty = new Dictionary<MainWindow.Catalog, List<int>>();
-            var orphanIds = new List<int>(MainWindow.DirtySpriteIds);
-
-            foreach (var cat in MainWindow.catalog)
+            var orphanIds = new List<int>();
+            foreach (int id in MainWindow.DirtySpriteIds.OrderBy(i => i))
             {
-                if (cat.Type != "sprite") continue;
-                for (int i = orphanIds.Count - 1; i >= 0; i--)
+                var cat = FindSheetForSprite(ranges, id);
+                if (cat == null) { orphanIds.Add(id); continue; }
+                if (!sheetToDirty.TryGetValue(cat, out var list))
                 {
-                    int id = orphanIds[i];
-                    if (id >= cat.FirstSpriteid && id <= cat.LastSpriteid)
-                    {
-                        if (!sheetToDirty.TryGetValue(cat, out var list))
-                        {
-                            list = new List<int>();
-                            sheetToDirty[cat] = list;
-                        }
-                        list.Add(id);
-                        orphanIds.RemoveAt(i);
-                    }
+                    list = new List<int>();
+                    sheetToDirty[cat] = list;
                 }
+                list.Add(id);
             }
 
-            int rewritten = 0;
-
-            // ── 1. Patch existing sheets ────────────────────────────────────────
-            foreach (var (cat, dirtyIds) in sheetToDirty)
+            // ── 0. Validate / load everything first ─────────────────────────────
+            // Orphans grouped by sprite size; unknown sizes are rejected.
+            var groups = new Dictionary<(int w, int h), List<(int oldSprId, byte[] png)>>();
+            foreach (int sprId in orphanIds)
             {
-                string sheetPath = Path.Combine(MainWindow._assetsPath, cat.File);
-                var layout = GetSpriteLayout(cat.SpriteType);
-                int tW = layout.SpriteSizeX, tH = layout.SpriteSizeY;
-                int cols = layout.Cols, rows = layout.Rows;
-
-                SKBitmap? baseBmp = null;
-                if (File.Exists(sheetPath))
+                if (!MainWindow.SprLists.TryGetValue(sprId, out var ms) || ms == null) continue;
+                byte[] png = ms.ToArray();
+                using var probe = SKBitmap.Decode(png);
+                if (probe == null)
                 {
-                    try { baseBmp = LZMA.DecompressFileLZMA(sheetPath); }
-                    catch { }
+                    MainWindow.Log($"Compile: sprite {sprId} has undecodable image data, skipped.", "Warning");
+                    continue;
                 }
-                using var sheet = baseBmp ?? new SKBitmap(SprSheetWidth, SprSheetHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
-
-                using (var canvas = new SKCanvas(sheet))
+                var key = (probe.Width, probe.Height);
+                if (!groups.TryGetValue(key, out var list))
                 {
-                    foreach (int sprId in dirtyIds)
-                    {
-                        if (!MainWindow.SprLists.TryGetValue(sprId, out var ms) || ms == null) continue;
-
-                        int i = sprId - cat.FirstSpriteid;
-                        if (i < 0 || i >= cols * rows) continue;
-
-                        byte[] pngBytes = ms.ToArray();
-                        using var tileBmp = SKBitmap.Decode(pngBytes);
-                        if (tileBmp == null) continue;
-
-                        int col = i % cols;
-                        int row = i / cols;
-
-                        canvas.Save();
-                        canvas.ClipRect(SKRect.Create(col * tW, row * tH, tW, tH));
-                        canvas.Clear(SKColors.Transparent);
-                        canvas.Restore();
-                        canvas.DrawBitmap(tileBmp, SKRect.Create(col * tW, row * tH, tW, tH));
-                    }
+                    list = new List<(int, byte[])>();
+                    groups[key] = list;
                 }
-
-                LZMA.ExportLzmaFile(sheet, ref sheetPath);
-                rewritten++;
+                list.Add((sprId, png));
             }
+            EnsureKnownSpriteSizes(groups.Keys);
 
-            // ── 2. Create new sheets for orphan sprites ─────────────────────────
-            if (orphanIds.Count > 0)
+            // Existing sheets: decode them all up front. A sheet that exists but can't be
+            // decompressed aborts the compile — writing a blank sheet over it would wipe
+            // every other sprite it contains.
+            var baseSheets = new Dictionary<MainWindow.Catalog, SKBitmap?>();
+            try
             {
-                // Find the next free contiguous ID range above all existing catalog entries.
-                uint nextFreeId = 1;
-                foreach (var c in MainWindow.catalog)
-                    if (c.Type == "sprite" && c.LastSpriteid != int.MinValue && (uint)c.LastSpriteid >= nextFreeId)
-                        nextFreeId = (uint)c.LastSpriteid + 1;
-                foreach (var k in MainWindow.SprLists.Keys)
-                    if ((uint)k >= nextFreeId) nextFreeId = (uint)k + 1;
-
-                // Collect PNG data grouped by sprite size.
-                var groups = new Dictionary<(int w, int h), List<(int oldSprId, byte[] png)>>();
-                foreach (int sprId in orphanIds)
+                foreach (var cat in sheetToDirty.Keys)
                 {
-                    if (!MainWindow.SprLists.TryGetValue(sprId, out var ms) || ms == null) continue;
-                    byte[] png = ms.ToArray();
-                    using var probe = SKBitmap.Decode(png);
-                    if (probe == null) continue;
-                    var key = (probe.Width, probe.Height);
-                    if (!groups.TryGetValue(key, out var list))
+                    string sheetPath = Path.Combine(MainWindow._assetsPath, cat.File);
+                    if (!File.Exists(sheetPath))
                     {
-                        list = new List<(int, byte[])>();
-                        groups[key] = list;
+                        MainWindow.Log($"Compile: sheet {cat.File} is missing on disk, it will be recreated from the edited sprites only.", "Warning");
+                        baseSheets[cat] = null;
+                        continue;
                     }
-                    list.Add((sprId, png));
+                    try { baseSheets[cat] = LZMA.DecompressFileLZMA(sheetPath); }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"Sprite sheet {cat.File} could not be read ({ex.Message}). " +
+                            "Nothing was written; restore the sheet (e.g. from its -orig/-bak copy) and compile again.", ex);
+                    }
+                    if (baseSheets[cat] == null)
+                        throw new InvalidOperationException(
+                            $"Sprite sheet {cat.File} could not be decoded. Nothing was written.");
                 }
 
-                foreach (var (size, items) in groups)
+                int rewritten = 0;
+
+                // ── 1. Patch existing sheets ────────────────────────────────────
+                foreach (var (cat, dirtyIds) in sheetToDirty)
                 {
-                    int spriteType = SpriteSizes.FindIndex(s => s.Width == size.w && s.Height == size.h);
-                    if (spriteType < 0) spriteType = 0;
-                    int cols = Math.Max(1, SprSheetWidth / size.w);
-                    int rows = Math.Max(1, SprSheetHeight / size.h);
-                    int perSheet = cols * rows;
+                    string sheetPath = Path.Combine(MainWindow._assetsPath, cat.File);
+                    var layout = GetSpriteLayout(cat.SpriteType);
+                    int tW = layout.SpriteSizeX, tH = layout.SpriteSizeY;
+                    int cols = layout.Cols, rows = layout.Rows;
 
-                    for (int off = 0; off < items.Count; off += perSheet)
+                    var sheet = baseSheets[cat];
+                    if (sheet == null)
                     {
-                        int count = Math.Min(perSheet, items.Count - off);
-                        uint firstId = nextFreeId;
+                        sheet = new SKBitmap(SprSheetWidth, SprSheetHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+                        sheet.Erase(SKColors.Transparent);
+                        baseSheets[cat] = sheet;
+                    }
 
-                        using var sheet = new SKBitmap(SprSheetWidth, SprSheetHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
-                        using var canvas = new SKCanvas(sheet);
-                        canvas.Clear(SKColors.Transparent);
-
-                        for (int i = 0; i < count; i++)
+                    using (var canvas = new SKCanvas(sheet))
+                    {
+                        foreach (int sprId in dirtyIds)
                         {
-                            var (oldSprId, png) = items[off + i];
-                            uint newId = nextFreeId++;
+                            if (!MainWindow.SprLists.TryGetValue(sprId, out var ms) || ms == null) continue;
 
-                            using var bmp = SKBitmap.Decode(png);
-                            if (bmp != null)
+                            int i = sprId - cat.FirstSpriteid;
+                            if (i < 0 || i >= cols * rows) continue;
+
+                            byte[] pngBytes = ms.ToArray();
+                            using var tileBmp = SKBitmap.Decode(pngBytes);
+                            if (tileBmp == null)
                             {
-                                int col = i % cols;
-                                int row = i / cols;
-                                canvas.DrawBitmap(bmp, SKRect.Create(col * size.w, row * size.h, size.w, size.h));
+                                MainWindow.Log($"Compile: sprite {sprId} has undecodable image data, slot left unchanged.", "Warning");
+                                continue;
+                            }
+                            if (tileBmp.Width != tW || tileBmp.Height != tH)
+                                MainWindow.Log($"Compile: sprite {sprId} is {tileBmp.Width}×{tileBmp.Height} but sheet {cat.File} holds {tW}×{tH}; it is scaled to fit.", "Warning");
+
+                            int col = i % cols;
+                            int row = i / cols;
+
+                            canvas.Save();
+                            canvas.ClipRect(SKRect.Create(col * tW, row * tH, tW, tH));
+                            canvas.Clear(SKColors.Transparent);
+                            canvas.Restore();
+                            canvas.DrawBitmap(tileBmp, SKRect.Create(col * tW, row * tH, tW, tH));
+                        }
+                    }
+
+                    LZMA.ExportLzmaFile(sheet, ref sheetPath);
+                    rewritten++;
+                }
+
+                // ── 2. Create new sheets for orphan sprites ─────────────────────
+                if (groups.Count > 0)
+                {
+                    // Find the next free contiguous ID range above all existing catalog entries.
+                    uint nextFreeId = 1;
+                    foreach (var c in MainWindow.catalog)
+                        if (c.Type == "sprite" && c.LastSpriteid != int.MinValue && (uint)c.LastSpriteid >= nextFreeId)
+                            nextFreeId = (uint)c.LastSpriteid + 1;
+                    foreach (var k in MainWindow.SprLists.Keys)
+                        if ((uint)k >= nextFreeId) nextFreeId = (uint)k + 1;
+
+                    var remap = new Dictionary<uint, uint>();
+                    foreach (var (size, items) in groups)
+                    {
+                        int spriteType = SpriteSizes.FindIndex(s => s.Width == size.w && s.Height == size.h);
+                        int cols = Math.Max(1, SprSheetWidth / size.w);
+                        int rows = Math.Max(1, SprSheetHeight / size.h);
+                        int perSheet = cols * rows;
+
+                        for (int off = 0; off < items.Count; off += perSheet)
+                        {
+                            int count = Math.Min(perSheet, items.Count - off);
+                            uint firstId = nextFreeId;
+
+                            using var sheet = new SKBitmap(SprSheetWidth, SprSheetHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+                            using var canvas = new SKCanvas(sheet);
+                            canvas.Clear(SKColors.Transparent);
+
+                            for (int i = 0; i < count; i++)
+                            {
+                                var (oldSprId, png) = items[off + i];
+                                uint newId = nextFreeId++;
+
+                                using var bmp = SKBitmap.Decode(png);
+                                if (bmp != null)
+                                {
+                                    int col = i % cols;
+                                    int row = i / cols;
+                                    canvas.DrawBitmap(bmp, SKRect.Create(col * size.w, row * size.h, size.w, size.h));
+                                }
+
+                                // Move sprite to new contiguous ID
+                                MainWindow.SprLists[(int)newId] = new MemoryStream(png, writable: false);
+                                if ((uint)oldSprId != newId)
+                                {
+                                    MainWindow.SprLists.TryRemove(oldSprId, out _);
+                                    remap[(uint)oldSprId] = newId;
+                                }
                             }
 
-                            // Move sprite to new contiguous ID
-                            MainWindow.SprLists[(int)newId] = new MemoryStream(png, writable: false);
-                            if ((uint)oldSprId != newId)
+                            uint lastId = nextFreeId - 1;
+
+                            using var sha = System.Security.Cryptography.SHA256.Create();
+                            string hash = Convert.ToHexString(sha.ComputeHash(sheet.Bytes)).ToLowerInvariant();
+                            string sheetName = $"sprites-{hash}.bmp.lzma";
+                            string sheetPath = Path.Combine(MainWindow._assetsPath, sheetName);
+                            LZMA.ExportLzmaFile(sheet, ref sheetPath);
+
+                            MainWindow.catalog.Add(new MainWindow.Catalog
                             {
-                                MainWindow.SprLists.TryRemove(oldSprId, out _);
-                                RemapSpriteIdEverywhere((uint)oldSprId, newId);
-                            }
+                                Type = "sprite",
+                                File = sheetName,
+                                SpriteType = spriteType,
+                                FirstSpriteid = (int)firstId,
+                                LastSpriteid = (int)lastId,
+                                Area = 0,
+                            });
+                            rewritten++;
                         }
-
-                        uint lastId = nextFreeId - 1;
-
-                        using var sha = System.Security.Cryptography.SHA256.Create();
-                        string hash = Convert.ToHexString(sha.ComputeHash(sheet.Bytes)).ToLowerInvariant();
-                        string sheetName = $"sprites-{hash}.bmp.lzma";
-                        string sheetPath = Path.Combine(MainWindow._assetsPath, sheetName);
-                        LZMA.ExportLzmaFile(sheet, ref sheetPath);
-
-                        MainWindow.catalog.Add(new MainWindow.Catalog
-                        {
-                            Type = "sprite",
-                            File = sheetName,
-                            SpriteType = spriteType,
-                            FirstSpriteid = (int)firstId,
-                            LastSpriteid = (int)lastId,
-                            Area = 0,
-                        });
-                        rewritten++;
                     }
-                }
-            }
 
-            MainWindow.DirtySpriteIds.Clear();
-            return rewritten;
+                    // One pass over every appearance instead of one per moved sprite.
+                    RemapSpriteIds(remap);
+                }
+
+                MainWindow.DirtySpriteIds.Clear();
+                return rewritten;
+            }
+            finally
+            {
+                foreach (var bmp in baseSheets.Values) bmp?.Dispose();
+            }
         }
 
-        // Update all SpriteId references everywhere: protobuf, AppearanceSprites UI list,
-        // and the AllSprList global sprite list.
-        private void RemapSpriteIdEverywhere(uint oldId, uint newId)
+        // Binary search over catalog ranges sorted by FirstSpriteid.
+        private static MainWindow.Catalog? FindSheetForSprite(List<MainWindow.Catalog> sortedRanges, int id)
         {
+            int lo = 0, hi = sortedRanges.Count - 1;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) >> 1;
+                var c = sortedRanges[mid];
+                if (id < c.FirstSpriteid) hi = mid - 1;
+                else if (id > c.LastSpriteid) lo = mid + 1;
+                else return c;
+            }
+            return null;
+        }
+
+        // Update all SpriteId references everywhere (protobuf + AppearanceSprites UI list),
+        // applying a whole old→new sprite id map in a single walk over every appearance.
+        // Returns the number of references changed.
+        private int RemapSpriteIds(IReadOnlyDictionary<uint, uint> map)
+        {
+            if (map.Count == 0) return 0;
+            int changed = 0;
             if (MainWindow.appearances != null)
             {
                 foreach (var list in new[] { MainWindow.appearances.Outfit, MainWindow.appearances.Object,
@@ -4133,10 +4342,15 @@ namespace Assets_Editor
                     {
                         foreach (var fg in app.FrameGroup)
                         {
-                            for (int i = 0; i < fg.SpriteInfo.SpriteId.Count; i++)
+                            var ids = fg.SpriteInfo?.SpriteId;
+                            if (ids == null) continue;
+                            for (int i = 0; i < ids.Count; i++)
                             {
-                                if (fg.SpriteInfo.SpriteId[i] == oldId)
-                                    fg.SpriteInfo.SpriteId[i] = newId;
+                                if (map.TryGetValue(ids[i], out uint newId))
+                                {
+                                    ids[i] = newId;
+                                    changed++;
+                                }
                             }
                         }
                     }
@@ -4146,63 +4360,71 @@ namespace Assets_Editor
             // Update AppearanceSprites (UI list for current appearance)
             foreach (var sl in AppearanceSprites)
             {
-                if (sl.Id == oldId) sl.Id = newId;
+                if (map.TryGetValue(sl.Id, out uint newId)) sl.Id = newId;
             }
+            return changed;
         }
 
         #endregion
 
         #region Feature 11: Sprite Atlas Repack
 
-        private async void RepackSheets_Click(object? sender, RoutedEventArgs e)
+        // Repacking for real means rewriting every sheet, renumbering sprite ids across all
+        // appearances and replacing the catalog — none of which is implemented. The old
+        // version only dropped unused ids from memory and then claimed success, while
+        // nothing changed on disk. This is now an honest, read-only report of how much a
+        // repack would reclaim; it does not modify memory or disk.
+        private void RepackSheets_Click(object? sender, RoutedEventArgs e)
         {
             if (MainWindow.appearances == null || string.IsNullOrEmpty(MainWindow._assetsPath))
             { ErrorManager.ShowError("Load assets first."); return; }
 
-            bool ok = await ErrorManager.ConfirmAsync("Repack Sprite Sheets",
-                "This will scan all sheets, remove empty tile slots, and rewrite compacted sheets.\n" +
-                "Sprite IDs will be remapped across all appearances. Back up first!\n\nContinue?");
-            if (!ok) return;
-
-            int sheetsRemoved = 0, slotsReclaimed = 0;
             try
             {
-                // Find sheets with unused sprite IDs
-                var usedIds = new HashSet<uint>();
-                void CollectIds(Google.Protobuf.Collections.RepeatedField<Appearance> col)
-                {
-                    foreach (var a in col)
-                        foreach (var fg in a.FrameGroup)
-                            foreach (var sid in fg.SpriteInfo.SpriteId)
-                                usedIds.Add(sid);
-                }
-                CollectIds(MainWindow.appearances.Outfit);
-                CollectIds(MainWindow.appearances.Object);
-                CollectIds(MainWindow.appearances.Effect);
-                CollectIds(MainWindow.appearances.Missile);
+                var usedIds = CollectUsedSpriteIds();
 
-                // Remove unused sprites from in-memory store
-                var keysToRemove = MainWindow.SprLists.Keys.Where(k => !usedIds.Contains((uint)k)).ToList();
-                foreach (var k in keysToRemove)
+                int sheets = 0, unusedSheets = 0;
+                long totalSlots = 0, unusedSlots = 0;
+                foreach (var cat in MainWindow.catalog)
                 {
-                    MainWindow.SprLists.TryRemove(k, out _);
-                    slotsReclaimed++;
+                    if (cat.Type != "sprite" || cat.FirstSpriteid == int.MinValue || cat.LastSpriteid < cat.FirstSpriteid) continue;
+                    sheets++;
+                    int unusedHere = 0;
+                    for (int id = cat.FirstSpriteid; id <= cat.LastSpriteid; id++)
+                        if (!usedIds.Contains((uint)id)) unusedHere++;
+                    int slots = cat.LastSpriteid - cat.FirstSpriteid + 1;
+                    totalSlots += slots;
+                    unusedSlots += unusedHere;
+                    if (unusedHere == slots) unusedSheets++;
                 }
 
-                // Update AllSprList
-                var toRemoveFromList = MainWindow.AllSprList.Where(s => !usedIds.Contains(s.Id)).ToList();
-                foreach (var s in toRemoveFromList)
-                    MainWindow.AllSprList.Remove(s);
-                sheetsRemoved = toRemoveFromList.Count > 0 ? 1 : 0; // simplified
-
-                StatusBar.Text = $"Repack: removed {slotsReclaimed} unused sprite IDs.";
-                ErrorManager.ShowInfo($"Repack complete.\n\nRemoved {slotsReclaimed} unused sprite IDs from memory.\n" +
-                    "Use 'Compile Assets' to write the cleaned data to disk.");
+                StatusBar.Text = $"Repack analysis: {unusedSlots} of {totalSlots} sprite ids unused.";
+                ErrorManager.ShowInfo(
+                    "Repack is not available in this version — nothing was changed.\n\n" +
+                    $"Analysis of {sheets} sprite sheets:\n" +
+                    $"  Sprite ids not referenced by any appearance: {unusedSlots} of {totalSlots}\n" +
+                    $"  Sheets with no referenced sprite at all: {unusedSheets}\n\n" +
+                    "Use 'Usuń wszystkie puste sprite'y' or 'Deduplicate Sprites' to clean up individual sprites.");
             }
             catch (Exception ex)
             {
-                ErrorManager.ShowError($"Repack failed: {ex.Message}");
+                ErrorManager.ShowError($"Repack analysis failed: {ex.Message}");
             }
+        }
+
+        // Every sprite id referenced by any appearance (all categories, all frame groups).
+        private static HashSet<uint> CollectUsedSpriteIds()
+        {
+            var usedIds = new HashSet<uint>();
+            if (MainWindow.appearances == null) return usedIds;
+            foreach (var col in new[] { MainWindow.appearances.Outfit, MainWindow.appearances.Object,
+                                        MainWindow.appearances.Effect, MainWindow.appearances.Missile })
+                foreach (var a in col)
+                    foreach (var fg in a.FrameGroup)
+                        if (fg.SpriteInfo != null)
+                            foreach (var sid in fg.SpriteInfo.SpriteId)
+                                usedIds.Add(sid);
+            return usedIds;
         }
 
         #endregion
@@ -4634,9 +4856,10 @@ namespace Assets_Editor
                     mi.Format = MagickFormat.Png;
                     return new MemoryStream(mi.ToByteArray());
                 }
-                catch
+                catch (Exception ex)
                 {
                     // fall through to Skia as a last resort
+                    MainWindow.Log($"ImageMagick resize failed, using Skia fallback: {ex.Message}", "Warning");
                 }
             }
 
@@ -5357,7 +5580,7 @@ namespace Assets_Editor
                 if (restore)
                     OpenAppearanceDatPath(AutosavePath);
             }
-            catch { }
+            catch (Exception ex) { MainWindow.Log($"Autosave restore failed: {ex.Message}", "Error"); }
         }
 
         private void QuickJumpMenu_Click(object? sender, RoutedEventArgs e) => _ = QuickJumpDialog();
@@ -6071,31 +6294,13 @@ namespace Assets_Editor
                     return;
                 }
 
-                // Remap references in all appearances
-                int remappedRefs = 0;
-                void RemapCollection(Google.Protobuf.Collections.RepeatedField<Appearance> col)
-                {
-                    foreach (var a in col)
-                        foreach (var fg in a.FrameGroup)
-                            for (int i = 0; i < fg.SpriteInfo.SpriteId.Count; i++)
-                                if (remap.TryGetValue(fg.SpriteInfo.SpriteId[i], out uint newId))
-                                {
-                                    fg.SpriteInfo.SpriteId[i] = newId;
-                                    remappedRefs++;
-                                }
-                }
-                RemapCollection(MainWindow.appearances.Outfit);
-                RemapCollection(MainWindow.appearances.Object);
-                RemapCollection(MainWindow.appearances.Effect);
-                RemapCollection(MainWindow.appearances.Missile);
+                // Remap references in all appearances (single pass)
+                int remappedRefs = RemapSpriteIds(remap);
 
                 // Remove the dup sprites from in-memory store
                 foreach (var dupId in remap.Keys)
-                {
                     MainWindow.SprLists.TryRemove((int)dupId, out _);
-                    var sl = MainWindow.AllSprList.FirstOrDefault(s => s.Id == dupId);
-                    if (sl != null) MainWindow.AllSprList.Remove(sl);
-                }
+                RemoveSpritesFromLists(new HashSet<uint>(remap.Keys));
 
                 StatusBar.Text = $"Deduplicated: {remap.Count} duplicates → {remappedRefs} refs remapped.";
                 ErrorManager.ShowInfo(
