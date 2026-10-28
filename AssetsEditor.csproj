@@ -19,15 +19,15 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
     <PackageReference Include="Semi.Avalonia" Version="11.2.1.4" />
-    <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.5.1" />
-    <PackageReference Include="Projektanker.Icons.Avalonia.FontAwesome" Version="9.5.1" />
+    <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.6.0" />
+    <PackageReference Include="Projektanker.Icons.Avalonia.FontAwesome" Version="9.6.0" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.2.0" />
     <PackageReference Include="Google.Protobuf" Version="3.21.4" />
     <PackageReference Include="Grpc.Tools" Version="2.60.0" PrivateAssets="All" />
-    <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.0-rc5.6" />
-    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.9.1" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.0-rc6" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.2" />
     <PackageReference Include="MoonSharp" Version="2.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SevenZip" Version="19.0.0" />
@@ -53,6 +53,13 @@
     <None Update="lua-syntax-light.xshd">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- the test project has its own csproj -->
+    <Compile Remove="tests/**" />
+    <None Remove="tests/**" />
+    <AvaloniaResource Remove="tests/**" />
   </ItemGroup>
 
   <ItemGroup>

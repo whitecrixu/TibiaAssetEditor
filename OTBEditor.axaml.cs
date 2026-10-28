@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -28,6 +29,9 @@ namespace Assets_Editor
 
         private Dictionary<uint, Appearance> appearanceByClientId = new();
         private List<ServerItem> OTBItems = new();
+        // one row per OTBItems entry, same order (SelectedIndex indexes both)
+        private ObservableCollection<ShowList> _rows = new();
+        private string? _otbPath;
         private bool OTBLoaded = false;
         private uint MajorVersion;
         private uint MinorVersion;
@@ -64,13 +68,14 @@ namespace Assets_Editor
                     foreach (Appearance appearance in MainWindow.appearances!.Object)
                         appearanceByClientId[appearance.Id] = appearance;
 
-                    var items = new List<ShowList>();
+                    _rows = new ObservableCollection<ShowList>();
                     foreach (var item in otbReader.Items)
                     {
                         OTBItems.Add(item);
-                        items.Add(new ShowList() { Id = item.ServerId, Cid = item.ClientId });
+                        _rows.Add(new ShowList() { Id = item.ServerId, Cid = item.ClientId });
                     }
-                    ItemListView.ItemsSource = items;
+                    ItemListView.ItemsSource = _rows;
+                    _otbPath = selectedFilePath;
                 }
             }
         }
@@ -144,6 +149,7 @@ namespace Assets_Editor
                     item.ClientId = (ushort)i;
                     item.ServerId = (ushort)sid;
                     OTBItems.Add(item);
+                    _rows.Add(new ShowList() { Id = item.ServerId, Cid = item.ClientId });
                     usedSids.Add(sid);
                     newItems.Add(new ShowList() { Id = item.ServerId, Cid = item.ClientId });
                 }
@@ -184,6 +190,17 @@ namespace Assets_Editor
             }
         }
 
+        private async void Save_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!OTBLoaded || string.IsNullOrEmpty(_otbPath)) return;
+            if (!await ErrorManager.ConfirmAsync("Save OTB", $"Overwrite {_otbPath}?\n\nThe original is kept once as {Path.GetFileName(_otbPath)}-bak. The server must be restarted to load it."))
+                return;
+            string backup = _otbPath + "-bak";
+            if (File.Exists(_otbPath) && !File.Exists(backup))
+                File.Copy(_otbPath, backup);
+            await WriteOtb(_otbPath);
+        }
+
         private async void SaveAs_Click(object? sender, RoutedEventArgs e)
         {
             if (!OTBLoaded) return;
@@ -196,29 +213,32 @@ namespace Assets_Editor
             });
 
             if (file != null)
-            {
-                // group 15 is unknown to TFS 1.x (NewEra): Items::loadFromOtb fails and the server does not start
-                int podiums = OTBItems.Count(x => x.Type == ServerItemType.Podium);
-                if (podiums > 0 && !await ErrorManager.ConfirmAsync("Podium items",
-                        $"{podiums} item(s) have type Podium (group 15). TFS 1.x based servers such as NewEra refuse to load an items.otb containing it. Save anyway?"))
-                    return;
+                await WriteOtb(file.Path.LocalPath);
+        }
 
-                try
-                {
-                    OTBWriter writer = new OTBWriter(OTBItems);
-                    writer.MajorVersion = MajorVersion;
-                    writer.MinorVersion = MinorVersion;
-                    writer.BuildNumber = BuildNumber;
-                    writer.ClientVersion = ClientVersion;
-                    if (writer.Write(file.Path.LocalPath))
-                        Debug.WriteLine("OTB saved");
-                    else
-                        ErrorManager.ShowError($"Saving the OTB failed: {writer.LastError}");
-                }
-                catch (UnauthorizedAccessException exception)
-                {
-                    ErrorManager.ShowError(exception.Message);
-                }
+        private async System.Threading.Tasks.Task WriteOtb(string path)
+        {
+            // group 15 is unknown to TFS 1.x (NewEra): Items::loadFromOtb fails and the server does not start
+            int podiums = OTBItems.Count(x => x.Type == ServerItemType.Podium);
+            if (podiums > 0 && !await ErrorManager.ConfirmAsync("Podium items",
+                    $"{podiums} item(s) have type Podium (group 15). TFS 1.x based servers such as NewEra refuse to load an items.otb containing it. Save anyway?"))
+                return;
+
+            try
+            {
+                OTBWriter writer = new OTBWriter(OTBItems);
+                writer.MajorVersion = MajorVersion;
+                writer.MinorVersion = MinorVersion;
+                writer.BuildNumber = BuildNumber;
+                writer.ClientVersion = ClientVersion;
+                if (writer.Write(path))
+                    ErrorManager.ShowInfo($"Saved {path}");
+                else
+                    ErrorManager.ShowError($"Saving the OTB failed: {writer.LastError}");
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                ErrorManager.ShowError(exception.Message);
             }
         }
 
@@ -255,6 +275,10 @@ namespace Assets_Editor
             item.LightColor = (ushort)(I_LightColor.Value ?? 0);
             item.MaxReadWriteChars = (ushort)(I_MaxReadWriteChars.Value ?? 0);
             item.MaxReadChars = (ushort)(I_MaxReadChars.Value ?? 0);
+
+            // keep the list row in sync (ReloadItemsAttr and the client-id lookup use it)
+            _rows[ItemListView.SelectedIndex].Id = item.ServerId;
+            _rows[ItemListView.SelectedIndex].Cid = item.ClientId;
         }
 
         #region Scroll-based image loading

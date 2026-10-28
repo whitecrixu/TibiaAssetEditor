@@ -99,7 +99,8 @@ return generateChartData()
     {
         try
         {
-            _luaScript = new Script();
+            // soft sandbox: no io/os/load/dofile - a shared script must not be able to touch the file system
+            _luaScript = new Script(CoreModules.Preset_SoftSandbox);
             UserData.RegisterType<Dictionary<string, object>>();
             UserData.RegisterType<List<object>>();
             _luaScript.Globals["print"] = DynValue.NewCallback(PrintToResults);
@@ -137,7 +138,7 @@ return generateChartData()
     private void InitializeTextEditor()
     {
         bool isDark = MainWindow.IsDarkModeSet();
-        string xshdFile = isDark ? DarkSyntaxFile : LightSyntaxFile;
+        string xshdFile = AppPaths.Bundled(isDark ? DarkSyntaxFile : LightSyntaxFile);
         if (!File.Exists(xshdFile)) return;
         try
         {

@@ -31,6 +31,7 @@
             <Grid RowDefinitions="40,40,Auto">
                 <Menu Grid.Row="0">
                     <MenuItem Header="_File">
+                        <MenuItem Header="Save" Click="Save_Click"/>
                         <MenuItem Header="Save As" Click="SaveAs_Click"/>
                     </MenuItem>
                     <MenuItem Header="_Edit">

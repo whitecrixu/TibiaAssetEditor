@@ -148,14 +148,19 @@ namespace Assets_Editor
 
         private void AddNew_Click(object? sender, RoutedEventArgs e)
         {
-            ushort newId = ItemsXml.Items.Count > 0
-                ? (ushort)(ItemsXml.Items.Keys.Max() + 1) : (ushort)100;
+            // the server ignores items.xml entries whose id is not in items.otb: prefer the newest OTB
+            // item that has no entry yet (e.g. one just created with "Create missing items")
+            var otbIds = MainWindow.ServerOTB.Items?.Select(i => i.ServerId).Where(id => !ItemsXml.Items.ContainsKey(id)).ToList();
+            ushort newId = otbIds != null && otbIds.Count > 0 ? otbIds.Max()
+                : ItemsXml.Items.Count > 0 ? (ushort)(ItemsXml.Items.Keys.Max() + 1) : (ushort)100;
             var entry = new ItemEntry { Id = newId, Name = $"new item {newId}" };
             ItemsXml.Items[newId] = entry;
             LoadImageFor(entry);
             RefreshList();
             ItemList.SelectedItem = entry;
-            StatusText.Text = $"Added entry {newId}";
+            StatusText.Text = otbIds != null && otbIds.Count > 0
+                ? $"Added entry {newId} (highest items.otb id without an entry; change the id if needed)"
+                : $"Added entry {newId} - no items.otb loaded (set the server path in the preset), the server ignores ids it does not have";
         }
 
         private void DeleteSelected_Click(object? sender, RoutedEventArgs e)

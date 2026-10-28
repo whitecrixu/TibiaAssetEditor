@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using Avalonia.Threading;
 
 namespace Assets_Editor;
 
@@ -14,6 +15,16 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // an exception in an event handler (most handlers are async void) used to close the whole app
+        // and lose unsaved edits; log it, tell the user and keep running
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            Program.WriteCrashLog("UI thread", e.Exception);
+            MainWindow.Log($"Unexpected error: {e.Exception.GetType().Name}: {e.Exception.Message}", "Error");
+            ErrorManager.ShowError($"Unexpected error: {e.Exception.Message}\n\nDetails were written to {Program.CrashLogPath}");
+            e.Handled = true;
+        };
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();

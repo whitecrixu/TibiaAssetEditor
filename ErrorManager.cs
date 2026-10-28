@@ -58,8 +58,7 @@ public static class ErrorManager
         }
         catch (Exception ex)
         {
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tae-delete-trace.log"),
-                $"{DateTime.Now:HH:mm:ss.fff} [ConfirmAsync] FAILED: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n"); } catch { }
+            MainWindow.Log($"Confirmation dialog failed: {ex.GetType().Name}: {ex.Message}", "Error");
             return false;
         }
     }

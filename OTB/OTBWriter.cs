@@ -277,7 +277,8 @@ namespace Assets_Editor
                                     break;
 
                                 case ServerItemAttribute.SpriteHash:
-                                    property.Write(item.SpriteHash);
+                                    // items made in the editor may have no hash yet; the attribute is a fixed 16 bytes
+                                    property.Write(item.SpriteHash ?? new byte[16]);
                                     writer.WriteProp(ServerItemAttribute.SpriteHash, property);
                                     break;
 

@@ -13,9 +13,10 @@ namespace Assets_Editor
         private uint cid;
         private string name = "";
 
-        private List<Bitmap?> images = new();
+        // created on first use: a legacy client has ~566k rows, and a Timer + List per row cost ~130 MB
+        private List<Bitmap?>? images;
         private Bitmap? image;
-        private Timer animationTimer;
+        private Timer? animationTimer;
         private int currentFrameIndex;
         private const double frameInterval = 100;
         private bool exported;
@@ -48,7 +49,7 @@ namespace Assets_Editor
 
         public List<Bitmap?> Images
         {
-            get => images;
+            get => images ??= new List<Bitmap?>();
             set
             {
                 if (images != value)
@@ -117,10 +118,6 @@ namespace Assets_Editor
 
         public ShowList()
         {
-            images = new List<Bitmap?>();
-            animationTimer = new Timer(frameInterval);
-            animationTimer.Elapsed += OnAnimationTick;
-            animationTimer.AutoReset = true;
         }
 
         private void OnAnimationTick(object? sender, ElapsedEventArgs e)
@@ -144,19 +141,25 @@ namespace Assets_Editor
 
         public void StartAnimation()
         {
-            if (Images != null && Images.Count > 0)
+            if (images != null && images.Count > 0)
             {
                 currentFrameIndex = 0;
                 Image = Images[currentFrameIndex];
+                if (animationTimer == null)
+                {
+                    animationTimer = new Timer(frameInterval);
+                    animationTimer.Elapsed += OnAnimationTick;
+                    animationTimer.AutoReset = true;
+                }
                 animationTimer.Start();
             }
         }
 
         public void StopAnimation()
         {
-            animationTimer.Stop();
+            animationTimer?.Stop();
             currentFrameIndex = 0;
-            if (Images != null && Images.Count > 0)
+            if (images != null && images.Count > 0)
             {
                 Image = Images[currentFrameIndex];
             }

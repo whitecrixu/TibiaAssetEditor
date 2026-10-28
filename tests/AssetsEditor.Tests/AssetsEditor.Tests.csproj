@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The editor is an Avalonia app whose MainWindow builds windows in static fields, so the tests do not
+    reference it. They compile the file-format code directly (DatStructure, LegacyAppearance, Sprite,
+    OTB, ItemsXml) against small stand-ins for MainWindow/ErrorManager in Stubs.cs.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Assets_Editor</RootNamespace>
+    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8625;CS0618;CS0168;CS0219</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Google.Protobuf" Version="3.21.4" />
+    <PackageReference Include="Grpc.Tools" Version="2.60.0" PrivateAssets="All" />
+    <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="../../appearances.proto" GrpcServices="None" Link="appearances.proto" />
+    <Compile Include="../../DatStructure.cs" Link="Src/DatStructure.cs" />
+    <Compile Include="../../LegacyAppearance.cs" Link="Src/LegacyAppearance.cs" />
+    <Compile Include="../../Sprite.cs" Link="Src/Sprite.cs" />
+    <Compile Include="../../LockBitmap.cs" Link="Src/LockBitmap.cs" />
+    <Compile Include="../../OTB/*.cs" LinkBase="Src/OTB" />
+    <Compile Include="../../ItemsXml.cs" Link="Src/ItemsXml.cs" />
+    <Compile Include="../../AppPaths.cs" Link="Src/AppPaths.cs" />
+    <None Include="../../Appearances.xml" Link="Appearances.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

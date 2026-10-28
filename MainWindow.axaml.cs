@@ -81,7 +81,7 @@ public partial class MainWindow : Window
     public static OTBReader ServerOTB = new();
     public static LogView logView = new();
     public static readonly DatStructure datStructure = new();
-    private static readonly string settingsFilePath = "Settings.json";
+    private static readonly string settingsFilePath = AppPaths.UserFile("Settings.json");
     private PresetSettings? _editingPreset;
 
     public MainWindow()
@@ -136,9 +136,12 @@ public partial class MainWindow : Window
         try
         {
             var json = JsonConvert.SerializeObject(SettingsList, Formatting.Indented);
-            File.WriteAllText(settingsFilePath, json);
+            AppPaths.WriteAllTextAtomic(settingsFilePath, json);
         }
-        catch { /* best-effort */ }
+        catch (Exception e)
+        {
+            Log($"Unable to save settings to {settingsFilePath}: {e.Message}", "Error");
+        }
     }
 
     // Track recent files — capped at 10, most recent first, no duplicates
@@ -313,7 +316,7 @@ public partial class MainWindow : Window
         _datPath = String.Format("{0}{1}", _assetsPath, catalog[0].File);
         if (File.Exists(_datPath) == false) return;
 
-        using var appStream = new FileStream(_datPath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+        using var appStream = new FileStream(_datPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         appearances = Appearances.Parser.ParseFrom(appStream);
         ObjectCount = Utils.GetLastIdOrZero(appearances.Object, o => o.Id);
         OutfitCount = Utils.GetLastIdOrZero(appearances.Outfit, o => o.Id);
@@ -503,12 +506,12 @@ public partial class MainWindow : Window
         try
         {
             var json = JsonConvert.SerializeObject(SettingsList, Formatting.Indented);
-            File.WriteAllText(settingsFilePath, json);
+            AppPaths.WriteAllTextAtomic(settingsFilePath, json);
         }
         catch (Exception e)
         {
-            LoadDefaultSettings();
-            ErrorManager.ShowError($"Unable to save settings!\n\n{e.Message}");
+            // keep the presets in memory: resetting them here made the next successful save persist the defaults
+            ErrorManager.ShowError($"Unable to save settings to {settingsFilePath}!\n\n{e.Message}");
         }
     }
 
@@ -525,7 +528,10 @@ public partial class MainWindow : Window
                 appearances = Dat.Appearances;
                 return true;
             }
-            catch { }
+            catch
+            {
+                // expected for every structure that does not match; the caller reports the overall failure
+            }
         }
         return false;
     }
@@ -533,7 +539,11 @@ public partial class MainWindow : Window
     private bool InternalTryLoadSpr()
     {
         try { LoadLegacySpr(); return true; }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            Log($"Unable to load {_sprPath}: {ex.Message}", "Error");
+            return false;
+        }
     }
 
     private void RefreshUIToggles()
@@ -574,72 +584,100 @@ public partial class MainWindow : Window
             return;
         }
 
-        await Task.Run(() =>
+        try
         {
-            if (LegacyClient == false)
+            await Task.Run(() =>
             {
-                LoadSprSheet();
-                Loaded = true;
-            }
-            else
-            {
-                SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Loading dat file ...");
-
-                bool datFound = false;
-                try
+                if (LegacyClient == false)
                 {
-                    LegacyAppearance Dat = new();
-                    Dat.ReadLegacyDat(_datPath, currentPreset.Version);
-                    appearances = Dat.Appearances;
-                    datFound = true;
+                    LoadSprSheet();
+                    Loaded = true;
                 }
-                catch { }
-
-                // the otfi flags describe the file exactly; try every structure with them before guessing flags
-                if (!datFound)
+                else
                 {
-                    SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Searching for matching version ...");
-                    datFound = InternalTryLoadDat();
-                }
+                    SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Loading dat file ...");
 
-                if (!datFound)
-                {
-                    currentPreset.Extended = false;
-                    currentPreset.FrameDurations = false;
-                    currentPreset.FrameGroups = false;
+                    bool datFound = false;
+                    try
+                    {
+                        LegacyAppearance Dat = new();
+                        Dat.ReadLegacyDat(_datPath, currentPreset.Version);
+                        appearances = Dat.Appearances;
+                        datFound = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Dat did not load with the preset's structure {currentPreset.Version}: {ex.InnerException?.Message ?? ex.Message}", "Warning");
+                    }
 
-                    datFound = InternalTryLoadDat();
-                    if (!datFound && !currentPreset.Extended) { currentPreset.Extended = true; datFound = InternalTryLoadDat(); }
-                    if (!datFound && !currentPreset.FrameDurations) { currentPreset.FrameDurations = true; datFound = InternalTryLoadDat(); }
-                    if (!datFound && !currentPreset.FrameGroups) { currentPreset.FrameGroups = true; datFound = InternalTryLoadDat(); }
-                }
+                    // the otfi flags describe the file exactly; try every structure with them before guessing flags
+                    if (!datFound)
+                    {
+                        SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Searching for matching version ...");
+                        datFound = InternalTryLoadDat();
+                    }
 
-                if (!datFound)
-                {
-                    SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_ERROR, "Unable to load dat!");
+                    if (!datFound)
+                    {
+                        // then every combination of the three layout flags (a read must end exactly at EOF,
+                        // so a wrong guess cannot be accepted)
+                        var (extended, durations, groups) = (currentPreset.Extended, currentPreset.FrameDurations, currentPreset.FrameGroups);
+                        for (int combo = 0; combo < 8 && !datFound; combo++)
+                        {
+                            currentPreset.Extended = (combo & 1) != 0;
+                            currentPreset.FrameDurations = (combo & 2) != 0;
+                            currentPreset.FrameGroups = (combo & 4) != 0;
+                            datFound = InternalTryLoadDat();
+                        }
+                        if (datFound)
+                            Log($"Dat layout detected: extended={currentPreset.Extended}, frame durations={currentPreset.FrameDurations}, frame groups={currentPreset.FrameGroups}, structure {currentPreset.Version}");
+                        else
+                            (currentPreset.Extended, currentPreset.FrameDurations, currentPreset.FrameGroups) = (extended, durations, groups);
+                    }
+
+                    if (!datFound)
+                    {
+                        SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_ERROR, "Unable to load dat! (details in Logger)");
+                        RefreshUIToggles();
+                        return;
+                    }
+
                     RefreshUIToggles();
-                    return;
+                    SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Loading spr file ...");
+
+                    if (!InternalTryLoadSpr())
+                    {
+                        SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_ERROR, "Unable to load spr!");
+                        RefreshUIToggles();
+                        return;
+                    }
+
+                    if (!String.IsNullOrEmpty(currentPreset.ServerPath))
+                    {
+                        string otbPath = Path.Combine(currentPreset.ServerPath, "data", "items", "items.otb");
+                        try
+                        {
+                            if (File.Exists(otbPath))
+                                ServerOTB.Read(otbPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            // a broken items.otb must not abort loading the client
+                            Log($"Unable to read {otbPath}: {ex.Message}", "Warning");
+                        }
+                    }
+
+                    Loaded = true;
                 }
-
-                RefreshUIToggles();
-                SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Loading spr file ...");
-
-                if (!InternalTryLoadSpr())
-                {
-                    SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_ERROR, "Unable to load spr!");
-                    RefreshUIToggles();
-                    return;
-                }
-
-                if (!String.IsNullOrEmpty(currentPreset.ServerPath))
-                {
-                    string otbPath = Path.Combine(currentPreset.ServerPath, "data/items/items.otb");
-                    ServerOTB.Read(otbPath);
-                }
-
-                Loaded = true;
-            }
-        });
+            });
+        }
+        catch (Exception ex)
+        {
+            // reported here instead of killing the app; the loaders log the details
+            Log($"Loading assets failed: {ex}", "Error");
+            SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_ERROR, $"Loading failed: {ex.Message}");
+            Loaded = false;
+        }
 
         SetUILock(false);
         // Sprite count isn't known until LoadSprSheet/InternalTryLoadSpr populate
@@ -807,6 +845,12 @@ public partial class MainWindow : Window
 
     public static MemoryStream? getSpriteStream(int spriteId)
     {
+        // legacy spr: SprLists only holds placeholders until a sprite is decoded, the storage reads it
+        if (LegacyClient && !string.IsNullOrEmpty(MainSprStorage.SprPath))
+            return spriteId >= 0 && MainSprStorage.Sprites.ContainsKey((uint)spriteId)
+                ? MainSprStorage.getSpriteStream((uint)spriteId)
+                : null;
+
         // Fast path: already loaded
         if (SprLists.TryGetValue(spriteId, out var cached) && cached != null)
             return cached;

@@ -22,10 +22,9 @@ namespace Assets_Editor
 
         public ScriptManager()
         {
-            // Store scripts in the executable directory
-            var executablePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            var executableDir = Path.GetDirectoryName(executablePath);
-            _scriptsFilePath = Path.Combine(executableDir, "lua_scripts.json");
+            // per-user config folder: Assembly.Location is empty in single-file builds and the
+            // executable's folder may not be writable
+            _scriptsFilePath = AppPaths.UserFile("lua_scripts.json");
             _scripts = [];
             LoadScripts();
         }
@@ -60,7 +59,7 @@ namespace Assets_Editor
             try
             {
                 var json = JsonConvert.SerializeObject(_scripts, Formatting.Indented);
-                File.WriteAllText(_scriptsFilePath, json);
+                AppPaths.WriteAllTextAtomic(_scriptsFilePath, json);
             }
             catch (Exception ex)
             {
