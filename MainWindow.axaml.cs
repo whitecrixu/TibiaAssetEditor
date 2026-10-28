@@ -698,6 +698,7 @@ public partial class MainWindow : Window
         // would blow away the inner ProgressBar and break the % binding.
         OpenDatEditorTile.IsEnabled = true;
         OpenSpriteEditorTile.IsEnabled = true;
+        OpenNewEraToolsTile.IsEnabled = LegacyClient;
         LoadAssetsLabel.Text = "Reload Assets";
     }
 
@@ -754,6 +755,11 @@ public partial class MainWindow : Window
     private void OpenItemsXmlEditor_Click(object? sender, RoutedEventArgs e)
     {
         new ItemsXmlEditor().Show();
+    }
+
+    private void OpenNewEraTools_Click(object? sender, RoutedEventArgs e)
+    {
+        new NewEraToolsWindow().Show(this);
     }
 
     private void OpenOtbEditor_Click(object? sender, RoutedEventArgs e)

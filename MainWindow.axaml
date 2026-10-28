@@ -193,7 +193,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Classes="hubTile" Click="OpenProficienciesEditor_Click" Margin="0,0,8,0">
+                    <Button Classes="hubTile" Click="OpenProficienciesEditor_Click" Margin="0,0,8,8">
                         <StackPanel Spacing="4">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <i:Icon Value="fa-bolt"/>
@@ -205,7 +205,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Classes="hubTile" Click="OpenItemsXmlEditor_Click" Margin="0,0,8,0">
+                    <Button Classes="hubTile" Click="OpenItemsXmlEditor_Click" Margin="0,0,8,8">
                         <StackPanel Spacing="4">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <i:Icon Value="fa-file-code"/>
@@ -217,7 +217,7 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Classes="hubTile" Click="OpenOtbEditor_Click">
+                    <Button Classes="hubTile" Click="OpenOtbEditor_Click" Margin="0,0,0,8">
                         <StackPanel Spacing="4">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <i:Icon Value="fa-database"/>
@@ -225,6 +225,20 @@
                             </StackPanel>
                             <TextBlock Classes="dim"
                                        Text="Server-side items.otb binary editor — server IDs, stack order, attributes."
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Requires a legacy (8.60) client loaded -->
+                    <Button Classes="hubTile" x:Name="OpenNewEraToolsTile" IsEnabled="False"
+                            Click="OpenNewEraTools_Click" Margin="0,0,8,0">
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <i:Icon Value="fa-clipboard-check"/>
+                                <TextBlock Classes="tileTitle" Text="NewEra Tools"/>
+                            </StackPanel>
+                            <TextBlock Classes="dim"
+                                       Text="Consistency report (dat / otb / items.xml / monsters), things hashes, diff and export for approval."
                                        TextWrapping="Wrap"/>
                         </StackPanel>
                     </Button>
