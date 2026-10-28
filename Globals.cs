@@ -30,4 +30,13 @@ public class Globals {
     public static readonly Guid GUID_OtbEditor_save = new("BFDCF4F6-ADE0-477D-AF45-472216ACBF47"); // save otb
 
     public static readonly Guid GUID_SprEditor_save = new("9AA10262-1929-47A2-85CE-A83183D8E620"); // save as bitmap
+
+    public static readonly Guid GUID_NewEraTools_ServerRoot = new("6B1E2D4A-93C7-4F0E-8A51-2C7D9E3B4F10"); // server root folder
+    public static readonly Guid GUID_NewEraTools_SaveReport = new("D3A84F62-1B9E-4C27-9F05-7E61A2C8B394"); // consistency report as TSV
+    public static readonly Guid GUID_NewEraTools_Manifest = new("8F27C1B5-4D6A-4E93-B0D8-51A9E7C3F2D6"); // update channel manifest
+    public static readonly Guid GUID_NewEraTools_OriginalDat = new("2C95E7A1-6F38-4B4D-8E12-A4D07B9C5E31"); // original dat for the things diff
+    public static readonly Guid GUID_NewEraTools_SaveDiff = new("A7D3F918-2E54-4A6B-9C81-3F0B6D2E7A45"); // things diff as JSON/TSV
+    public static readonly Guid GUID_NewEraTools_ServerFiles = new("5E4B9A27-C1D8-4F63-A2E7-9B18D5C3F604"); // server files for the export
+    public static readonly Guid GUID_NewEraTools_ThingsDir = new("F1C6A83D-7B29-4E50-8D4F-62E3A9B1C7D8"); // client things folder for the export
+    public static readonly Guid GUID_NewEraTools_ExportDir = new("39B7E5C2-A846-4D1F-B3E9-0C5A7F2D8B61"); // staging folder for the export
 }
