@@ -47,7 +47,22 @@ namespace Assets_Editor
 
         public static void CompressFileLZMA(MemoryStream inFile, string outFile)
         {
-            int dictionary = 33554432;
+            // Build the whole file in memory and replace the target atomically, so a
+            // failure halfway never leaves a truncated sheet the client can't read.
+            CatalogWriter.WriteAllBytesAtomic(outFile, CompressToTibiaLZMA(inFile));
+        }
+
+        // Tibia .lzma container: 32-byte header (zero padding, then a 0x70 0x0A 0xFA 0x80 0x24
+        // marker and the 7-bit encoded compressed size at 0x18/0x19), followed by the 5-byte
+        // LZMA properties, an 8-byte "unknown" size and the end-marker terminated stream.
+        public static byte[] CompressToTibiaLZMA(MemoryStream inFile)
+        {
+            // Dictionary sized to the input: a power of two >= input length (64 KiB..32 MiB).
+            // A fixed 32 MiB dictionary with bt4 allocates ~370 MB per sheet; the decoder
+            // only needs a window >= the data length, so the output is equivalent.
+            int dictionary = 1 << 16;
+            long remaining = inFile.Length - inFile.Position;
+            while (dictionary < remaining && dictionary < (1 << 25)) dictionary <<= 1;
             int posStateBits = 2;
             int litContextBits = 3;
             int litPosBits = 0;
@@ -59,7 +74,7 @@ namespace Assets_Editor
             object[] properties = { dictionary, posStateBits, litContextBits, litPosBits, algorithm, numFastBytes, mf, eos };
             byte[] TibiaHeader = new byte[32];
 
-            using FileStream outStream = new FileStream(outFile, FileMode.Create);
+            using MemoryStream outStream = new MemoryStream();
             outStream.Write(TibiaHeader);
             Encoder encoder = new Encoder();
             encoder.SetCoderProperties(propIDs, properties);
@@ -82,8 +97,7 @@ namespace Assets_Editor
                 outStream.Position = 0x19;
 
             outStream.Write(tmp.ToArray(), 0, (int)tmp.Length);
-            outStream.Position = 0;
-            outStream.Close();
+            return outStream.ToArray();
         }
 
         public static byte[] Uncompress(byte[] bytes)

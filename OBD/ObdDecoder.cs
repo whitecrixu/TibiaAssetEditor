@@ -51,7 +51,9 @@ public class ObdDecoder
             catch { ms = null; }
         }
 
-        SKBitmap? bmp = ms != null ? SKBitmap.Decode(ms) : null;
+        // Decode from bytes: the stream is the cached one in SprLists and
+        // SKBitmap.Decode(Stream) would dispose it.
+        SKBitmap? bmp = ms != null ? SKBitmap.Decode(ms.ToArray()) : null;
         if (bmp == null)
         {
             // Return a fully-transparent 32×32 tile so the export still succeeds.
