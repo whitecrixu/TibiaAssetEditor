@@ -1,0 +1,195 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="https://github.com/projektanker/icons.avalonia"
+        x:Class="Assets_Editor.NewEraToolsWindow"
+        Title="NewEra Tools"
+        Width="1200" Height="820"
+        WindowStartupLocation="CenterOwner">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- shared inputs: loaded client + server root -->
+        <Border Grid.Row="0" Classes="appbar">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,*,Auto" RowDefinitions="Auto">
+                <TextBlock Grid.Column="0" Text="Loaded client:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Grid.Column="1" x:Name="ClientText" VerticalAlignment="Center" Classes="dim" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="3" Text="Server root:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                <TextBox Grid.Column="4" x:Name="ServerRootBox" Watermark="folder that contains data/ (TFS-1.5-Downgrades-8.60)"/>
+                <Button Grid.Column="5" Classes="tool" i:Attached.Icon="fa-folder-open" Content="Browse…" Margin="6,0,0,0" Click="BrowseServerRoot_Click"/>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="1" Margin="8" x:Name="Tabs">
+            <!-- 1. consistency report -->
+            <TabItem Header="Consistency">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="4">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6">
+                        <Button x:Name="RunCheckButton" Classes="tool primary" i:Attached.Icon="fa-play" Content="Run check" Click="RunCheck_Click"/>
+                        <Button x:Name="CancelCheckButton" Classes="tool" i:Attached.Icon="fa-stop" Content="Cancel" IsEnabled="False" Click="CancelCheck_Click"/>
+                        <ProgressBar x:Name="CheckProgress" Width="220" Minimum="0" Maximum="1" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="CheckStage" VerticalAlignment="Center" Classes="dim"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,8">
+                        <TextBlock Text="Severity:" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="SeverityFilter" Width="120" SelectedIndex="0" SelectionChanged="Filter_Changed">
+                            <ComboBoxItem Content="All"/>
+                            <ComboBoxItem Content="Error"/>
+                            <ComboBoxItem Content="Warning"/>
+                            <ComboBoxItem Content="Info"/>
+                            <ComboBoxItem Content="Error + Warning"/>
+                        </ComboBox>
+                        <TextBlock Text="Category:" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <ComboBox x:Name="CategoryFilter" Width="170" SelectionChanged="Filter_Changed"/>
+                        <TextBox x:Name="TextFilter" Width="260" Watermark="Search id or text…" TextChanged="TextFilter_Changed"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-copy" Content="Copy" Click="CopyFindings_Click"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-floppy-disk" Content="Save as TSV…" Click="SaveFindings_Click"/>
+                    </StackPanel>
+                    <Border Grid.Row="2" Classes="card" Padding="0">
+                        <Grid RowDefinitions="Auto,*">
+                            <Grid Grid.Row="0" ColumnDefinitions="80,150,70,*" Margin="8,4">
+                                <TextBlock Grid.Column="0" Text="Severity" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="1" Text="Category" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="2" Text="Id" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Column="3" Text="Message" FontWeight="SemiBold"/>
+                            </Grid>
+                            <ListBox Grid.Row="1" x:Name="FindingList" SelectionMode="Multiple">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="80,150,70,*">
+                                            <TextBlock Grid.Column="0" Text="{Binding SeverityText}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Category}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding IdText}"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding Message}" TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                    <TextBlock Grid.Row="3" x:Name="FindingSummary" Classes="dim" Margin="0,6,0,0"/>
+                </Grid>
+            </TabItem>
+
+            <!-- 2. things guard -->
+            <TabItem Header="Things guard">
+                <Grid RowDefinitions="Auto,Auto,*" Margin="4">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6">
+                        <Button x:Name="HashButton" Classes="tool primary" i:Attached.Icon="fa-fingerprint" Content="Hash loaded things" Click="HashThings_Click"/>
+                    </StackPanel>
+                    <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8,0,8">
+                        <TextBlock Grid.Column="0" Text="Channel manifest:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="1" x:Name="ManifestBox" Watermark="dist/wolfupdate/manifest.json or builds/N.json"/>
+                        <Button Grid.Column="2" Classes="tool" i:Attached.Icon="fa-folder-open" Content="Browse…" Margin="6,0,0,0" Click="BrowseManifest_Click"/>
+                        <Button Grid.Column="3" x:Name="CompareManifestButton" Classes="tool" i:Attached.Icon="fa-code-compare" Content="Compare" Margin="6,0,0,0" Click="CompareManifest_Click"/>
+                    </Grid>
+                    <Border Grid.Row="2" Classes="card">
+                        <TextBox x:Name="GuardText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" FontFamily="monospace" VerticalAlignment="Stretch" VerticalContentAlignment="Top"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- 3. things diff -->
+            <TabItem Header="Things diff">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="4">
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto">
+                        <TextBlock Grid.Column="0" Text="Original dat:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="1" x:Name="OriginalDatBox" Watermark="Tibia.dat-bak (written by the first Compile), or pick the original"/>
+                        <Button Grid.Column="2" Classes="tool" i:Attached.Icon="fa-folder-open" Content="Browse…" Margin="6,0,0,0" Click="BrowseOriginalDat_Click"/>
+                        <Button Grid.Column="3" x:Name="DiffButton" Classes="tool primary" i:Attached.Icon="fa-code-compare" Content="Compare" Margin="6,0,0,0" Click="ComputeDiff_Click"/>
+                    </Grid>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,8">
+                        <TextBlock Text="Show:" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="DiffCategoryFilter" Width="120" SelectedIndex="0" SelectionChanged="DiffFilter_Changed">
+                            <ComboBoxItem Content="All"/>
+                            <ComboBoxItem Content="Item"/>
+                            <ComboBoxItem Content="Outfit"/>
+                            <ComboBoxItem Content="Effect"/>
+                            <ComboBoxItem Content="Missile"/>
+                        </ComboBox>
+                        <ComboBox x:Name="DiffKindFilter" Width="120" SelectedIndex="0" SelectionChanged="DiffFilter_Changed">
+                            <ComboBoxItem Content="All"/>
+                            <ComboBoxItem Content="new"/>
+                            <ComboBoxItem Content="art"/>
+                            <ComboBoxItem Content="gameplay"/>
+                            <ComboBoxItem Content="drawing"/>
+                            <ComboBoxItem Content="removed"/>
+                        </ComboBox>
+                        <Button Classes="tool" i:Attached.Icon="fa-floppy-disk" Content="Export JSON…" Click="ExportDiffJson_Click"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-floppy-disk" Content="Export TSV…" Click="ExportDiffTsv_Click"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-copy" Content="Copy checklist" Click="CopyChecklist_Click"/>
+                    </StackPanel>
+                    <Grid Grid.Row="2" ColumnDefinitions="*,6,*">
+                        <Border Grid.Column="0" Classes="card" Padding="0">
+                            <Grid RowDefinitions="Auto,*">
+                                <Grid Grid.Row="0" ColumnDefinitions="70,70,80,*" Margin="8,4">
+                                    <TextBlock Grid.Column="0" Text="Type" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="1" Text="Id" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="2" Text="Change" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="3" Text="Details" FontWeight="SemiBold"/>
+                                </Grid>
+                                <ListBox Grid.Row="1" x:Name="DiffList">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="70,70,80,*">
+                                                <TextBlock Grid.Column="0" Text="{Binding CategoryText}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Id}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Kind}"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding Details}" TextWrapping="Wrap"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+                        <GridSplitter Grid.Column="1" ResizeDirection="Columns"/>
+                        <Border Grid.Column="2" Classes="card">
+                            <TextBox x:Name="ChecklistText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" FontFamily="monospace" VerticalAlignment="Stretch" VerticalContentAlignment="Top"
+                                     Watermark="The follow-up checklist appears here after Compare."/>
+                        </Border>
+                    </Grid>
+                    <TextBlock Grid.Row="3" x:Name="DiffSummary" Classes="dim" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                </Grid>
+            </TabItem>
+
+            <!-- 4. export for owner approval -->
+            <TabItem Header="Export for approval">
+                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,*" Margin="4">
+                    <WrapPanel Grid.Row="0" Orientation="Horizontal">
+                        <TextBlock Text="Server files (from the server root):" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ExportOtb" Content="data/items/items.otb" IsChecked="True" Margin="0,0,12,0"/>
+                        <CheckBox x:Name="ExportItemsXml" Content="data/items/items.xml" IsChecked="True" Margin="0,0,12,0"/>
+                        <CheckBox x:Name="ExportOutfitsXml" Content="data/XML/outfits.xml" IsChecked="False" Margin="0,0,12,0"/>
+                    </WrapPanel>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,4">
+                        <TextBlock Text="Other changed server files (monsters, …):" VerticalAlignment="Center"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-plus" Content="Add files…" Click="AddServerFiles_Click"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-trash" Content="Remove selected" Click="RemoveServerFiles_Click"/>
+                        <Button Classes="tool" i:Attached.Icon="fa-eraser" Content="Clear" Click="ClearServerFiles_Click"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="2" Classes="dim" TextWrapping="Wrap"
+                               Text="Only files under data/ with .lua .xml .otbm .otb .json .txt .png, at most 256 MB each, never config.lua / key*.pem / *.sql / data/logs / data/reports (newera-files checks.py)."/>
+                    <Border Grid.Row="3" Classes="card" Padding="0" Margin="0,4,0,0">
+                        <ListBox x:Name="ServerFileList" SelectionMode="Multiple"/>
+                    </Border>
+                    <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,8,0,0">
+                        <CheckBox Grid.Column="0" x:Name="ExportClient" Content="Client things" IsChecked="True" Margin="0,0,8,0"/>
+                        <TextBlock Grid.Column="1" Text="from:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="2" x:Name="ThingsDirBox" Watermark="client-mehah/data/things/860"/>
+                        <Button Grid.Column="3" Classes="tool" i:Attached.Icon="fa-folder-open" Content="Browse…" Margin="6,0,0,0" Click="BrowseThingsDir_Click"/>
+                    </Grid>
+                    <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8,0,8">
+                        <TextBlock Grid.Column="0" Text="Staging folder:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="1" x:Name="ExportDirBox" Watermark="a new, empty folder"/>
+                        <Button Grid.Column="2" Classes="tool" i:Attached.Icon="fa-folder-open" Content="Browse…" Margin="6,0,0,0" Click="BrowseExportDir_Click"/>
+                        <Button Grid.Column="3" x:Name="ExportButton" Classes="tool primary" i:Attached.Icon="fa-box-archive" Content="Export" Margin="6,0,0,0" Click="Export_Click"/>
+                    </Grid>
+                    <Border Grid.Row="6" Classes="card">
+                        <TextBox x:Name="ExportLog" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" FontFamily="monospace" VerticalAlignment="Stretch" VerticalContentAlignment="Top"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="2" Classes="statusbar">
+            <TextBlock x:Name="StatusText" Classes="dim" Text="Ready"/>
+        </Border>
+    </Grid>
+</Window>
