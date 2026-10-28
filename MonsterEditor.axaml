@@ -75,11 +75,18 @@
                                        FontWeight="SemiBold" FontSize="16"/>
                             <TextBlock x:Name="HeaderHint" Classes="dim"
                                        Text="Load a monster folder (e.g. data-otservbr-global/monster) or ➕ create a new one."/>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock x:Name="FormatText" FontSize="11" Opacity="0.75" VerticalAlignment="Center"/>
+                                <Border x:Name="GeneratedBadge" IsVisible="False" CornerRadius="3" Padding="6,1"
+                                        Background="#33E0A030" BorderBrush="#E0A030" BorderThickness="1">
+                                    <TextBlock Text="⚠ generated file - regenerating it overwrites edits" FontSize="11"/>
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <TabControl Grid.Row="1" Margin="0,8,0,0">
+                <TabControl x:Name="DetailTabs" Grid.Row="1" Margin="0,8,0,0">
                     <!-- Basic -->
                     <TabItem Header="Basic">
                         <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
@@ -174,7 +181,7 @@
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Static Attack Chance" VerticalAlignment="Center"/>
                                     <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="StaticAttackBox" Minimum="0" Maximum="100" FormatString="0" ValueChanged="Field_Num"/>
                                     <TextBlock Grid.Row="0" Grid.Column="3" Text="Target Distance" VerticalAlignment="Center"/>
-                                    <NumericUpDown Grid.Row="0" Grid.Column="4" x:Name="TargetDistanceBox" Minimum="0" Maximum="10" FormatString="0" ValueChanged="Field_Num"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="4" x:Name="TargetDistanceBox" Minimum="0" Maximum="20" FormatString="0" ValueChanged="Field_Num"/>
 
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Run Health" VerticalAlignment="Center" Margin="0,4,0,0"/>
                                     <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="RunHealthBox" Minimum="0" Maximum="999999" FormatString="0" Margin="0,4,0,0" ValueChanged="Field_Num"/>
@@ -184,7 +191,42 @@
                     </TabItem>
 
                     <!-- Bestiary -->
-                    <TabItem Header="Bestiary">
+                    <!-- Loot (revscript monsters: one entry per `do local loot = Loot() ... end` block) -->
+                    <TabItem x:Name="LootTab" Header="Loot">
+                        <Grid RowDefinitions="Auto,Auto,*" Margin="8">
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+                                <Button x:Name="LootAddButton" Classes="tool" i:Attached.Icon="fa-plus" Content="Add item" Click="LootAdd_Click"/>
+                                <TextBlock x:Name="LootHint" VerticalAlignment="Center" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                                           Text="Chance is out of 100000. Only changed entries are rewritten; a changed id drops the old '-- item name' comment unless you edit it."/>
+                            </StackPanel>
+                            <Grid Grid.Row="1" ColumnDefinitions="110,130,100,*,36" Margin="4,0,4,2">
+                                <TextBlock Grid.Column="0" Text="Item id" FontSize="11" Opacity="0.7"/>
+                                <TextBlock Grid.Column="1" Text="Chance" FontSize="11" Opacity="0.7"/>
+                                <TextBlock Grid.Column="2" Text="Max count" FontSize="11" Opacity="0.7"/>
+                                <TextBlock Grid.Column="3" Text="Comment" FontSize="11" Opacity="0.7"/>
+                            </Grid>
+                            <ListBox Grid.Row="2" x:Name="LootList">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="110,130,100,*,36" ToolTip.Tip="{Binding LockReason}">
+                                            <NumericUpDown Grid.Column="0" Value="{Binding Id, Mode=TwoWay}" IsEnabled="{Binding IsEditable}"
+                                                           Minimum="0" Maximum="65535" FormatString="0" Margin="0,0,4,0"/>
+                                            <NumericUpDown Grid.Column="1" Value="{Binding Chance, Mode=TwoWay}" IsEnabled="{Binding IsEditable}"
+                                                           Minimum="0" Maximum="999999999" FormatString="0" Margin="0,0,4,0"/>
+                                            <NumericUpDown Grid.Column="2" Value="{Binding MaxCount, Mode=TwoWay}" IsEnabled="{Binding IsEditable}"
+                                                           Minimum="0" Maximum="999999" FormatString="0" Margin="0,0,4,0"/>
+                                            <TextBox Grid.Column="3" Text="{Binding Comment, Mode=TwoWay}" IsEnabled="{Binding IsEditable}"
+                                                     Margin="0,0,4,0"/>
+                                            <Button Grid.Column="4" i:Attached.Icon="fa-trash" ToolTip.Tip="Remove this loot entry"
+                                                    Click="LootDelete_Click"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem x:Name="BestiaryTab" Header="Bestiary">
                         <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="6">
                                 <CheckBox x:Name="HasBestiaryCb" Content="Has Bestiary entry"
@@ -221,7 +263,7 @@
                     </TabItem>
 
                     <!-- Bosstiary -->
-                    <TabItem Header="Bosstiary">
+                    <TabItem x:Name="BosstiaryTab" Header="Bosstiary">
                         <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="6">
                                 <CheckBox x:Name="HasBosstiaryCb" Content="Has Bosstiary entry (reward boss)"
@@ -243,7 +285,7 @@
                     </TabItem>
 
                     <!-- Raw blocks -->
-                    <TabItem Header="Raw Blocks">
+                    <TabItem x:Name="RawTab" Header="Raw Blocks">
                         <Grid RowDefinitions="Auto,*">
                             <TextBlock Grid.Row="0" Margin="8,8,8,4" FontSize="11" Opacity="0.7"
                                        Text="Complex blocks are kept verbatim. Edit as Lua table syntax; blank = use default."/>
@@ -268,7 +310,7 @@
                         <Grid RowDefinitions="Auto,*" Margin="8">
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
                                 <Button Content="🔄 Refresh" Click="RefreshPreview_Click"/>
-                                <TextBlock Text="Read-only view of what will be written to disk."
+                                <TextBlock x:Name="PreviewHint" Text="Read-only view of what will be written to disk."
                                            VerticalAlignment="Center" FontSize="11" Opacity="0.7"/>
                             </StackPanel>
                             <TextBox Grid.Row="1" x:Name="PreviewBox" AcceptsReturn="True"
