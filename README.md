@@ -8,6 +8,12 @@ Linux / macOS / Windows port of the original Windows WPF editor, rebuilt on
 **.NET 9.0 + Avalonia 11** with **Semi.Avalonia** theming, SkiaSharp for image
 work and Magick.NET for GIF/APNG handling.
 
+## What's new in v2.3
+
+The editor updates itself from GitHub releases: it checks at startup, shows the
+release notes and can download, verify (SHA-256) and install the new version,
+then restart. See [`CHANGELOG.md`](CHANGELOG.md).
+
 ## What's new in v2.2
 
 Audit release — see [`CHANGELOG.md`](CHANGELOG.md) for the full list.

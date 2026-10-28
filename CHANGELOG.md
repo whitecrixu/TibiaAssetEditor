@@ -4,6 +4,23 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.3 — Updates from GitHub
+
+- **The editor checks GitHub for a new release** at startup (in the
+  background) and shows what changed, with *Update now*, *Open on GitHub*,
+  *Skip this version* and *Later*.
+- **Update now** downloads the package for your system, checks it against the
+  SHA-256 GitHub publishes for the release file, swaps the program files and
+  restarts. The previous files are kept as `*.old` until the next start, and
+  a failed update puts them back.
+- *Check for updates* button and a *Check at startup* switch on the main
+  screen; the installed version is shown next to them.
+- Self-update works for the released single-file builds (Linux x64, Windows
+  x64) when the program folder is writable; otherwise the window links to the
+  GitHub release.
+
+---
+
 ## V2.2 — Audit release
 
 Full audit of the editor and fixes for everything it found, plus new tools for

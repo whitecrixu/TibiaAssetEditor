@@ -17,10 +17,19 @@ public static class AppPaths
     /// <summary>A file shipped next to the executable.</summary>
     public static string Bundled(string fileName) => Path.Combine(BaseDirectory, fileName);
 
+    /// <summary>Tests point this at a temp folder so they never touch the real config.</summary>
+    public static string? ConfigDirectoryOverride { get; set; }
+
     public static string ConfigDirectory
     {
         get
         {
+            if (ConfigDirectoryOverride != null)
+            {
+                Directory.CreateDirectory(ConfigDirectoryOverride);
+                return ConfigDirectoryOverride;
+            }
+
             // Create: without it .NET returns "" when ~/.config does not exist yet, which would put the
             // folder in the current directory again
             string root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create);

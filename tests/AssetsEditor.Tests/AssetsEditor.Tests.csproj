@@ -32,6 +32,7 @@
     <Compile Include="../../OTB/*.cs" LinkBase="Src/OTB" />
     <Compile Include="../../ItemsXml.cs" Link="Src/ItemsXml.cs" />
     <Compile Include="../../AppPaths.cs" Link="Src/AppPaths.cs" />
+    <Compile Include="../../UpdateService.cs" Link="Src/UpdateService.cs" />
     <Compile Include="../../MonsterData.cs" Link="Src/MonsterData.cs" />
     <Compile Include="../../MonsterRevscript.cs" Link="Src/MonsterRevscript.cs" />
     <None Include="../../Appearances.xml" Link="Appearances.xml" CopyToOutputDirectory="PreserveNewest" />

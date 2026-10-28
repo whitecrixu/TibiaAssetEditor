@@ -99,6 +99,60 @@ public partial class MainWindow : Window
         };
 
         CurrentPresetDropdown.SelectedIndex = Math.Clamp(SettingsList.LastPresetChoice, 0, Math.Max(CurrentPresetDropdown.ItemCount - 1, 0));
+
+        UpdateService.CleanupAfterUpdate();
+        CheckUpdatesToggle.IsChecked = SettingsList.CheckForUpdates;
+        VersionLabel.Text = $"v{UpdateService.CurrentVersion}";
+        Opened += async (_, _) =>
+        {
+            if (SettingsList.CheckForUpdates)
+                await CheckForUpdatesAsync(manual: false);
+        };
+    }
+
+    private UpdateWindow? _updateWindow;
+
+    // manual: also report "up to date" and errors, and offer a skipped version again
+    private async Task CheckForUpdatesAsync(bool manual)
+    {
+        UpdateInfo? info;
+        try
+        {
+            info = await UpdateService.CheckAsync();
+        }
+        catch (Exception ex)
+        {
+            Log($"Update check failed: {ex.Message}", "Warning");
+            if (manual)
+                ErrorManager.ShowWarning($"Could not reach GitHub to check for updates.\n\n{ex.Message}");
+            return;
+        }
+
+        if (info == null)
+        {
+            if (manual)
+                ErrorManager.ShowInfo($"You have the latest version (v{UpdateService.CurrentVersion}).");
+            return;
+        }
+        Log($"Update available: {info.Tag} (installed v{UpdateService.CurrentVersion})");
+        if (!manual && SettingsList.SkippedUpdateVersion == info.Version.ToString())
+            return;
+
+        if (_updateWindow != null) { _updateWindow.Activate(); return; }
+        _updateWindow = new UpdateWindow(info);
+        _updateWindow.Closed += (_, _) => _updateWindow = null;
+        _updateWindow.Show(this);
+    }
+
+    private async void CheckUpdates_Click(object? sender, RoutedEventArgs e)
+    {
+        await CheckForUpdatesAsync(manual: true);
+    }
+
+    private void CheckUpdatesToggle_Changed(object? sender, RoutedEventArgs e)
+    {
+        SettingsList.CheckForUpdates = CheckUpdatesToggle.IsChecked == true;
+        PersistSettings();
     }
 
     private void LoadDatChoices()
@@ -128,6 +182,10 @@ public partial class MainWindow : Window
         public int DefaultPreviewFps { get; set; } = 5;
         // Bookmarks: "outfit:123", "item:456", ...
         public List<string> Bookmarks { get; set; } = [];
+
+        // GitHub release check at startup; a version the user chose to skip is not offered again
+        public bool CheckForUpdates { get; set; } = true;
+        public string? SkippedUpdateVersion { get; set; }
     }
 
     public static Settings GetSettings() => SettingsList;
