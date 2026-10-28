@@ -185,9 +185,7 @@ public class LegacyFormatTests : IDisposable
         {
             blue.Erase(SKColors.Blue);
             byte[] compressed = Sprite.CompressBitmap(blue, false);
-            storage.Sprites[3] = new Sprite { ID = 3, CompressedPixels = compressed, Size = (uint)compressed.Length };
-            storage.SprLists[3] = new MemoryStream();
-            storage.MarkModified(3);
+            storage.SetSprite(3, compressed);
         }
 
         string output = Path.Combine(_dir, "out.spr");
@@ -198,5 +196,24 @@ public class LegacyFormatTests : IDisposable
         Assert.Equal(SKColors.Red, PixelOf(reread, 1));
         Assert.Equal(0, PixelOf(reread, 2).Alpha);
         Assert.Equal(SKColors.Blue, PixelOf(reread, 3));
+    }
+
+    [Fact]
+    public void Spr_added_sprite_is_appended()
+    {
+        var storage = new SpriteStorage(WriteSampleSpr(), false);
+        storage.LoadSprites();
+        using var yellow = new SKBitmap(32, 32, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+        yellow.Erase(SKColors.Yellow);
+        uint id = storage.AddSprite(Sprite.CompressBitmap(yellow, false));
+        Assert.Equal(4u, id);
+
+        string output = Path.Combine(_dir, "out.spr");
+        storage.Compile(output, storage.Signature, false, true, null);
+        var reread = new SpriteStorage(output, false);
+        reread.LoadSprites();
+        Assert.Equal(4u, reread.SpriteCount);
+        Assert.Equal(SKColors.Yellow, PixelOf(reread, 4));
+        Assert.Equal(SKColors.Red, PixelOf(reread, 1));
     }
 }

@@ -8,6 +8,20 @@ Linux / macOS / Windows port of the original Windows WPF editor, rebuilt on
 **.NET 9.0 + Avalonia 11** with **Semi.Avalonia** theming, SkiaSharp for image
 work and Magick.NET for GIF/APNG handling.
 
+## What's new in v2.2
+
+Audit release — see [`CHANGELOG.md`](CHANGELOG.md) for the full list.
+
+- Starts from anywhere (desktop shortcuts); settings in `~/.config/TibiaMultiToolEditor`.
+- Legacy 8.60 editor: texture/slot editing, image import split into tiles,
+  import from other clients and OBD, animated preview, compile change summary.
+- Modern editor: catalog written with lowercase keys again, many flag
+  round-trip fixes, safe sprite deletion and publish.
+- Monster Editor edits TFS revscript (`mType:`) monsters in place.
+- New **NewEra Tools**: consistency report (dat / otb / items.xml / monsters),
+  things hashes, diff and export for approval.
+- Tests: `dotnet test tests/AssetsEditor.Tests`.
+
 ## What's new in v2.1
 
 Compatibility update for **TFS 1.x / protocol 8.60** servers with OTClient

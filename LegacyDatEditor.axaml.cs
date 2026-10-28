@@ -14,6 +14,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Google.Protobuf;
 using SkiaSharp;
 using Tibia.Protobuf.Appearances;
 
@@ -43,6 +44,46 @@ namespace Assets_Editor
         private ShowList? _dragSprite;
         private Point _dragStart;
         private bool _dragging;
+
+        // the appearances as last loaded or compiled; closing with other content asks first
+        private byte[]? _compiledSnapshot;
+        private bool _closeConfirmed;
+
+        private bool HasUncompiledChanges()
+        {
+            var storage = MainWindow.MainSprStorage;
+            lock (storage.Modified)
+                if (storage.Modified.Count > 0 || storage.SpriteCount != storage.FileSpriteCount)
+                    return true;
+            return MainWindow.appearances != null && _compiledSnapshot != null
+                && !MainWindow.appearances.ToByteArray().AsSpan().SequenceEqual(_compiledSnapshot);
+        }
+
+        protected override void OnClosing(WindowClosingEventArgs e)
+        {
+            base.OnClosing(e);
+            if (_closeConfirmed)
+                return;
+            if (_compiling)
+            {
+                e.Cancel = true; // the files are being written
+                return;
+            }
+            if (!HasUncompiledChanges())
+                return;
+
+            // closing this window ends the app: ask before throwing edits away
+            e.Cancel = true;
+            Dispatcher.UIThread.Post(async () =>
+            {
+                if (await ErrorManager.ConfirmAsync("Unsaved changes",
+                        "There are edits that were not compiled into the client files yet. Close and discard them?"))
+                {
+                    _closeConfirmed = true;
+                    Close();
+                }
+            });
+        }
 
         protected override void OnClosed(EventArgs e)
         {
@@ -78,6 +119,7 @@ namespace Assets_Editor
 
             SprListView.ItemsSource = MainWindow.AllSprList;
             loadedVersion = versionInfo;
+            _compiledSnapshot = appearances.ToByteArray();
             isPageLoaded = true;
             UpdateShowList(ObjectMenu.SelectedIndex);
 
@@ -1123,6 +1165,7 @@ namespace Assets_Editor
             try
             {
                 string? error = null;
+                string diffSummary = "";
                 await Task.Run(() =>
                 {
                     try
@@ -1138,6 +1181,22 @@ namespace Assets_Editor
                         {
                             BackupOnce(sprPath);
                             storage.Compile(sprPath, MainWindow.SprSignature, storage.Transparency, preset.Extended, null);
+                        }
+
+                        // what changed against the untouched original, for the follow-up steps (server otb, minimap, site)
+                        if (File.Exists(datPath + "-bak"))
+                        {
+                            try
+                            {
+                                var diff = ThingsDiff.Compute(MainWindow.appearances, datPath + "-bak", loadedVersion.Structure, preset);
+                                diffSummary = diff.HasChanges
+                                    ? $"\n\nChanges against the original ({Path.GetFileName(datPath)}-bak):\n{diff.Summary()}\n\nNewEra Tools > Things diff lists the follow-up steps."
+                                    : "";
+                            }
+                            catch (Exception ex)
+                            {
+                                MainWindow.Log($"Things diff after compile failed: {ex.Message}", "Warning");
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -1155,7 +1214,8 @@ namespace Assets_Editor
                 }
 
                 MainWindow.Log($"Compiled {datPath}" + (sprChanged ? $" and {sprPath}" : ""));
-                ErrorManager.ShowInfo("Compiled successfully." + (sprChanged ? "" : " (no sprite changes - spr untouched)"));
+                ErrorManager.ShowInfo("Compiled successfully." + (sprChanged ? "" : " (no sprite changes - spr untouched)") + diffSummary);
+                _compiledSnapshot = MainWindow.appearances.ToByteArray();
             }
             finally
             {

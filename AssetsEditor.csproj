@@ -5,8 +5,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Assets_Editor</RootNamespace>
     <AssemblyName>Tibia MultiTool Editor</AssemblyName>
-    <FileVersion>2.1.0</FileVersion>
-    <AssemblyVersion>2.1.0</AssemblyVersion>
+    <FileVersion>2.2.0</FileVersion>
+    <AssemblyVersion>2.2.0</AssemblyVersion>
     <Product>Tibia MultiTool Editor By WhiteCrixu</Product>
     <Description>Cross-platform Tibia MultiTool Editor</Description>
     <Nullable>enable</Nullable>
@@ -22,6 +22,8 @@
     <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.6.0" />
     <PackageReference Include="Projektanker.Icons.Avalonia.FontAwesome" Version="9.6.0" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.2.3" />
+    <PackageReference Include="Semi.Avalonia.DataGrid" Version="11.2.1.4" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.2.0" />
     <PackageReference Include="Google.Protobuf" Version="3.21.4" />

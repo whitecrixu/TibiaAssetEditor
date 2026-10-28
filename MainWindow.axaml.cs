@@ -853,7 +853,7 @@ public partial class MainWindow : Window
     {
         // legacy spr: SprLists only holds placeholders until a sprite is decoded, the storage reads it
         if (LegacyClient && !string.IsNullOrEmpty(MainSprStorage.SprPath))
-            return spriteId >= 0 && MainSprStorage.Sprites.ContainsKey((uint)spriteId)
+            return spriteId >= 0 && spriteId <= MainSprStorage.SpriteCount
                 ? MainSprStorage.getSpriteStream((uint)spriteId)
                 : null;
 

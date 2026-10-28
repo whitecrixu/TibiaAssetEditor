@@ -8,6 +8,9 @@
              and a better dark mode than the default Fluent one. The resource
              class lives at the DLL root, hence the simple avares:// URI. -->
         <StyleInclude Source="avares://Semi.Avalonia/Index.axaml" />
+        <!-- DataGrid ships its template separately; without it the grids (Logger, items.xml
+             attributes, Lua results) render empty. -->
+        <StyleInclude Source="avares://Semi.Avalonia.DataGrid/Index.axaml" />
 
         <!-- Project-wide design tokens + global control styles (spacing, radii,
              typography, Card / panelHeader / hero classes). Loaded after Semi

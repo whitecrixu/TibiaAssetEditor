@@ -66,7 +66,8 @@ namespace Assets_Editor
 
         public DatStructure()
         {
-            string xmlPath = "Appearances.xml";
+            // next to the executable, not the current directory (desktop shortcuts start elsewhere)
+            string xmlPath = AppPaths.Bundled("Appearances.xml");
             if (!File.Exists(xmlPath)) {
                 throw new FileNotFoundException($"Appearances XML not found: {xmlPath}");
             }

@@ -276,7 +276,7 @@ public class ObdDecoder
 
         try
         {
-            using BinaryReader br = new(new FileStream(path, FileMode.Open));
+            using BinaryReader br = new(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read));
             byte[] bytes = br.ReadBytes((int)br.BaseStream.Length);
             br.Close();
             if (bytes == null)

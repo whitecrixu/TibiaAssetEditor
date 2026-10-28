@@ -21,7 +21,12 @@ public static class AppPaths
     {
         get
         {
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TibiaMultiToolEditor");
+            // Create: without it .NET returns "" when ~/.config does not exist yet, which would put the
+            // folder in the current directory again
+            string root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create);
+            if (string.IsNullOrEmpty(root))
+                root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+            string dir = Path.Combine(root, "TibiaMultiToolEditor");
             Directory.CreateDirectory(dir);
             return dir;
         }

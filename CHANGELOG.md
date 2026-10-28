@@ -4,6 +4,89 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.2 — Audit release
+
+Full audit of the editor and fixes for everything it found, plus new tools for
+TFS 1.x / 8.60 servers. Round trips stay byte-identical; tests now guard them.
+
+### Fixed — affects every user
+- **Startup crash when launched outside the program folder** (desktop shortcut,
+  menu entry): bundled files are found next to the executable.
+- Settings, Lua scripts and the crash log now live in the per-user config folder
+  (`~/.config/TibiaMultiToolEditor`, `%APPDATA%\TibiaMultiToolEditor`); old
+  `Settings.json` / `lua_scripts.json` are migrated on first start.
+- The Lua window no longer crashes in the single-file release builds.
+- A failed settings save no longer resets every preset to defaults; saves are atomic.
+- Unexpected errors are logged and shown instead of closing the app
+  (`crash.log` in the config folder).
+- DataGrid views (Logger, items.xml attributes, Lua results) had no theme and
+  rendered empty.
+- Lua scripts run in a soft sandbox (no file system / OS access).
+- Magick.NET updated (security advisories); package versions pinned to versions
+  that exist; Avalonia.Diagnostics only in Debug builds.
+
+### Legacy 8.60 editor (Tibia.dat / Tibia.spr)
+- **Texture tab saves**: size, layers, patterns, frames (ids kept at their slot).
+- **Slot editor**: assign sprites to slots (double-click / drag), clear slots,
+  edit animation mode, loop count and per-frame durations; frame-group selector
+  for outfits.
+- **Import image**: splits an image into 32×32 tiles, adds them as sprites and
+  fills the slots. Replace no longer squashes large images.
+- **Import from another client / OBD** works: source read with its own flags,
+  next free id, sprites copied and remapped. New sprites appear in the list.
+- Preview follows direction, frame group, layer and frame; Play/Stop uses the
+  frame durations; thumbnails refresh after edits.
+- Compile locks the editor, compiles from a snapshot and shows what changed
+  against the original (`-bak`). Closing with uncompiled edits asks first.
+- Fixes: crash when switching category after scrolling, Search "Top Effect"
+  used the wrong flag, Paste Flags no longer copies trade-as/show-as ids,
+  faster sprite reads (one shared file handle), ~130 MB less memory on a
+  500k-sprite client.
+
+### Modern editor (appearances + sprite sheets)
+- Sprite Editor wrote `catalog-content.json` in camelCase (client showed no
+  graphics). One `CatalogWriter` now writes it: lowercase keys, atomic,
+  one-time `-orig` backup.
+- Flags no longer lost on save: Monk saved as Druid, Market name/vocation,
+  market categories 25–27, Lens help ids, Shift A/B, hooks/clothes/default
+  action, values clamped by number boxes; an appearance without flags no
+  longer inherits the previous one's.
+- Undo/redo restores into the right category.
+- Deleting sprites/sheets always asks, lists appearances that still use them,
+  and backs up sheets first. Publish writes everything new before removing the
+  old dat. Compile never writes a blank sheet over an unreadable one.
+- OBD import of files that reuse a sprite works; image export truncates files,
+  exports the right frame count and reports failures.
+- Sprites of unknown size are rejected before packing; sheet id allocation
+  respects gaps; Repack is honest (analysis only).
+- LZMA uses a dictionary sized to the input (~25× less memory per sheet);
+  delete / dedup / remap loops no longer quadratic.
+
+### Server tools
+- **Monster Editor edits TFS revscript monsters** (`mType:` calls) by patching
+  only the changed calls and loot blocks; unchanged files are never rewritten,
+  first save keeps `-bak`. Generated files are marked.
+- **OTB editor**: Save (overwrite with one-time `-bak`), created items appear
+  in the list, items without a sprite hash can be written.
+- **items.xml editor**: Add New proposes an id that exists in items.otb.
+
+### New: NewEra Tools (legacy clients)
+- **Consistency report**: dat ↔ items.otb (stack order, use flags; same results
+  as `items_otb.py check --dat`), items.xml ↔ otb, monsters (corpse, lookType,
+  loot) and outfits.xml ↔ dat, with filters and TSV export.
+- **Things guard**: SHA-256 of Tibia.dat/.spr/.otfi, warning for the frozen
+  client tree, comparison with an update-channel manifest.
+- **Things diff**: new / art-changed / flag-changed ids against the original
+  dat, JSON/TSV export and the follow-up checklist.
+- **Export for approval**: staging folder in the server upload layout plus the
+  client files with `SHA256SUMS` and the release order.
+
+### Development
+- `tests/AssetsEditor.Tests`: round-trip tests for legacy dat/spr, OTB,
+  items.xml and revscript monsters (`dotnet test`).
+
+---
+
 ## V2.1 — 8.60 / TFS 1.x compatibility update
 
 Full audit against a TFS 1.5 (protocol 8.60) server with an OTClient (Mehah)
