@@ -390,6 +390,32 @@ namespace Assets_Editor
             LoadTextureView(true);
 
             A_FullInfo.Text = CurrentObjectAppearance.ToString();
+            UpdateObjectHeader();
+        }
+
+        // the header above the tabs: what is selected and its shape
+        private void UpdateObjectHeader()
+        {
+            var a = CurrentObjectAppearance;
+            if (a == null)
+            {
+                ObjectTitle.Text = "No object selected";
+                ObjectSubtitle.Text = "Pick an object on the left.";
+                ObjectThumbnail.Source = null;
+                return;
+            }
+
+            string category = ObjectMenu.SelectedIndex switch { 0 => "Outfit", 1 => "Item", 2 => "Effect", 3 => "Missile", _ => "Object" };
+            ObjectTitle.Text = string.IsNullOrWhiteSpace(a.Name) ? $"{category} #{a.Id}" : $"{category} #{a.Id} — {a.Name}";
+            if (a.FrameGroup.Count == 0)
+            {
+                ObjectSubtitle.Text = "No sprites";
+                return;
+            }
+            var info = a.FrameGroup[0].SpriteInfo;
+            string groups = a.FrameGroup.Count > 1 ? $", {a.FrameGroup.Count} frame groups" : "";
+            ObjectSubtitle.Text = $"{info.PatternWidth}×{info.PatternHeight} tiles, {info.PatternLayers} layer(s), " +
+                                  $"patterns {info.PatternX}×{info.PatternY}×{info.PatternZ}, {info.PatternFrames} frame(s){groups}";
         }
 
         private void ApplyCurrentFlagsFromUI()
@@ -655,6 +681,7 @@ namespace Assets_Editor
                 MemoryStream stream = LegacyAppearance.GetObjectImage(CurrentObjectAppearance, MainWindow.MainSprStorage,
                     _viewGroup, ViewPatternX, ViewPatternY, ViewPatternZ, ViewFrame, IsOutfitCategory ? ViewLayer : -1);
                 SpriteViewerImge.Source = Utils.MemoryStreamToBitmap(stream);
+                ObjectThumbnail.Source = SpriteViewerImge.Source;
                 SprFrameLabel.Text = $"{ViewFrame + 1}/{Math.Max(1u, info.PatternFrames)}";
             }
             catch (Exception ex)

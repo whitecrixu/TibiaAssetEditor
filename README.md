@@ -8,6 +8,12 @@ Linux / macOS / Windows port of the original Windows WPF editor, rebuilt on
 **.NET 9.0 + Avalonia 11** with **Semi.Avalonia** theming, SkiaSharp for image
 work and Magick.NET for GIF/APNG handling.
 
+## What's new in v2.4
+
+Clearer interface: redesigned main screen, legacy 8.60 editor and OTB editor,
+icons that show on Linux (bundled Noto Emoji), working secondary colours in
+both themes. See [`CHANGELOG.md`](CHANGELOG.md).
+
 ## What's new in v2.3
 
 The editor updates itself from GitHub releases: it checks at startup, shows the

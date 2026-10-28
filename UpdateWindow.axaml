@@ -9,9 +9,9 @@
         <TextBlock Grid.Row="1" x:Name="VersionText" Classes="dim" Margin="0,4,0,10" TextWrapping="Wrap"/>
 
         <Border Grid.Row="2" Classes="card" Padding="0">
-            <TextBox x:Name="NotesBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
-                     BorderThickness="0" Background="Transparent"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+            <ScrollViewer Padding="12">
+                <SelectableTextBlock x:Name="NotesBox" TextWrapping="Wrap"/>
+            </ScrollViewer>
         </Border>
 
         <StackPanel Grid.Row="3" Margin="0,10,0,0" Spacing="4">
@@ -26,7 +26,7 @@
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button x:Name="LaterButton" Content="Later" Click="Later_Click"/>
-                <Button x:Name="UpdateButton" Content="Update now" Classes="Primary" IsDefault="True" Click="Update_Click"/>
+                <Button x:Name="UpdateButton" Content="Update now" Classes="primary" IsDefault="True" Click="Update_Click"/>
             </StackPanel>
         </Grid>
     </Grid>

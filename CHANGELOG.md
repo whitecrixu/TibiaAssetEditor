@@ -4,6 +4,29 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.4 — Clearer interface
+
+- **Icons show on Linux**: the toolbars use emoji icons and most Linux systems
+  have no emoji font, so they appeared as empty boxes. Noto Emoji (SIL OFL) is
+  now bundled as a fallback font.
+- **Main screen** redesigned: header with version and update check, one
+  *Client* card (preset, folder, file format, detected version, counts as
+  tiles, a full-width *Load Assets* button), equal tool tiles.
+- **Legacy 8.60 editor** redesigned: toolbar with labelled buttons (Compile,
+  Import, Search, OTB), a header showing the selected object with its picture
+  and shape and a *Save object* button, flags grouped into cards (Ground &
+  layering, Use & content, Movement & blocking, Display, Info & market),
+  Texture tab in cards, labelled list actions.
+- **OTB editor** redesigned the same way (Open / Save / Save as, grouped form).
+- Secondary text, tile backgrounds and button hover colours referenced colour
+  names the theme does not define, so they never applied; fixed everywhere.
+- Fixed: thumbnails in the long legacy and OTB lists loaded for the wrong rows
+  once scrolled far (row height did not match what the loader assumed).
+- Update window: release notes start at the top; disabled main buttons stay
+  readable.
+
+---
+
 ## V2.3 — Updates from GitHub
 
 - **The editor checks GitHub for a new release** at startup (in the

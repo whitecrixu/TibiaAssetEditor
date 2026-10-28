@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Media;
+using Avalonia.Media.Fonts;
 using Projektanker.Icons.Avalonia;
 using Projektanker.Icons.Avalonia.FontAwesome;
 using System;
@@ -46,5 +48,10 @@ class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            // the toolbars use emoji glyphs; Linux usually has no emoji font, so they rendered as boxes
+            .ConfigureFonts(fonts => fonts.AddFontCollection(new EmbeddedFontCollection(EmojiFontKey, new Uri("avares://AssetsEditor.Fonts"))))
+            .With(new FontManagerOptions { FontFallbacks = new[] { new FontFallback { FontFamily = new FontFamily($"{EmojiFontKey}#Noto Emoji") } } })
             .LogToTrace();
+
+    private static readonly Uri EmojiFontKey = new("fonts:Emoji");
 }

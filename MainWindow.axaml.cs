@@ -361,12 +361,11 @@ public partial class MainWindow : Window
 
     private void UpdateAppearancesCount()
     {
-        AppearancesCount.Text =
-            $"Items:\t{ObjectCount}\n" +
-            $"Outfits:\t{OutfitCount}\n" +
-            $"Effects:\t{EffectCount}\n" +
-            $"Missiles:\t{MissileCount}\n" +
-            $"Sprites:\t{SprLists.Count}";
+        CountItems.Text = ObjectCount.ToString("N0");
+        CountOutfits.Text = OutfitCount.ToString("N0");
+        CountEffects.Text = EffectCount.ToString("N0");
+        CountMissiles.Text = MissileCount.ToString("N0");
+        CountSprites.Text = SprLists.Count.ToString("N0");
     }
 
     private void LoadAppearances()

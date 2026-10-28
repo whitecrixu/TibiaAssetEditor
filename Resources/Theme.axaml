@@ -72,7 +72,7 @@
     <!-- Hero: the big header band that summarises the current selection
          (monster/proficiency/item). A slightly tinted card. -->
     <Style Selector="Border.hero">
-        <Setter Property="Background"      Value="{DynamicResource SemiColorFillTertiary}"/>
+        <Setter Property="Background"      Value="{DynamicResource SemiColorFill0}"/>
         <Setter Property="BorderBrush"     Value="{DynamicResource SemiColorBorder}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius"    Value="{StaticResource Radius.Md}"/>
@@ -81,7 +81,7 @@
 
     <!-- Sprite slot: 1:1 container for outfit/item thumbnails -->
     <Style Selector="Border.spriteSlot">
-        <Setter Property="Background"      Value="{DynamicResource SemiColorFillTertiary}"/>
+        <Setter Property="Background"      Value="{DynamicResource SemiColorFill0}"/>
         <Setter Property="CornerRadius"    Value="{StaticResource Radius.Sm}"/>
     </Style>
 
@@ -89,7 +89,7 @@
     <Style Selector="TextBlock.panelHeader">
         <Setter Property="FontSize"     Value="{StaticResource Font.Sm}"/>
         <Setter Property="FontWeight"   Value="SemiBold"/>
-        <Setter Property="Foreground"   Value="{DynamicResource SemiColorTextSecondary}"/>
+        <Setter Property="Foreground"   Value="{DynamicResource SemiColorText2}"/>
         <Setter Property="Margin"       Value="4,12,0,6"/>
     </Style>
     <Style Selector="TextBlock.sectionTitle">
@@ -98,7 +98,7 @@
         <Setter Property="Margin"       Value="0,0,0,4"/>
     </Style>
     <Style Selector="TextBlock.dim">
-        <Setter Property="Foreground"   Value="{DynamicResource SemiColorTextSecondary}"/>
+        <Setter Property="Foreground"   Value="{DynamicResource SemiColorText2}"/>
         <Setter Property="FontSize"     Value="{StaticResource Font.Xs}"/>
     </Style>
     <Style Selector="TextBlock.mono">
@@ -143,7 +143,11 @@
         </Setter>
     </Style>
     <Style Selector="Button.primary:pointerover">
-        <Setter Property="Background"   Value="{DynamicResource SemiColorPrimaryHover}"/>
+        <Setter Property="Background"   Value="{DynamicResource SemiColorPrimaryPointerover}"/>
+    </Style>
+    <!-- disabled primary button: a neutral fill, so the dimmed label stays readable -->
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+        <Setter Property="Background"   Value="{DynamicResource SemiColorFill1}"/>
     </Style>
     <Style Selector="Button.primary:pressed">
         <Setter Property="Background"   Value="{DynamicResource SemiColorPrimaryActive}"/>

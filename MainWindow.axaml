@@ -15,6 +15,11 @@
     <Window.Styles>
         <!-- Big "tile" button for the hub -->
         <Style Selector="Button.hubTile">
+            <Setter Property="MinHeight"       Value="92"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment"   Value="Stretch"/>
+            <Setter Property="FontWeight"      Value="Normal"/>
+            <Setter Property="VerticalContentAlignment" Value="Top"/>
             <Setter Property="Background"      Value="{DynamicResource SemiColorBackground1}"/>
             <Setter Property="BorderBrush"     Value="{DynamicResource SemiColorBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -23,11 +28,32 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         </Style>
         <Style Selector="Button.hubTile:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource SemiColorFillSecondary}"/>
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}"/>
         </Style>
         <Style Selector="Button.hubTile:disabled">
-            <Setter Property="Opacity" Value="0.45"/>
+            <Setter Property="Opacity" Value="0.5"/>
         </Style>
+        <Style Selector="Button.hubTile:disabled /template/ ContentPresenter">
+            <Setter Property="Background"  Value="{DynamicResource SemiColorBackground1}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}"/>
+        </Style>
+        <Style Selector="Button.hubTile TextBlock.dim">
+            <Setter Property="FontSize" Value="{StaticResource Font.Sm}"/>
+        </Style>
+        <!-- count tiles under the client card -->
+        <Style Selector="Border.stat">
+            <Setter Property="Background"   Value="{DynamicResource SemiColorFill0}"/>
+            <Setter Property="BorderBrush"  Value="{DynamicResource SemiColorBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding"      Value="12,8"/>
+            <Setter Property="Margin"       Value="0,0,8,0"/>
+        </Style>
+        <Style Selector="TextBlock.statValue">
+            <Setter Property="FontSize"   Value="{StaticResource Font.Xl}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
         <Style Selector="Button.hubTile i|Icon">
             <Setter Property="FontSize" Value="22"/>
         </Style>
@@ -38,222 +64,233 @@
     </Window.Styles>
     <Panel>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <Grid Margin="16,34,16,16" RowDefinitions="Auto,Auto,Auto,Auto">
+            <Grid Margin="20,36,20,20" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
 
-                <!-- ═════  Preset row  ═════ -->
-                <Border Grid.Row="0" Classes="card">
-                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <TextBlock Text="Preset" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="CurrentPresetDropdown" Width="180" Height="32"/>
-                            <Button x:Name="NewPresetBtn"    Classes="tool" Content="+ New"  Click="NewPreset_Click"/>
-                            <Button x:Name="RenamePresetBtn" Classes="tool" Content="Rename" Click="RenamePreset_Click"/>
-                            <Button x:Name="DeletePresetBtn" Classes="tool" Content="Delete" Click="DeletePreset_Click"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <TextBlock Text="Density" Classes="dim" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="DensityDropdown" Width="120" Height="30"
-                                      SelectionChanged="DensityDropdown_Changed">
-                                <ComboBoxItem Content="Comfortable"/>
-                                <ComboBoxItem Content="Cozy"/>
-                                <ComboBoxItem Content="Compact"/>
-                            </ComboBox>
-                            <TextBlock Text="Light" Classes="dim" VerticalAlignment="Center"/>
-                            <ToggleSwitch x:Name="DarkModeToggle" OnContent="" OffContent=""
-                                          IsCheckedChanged="DarkModeToggle_Changed"/>
-                            <TextBlock Text="Dark" Classes="dim" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Updates from GitHub releases -->
-                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal"
-                                    Spacing="10" Margin="0,10,0,0" HorizontalAlignment="Right">
-                            <TextBlock x:Name="VersionLabel" Classes="dim" VerticalAlignment="Center"/>
-                            <Button Classes="tool" Content="Check for updates" Click="CheckUpdates_Click"
-                                    ToolTip.Tip="Look for a newer release on GitHub"/>
-                            <CheckBox x:Name="CheckUpdatesToggle" Content="Check at startup" VerticalAlignment="Center"
-                                      IsCheckedChanged="CheckUpdatesToggle_Changed"
-                                      ToolTip.Tip="Check GitHub for a new version every time the editor starts"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- ═════  Assets section  ═════ -->
-                <Grid Grid.Row="1" RowDefinitions="Auto,Auto,Auto" Margin="0,14,0,0">
-                    <TextBlock Grid.Row="0" Classes="sectionTitle" Text="Assets"/>
-
-                    <Border Grid.Row="1" Classes="card" Margin="0,6,0,0">
-                        <StackPanel Spacing="12">
-                            <!-- DAT path -->
-                            <Grid ColumnDefinitions="120,*,Auto">
-                                <TextBlock Grid.Column="0" Text="DAT file path" VerticalAlignment="Center"/>
-                                <TextBox   Grid.Column="1" x:Name="AssetsPath" IsReadOnly="True"/>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                                    <Button Classes="icon" i:Attached.Icon="fa-folder-open"
-                                            Click="SelectAssetsFolder" ToolTip.Tip="Select path"/>
-                                    <Button Classes="icon" i:Attached.Icon="fa-copy"
-                                            Click="CopyAssetsPath" ToolTip.Tip="Copy path"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <!-- status -->
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="124,0,0,0">
-                                <TextBlock x:Name="StatusIcon" Text="ℹ️" FontSize="14" VerticalAlignment="Center" IsVisible="False"/>
-                                <TextBlock x:Name="AssetsPathLoadingMessage" Text="Initializing …"
-                                           Classes="dim" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <!-- stats + toggles + version -->
-                            <Grid ColumnDefinitions="*,*,*">
-                                <Border Grid.Column="0" Classes="card" Padding="10" Margin="0,0,8,0">
-                                    <TextBox x:Name="AppearancesCount" IsReadOnly="True"
-                                             BorderThickness="0" Background="Transparent"
-                                             TextWrapping="Wrap" FontFamily="monospace"
-                                             Text="Items:&#9;0&#10;Outfits:&#9;0&#10;Effects:&#9;0&#10;Missiles:&#9;0&#10;Sprites:&#9;0"/>
-                                </Border>
-
-                                <StackPanel Grid.Column="1" Spacing="4" Margin="0,0,8,0">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <ToggleSwitch x:Name="DatExtendedToggle" OnContent="" OffContent=""
-                                                      IsEnabled="False" IsCheckedChanged="DatExtended_Changed"/>
-                                        <TextBlock Text="Extended" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <ToggleSwitch x:Name="DatTransparentToggle" OnContent="" OffContent=""
-                                                      IsEnabled="False" IsCheckedChanged="DatTransparent_Changed"/>
-                                        <TextBlock Text="Transparency" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <ToggleSwitch x:Name="DatAnimationsToggle" OnContent="" OffContent=""
-                                                      IsEnabled="False" IsCheckedChanged="DatAnimations_Changed"/>
-                                        <TextBlock Text="Improved animations" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <ToggleSwitch x:Name="DatFrameGroupsToggle" OnContent="" OffContent=""
-                                                      IsEnabled="False" IsCheckedChanged="DatFrameGroup_Changed"/>
-                                        <TextBlock Text="Frame groups" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="2" Spacing="4">
-                                    <TextBlock Classes="panelHeader" Text="Version" Margin="0,0,0,2"/>
-                                    <TextBox x:Name="AssetsVersionInfo" Text="No version loaded"
-                                             IsReadOnly="True" BorderThickness="0" Background="Transparent"
-                                             TextWrapping="Wrap"/>
-                                    <ComboBox x:Name="DatStructureDropdown" Width="160" Height="30" IsEnabled="False"/>
-                                </StackPanel>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Button Grid.Row="2" x:Name="LoadAssets" IsEnabled="False"
-                            Classes="primary" HorizontalAlignment="Center" VerticalAlignment="Top"
-                            Margin="0,8,0,0" MinWidth="220" Click="LoadAssets_Click">
+                <!-- ═════  Header: name, version, updates  ═════ -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <i:Icon Value="fa-cube" FontSize="28" Foreground="{DynamicResource SemiColorPrimary}"/>
                         <StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                                <TextBlock x:Name="LoadAssetsLabel" Text="Load Assets"/>
-                                <TextBlock Text="{Binding #LoadProgress.Value, StringFormat={}{0:0}%}"
-                                           Opacity="0.85"/>
+                            <TextBlock Text="Tibia MultiTool Editor" FontSize="{StaticResource Font.H1}" FontWeight="Bold"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock x:Name="VersionLabel" Classes="dim" VerticalAlignment="Center"/>
+                                <TextBlock Classes="dim" Text="·" VerticalAlignment="Center"/>
+                                <TextBlock Classes="dim" Text="by WhiteCrixu" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <ProgressBar x:Name="LoadProgress" Minimum="0" Maximum="100" Value="0"
-                                         Width="200" Height="6" Margin="0,4,0,0"/>
                         </StackPanel>
-                    </Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Classes="tool" Click="CheckUpdates_Click" ToolTip.Tip="Look for a newer release on GitHub">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <i:Icon Value="fa-arrows-rotate"/>
+                                <TextBlock Text="Check for updates"/>
+                            </StackPanel>
+                        </Button>
+                        <CheckBox x:Name="CheckUpdatesToggle" Content="at startup" VerticalAlignment="Center"
+                                  IsCheckedChanged="CheckUpdatesToggle_Changed"
+                                  ToolTip.Tip="Check GitHub for a new version every time the editor starts"/>
+                        <Border Width="1" Height="22" Background="{DynamicResource SemiColorBorder}" Margin="4,0"/>
+                        <ComboBox x:Name="DensityDropdown" Width="130" SelectionChanged="DensityDropdown_Changed"
+                                  ToolTip.Tip="Spacing of the interface">
+                            <ComboBoxItem Content="Comfortable"/>
+                            <ComboBoxItem Content="Cozy"/>
+                            <ComboBoxItem Content="Compact"/>
+                        </ComboBox>
+                        <TextBlock Text="Light" Classes="dim" VerticalAlignment="Center"/>
+                        <ToggleSwitch x:Name="DarkModeToggle" OnContent="" OffContent=""
+                                      IsCheckedChanged="DarkModeToggle_Changed"/>
+                        <TextBlock Text="Dark" Classes="dim" VerticalAlignment="Center"/>
+                    </StackPanel>
                 </Grid>
 
+                <!-- ═════  Client: preset, folder, format, load  ═════ -->
+                <Border Grid.Row="1" Classes="card" Padding="16">
+                    <StackPanel Spacing="14">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Grid.Column="0" Classes="sectionTitle" Text="Client" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <TextBlock Text="Preset" Classes="dim" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CurrentPresetDropdown" Width="200"/>
+                                <Button x:Name="NewPresetBtn"    Classes="tool" Content="New"    Click="NewPreset_Click" ToolTip.Tip="New preset (client folder + format)"/>
+                                <Button x:Name="RenamePresetBtn" Classes="tool" Content="Rename" Click="RenamePreset_Click"/>
+                                <Button x:Name="DeletePresetBtn" Classes="tool" Content="Delete" Click="DeletePreset_Click"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- folder -->
+                        <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" x:Name="AssetsPath" IsReadOnly="True" Watermark="Choose the client's assets folder (with Tibia.dat / Tibia.spr or catalog-content.json)"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                                    <Button Classes="tool" Click="SelectAssetsFolder" ToolTip.Tip="Choose the client folder">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <i:Icon Value="fa-folder-open"/>
+                                            <TextBlock Text="Browse..."/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="icon" i:Attached.Icon="fa-copy" Click="CopyAssetsPath" ToolTip.Tip="Copy path"/>
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock x:Name="StatusIcon" Text="ℹ️" VerticalAlignment="Center" IsVisible="False"/>
+                                <TextBlock x:Name="AssetsPathLoadingMessage" Text="Initializing …" Classes="dim" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- format + detected version -->
+                        <Grid ColumnDefinitions="*,24,*">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Classes="panelHeader" Text="FILE FORMAT" Margin="0,0,0,4"/>
+                                <Grid ColumnDefinitions="*,Auto" MinHeight="30">
+                                    <TextBlock Text="Extended (sprite ids above 65 535)" VerticalAlignment="Center"/>
+                                    <ToggleSwitch Grid.Column="1" x:Name="DatExtendedToggle" OnContent="" OffContent=""
+                                                  IsEnabled="False" IsCheckedChanged="DatExtended_Changed"/>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" MinHeight="30">
+                                    <TextBlock Text="Transparency (alpha channel)" VerticalAlignment="Center"/>
+                                    <ToggleSwitch Grid.Column="1" x:Name="DatTransparentToggle" OnContent="" OffContent=""
+                                                  IsEnabled="False" IsCheckedChanged="DatTransparent_Changed"/>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" MinHeight="30">
+                                    <TextBlock Text="Frame durations (improved animations)" VerticalAlignment="Center"/>
+                                    <ToggleSwitch Grid.Column="1" x:Name="DatAnimationsToggle" OnContent="" OffContent=""
+                                                  IsEnabled="False" IsCheckedChanged="DatAnimations_Changed"/>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" MinHeight="30">
+                                    <TextBlock Text="Frame groups (idle / moving outfits)" VerticalAlignment="Center"/>
+                                    <ToggleSwitch Grid.Column="1" x:Name="DatFrameGroupsToggle" OnContent="" OffContent=""
+                                                  IsEnabled="False" IsCheckedChanged="DatFrameGroup_Changed"/>
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Spacing="6">
+                                <TextBlock Classes="panelHeader" Text="DETECTED" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="AssetsVersionInfo" Text="No version loaded" TextWrapping="Wrap" FontFamily="monospace, Consolas, Menlo"/>
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <TextBlock Text="Dat structure" Classes="dim" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ComboBox Grid.Column="1" x:Name="DatStructureDropdown" HorizontalAlignment="Stretch" IsEnabled="False"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- counts -->
+                        <UniformGrid Columns="5">
+                            <Border Classes="stat"><StackPanel><TextBlock x:Name="CountItems" Classes="statValue" Text="0"/><TextBlock Classes="dim" Text="Items"/></StackPanel></Border>
+                            <Border Classes="stat"><StackPanel><TextBlock x:Name="CountOutfits" Classes="statValue" Text="0"/><TextBlock Classes="dim" Text="Outfits"/></StackPanel></Border>
+                            <Border Classes="stat"><StackPanel><TextBlock x:Name="CountEffects" Classes="statValue" Text="0"/><TextBlock Classes="dim" Text="Effects"/></StackPanel></Border>
+                            <Border Classes="stat"><StackPanel><TextBlock x:Name="CountMissiles" Classes="statValue" Text="0"/><TextBlock Classes="dim" Text="Missiles"/></StackPanel></Border>
+                            <Border Classes="stat" Margin="0"><StackPanel><TextBlock x:Name="CountSprites" Classes="statValue" Text="0"/><TextBlock Classes="dim" Text="Sprites"/></StackPanel></Border>
+                        </UniformGrid>
+
+                        <Button x:Name="LoadAssets" IsEnabled="False" Classes="primary" HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center" MinHeight="40" Click="LoadAssets_Click">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                    <i:Icon Value="fa-play"/>
+                                    <TextBlock x:Name="LoadAssetsLabel" Text="Load Assets"/>
+                                    <TextBlock Text="{Binding #LoadProgress.Value, StringFormat={}{0:0}%}" Opacity="0.85"/>
+                                </StackPanel>
+                                <ProgressBar x:Name="LoadProgress" Minimum="0" Maximum="100" Value="0"
+                                             Width="260" Height="4" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
                 <!-- ═════  Tools hub  ═════ -->
-                <TextBlock Grid.Row="2" Classes="sectionTitle" Text="Tools" Margin="0,20,0,0"/>
-                <UniformGrid Grid.Row="3" Columns="3" Margin="0,6,0,0">
-
-                    <!-- Requires assets loaded -->
-                    <Button Classes="hubTile" x:Name="OpenDatEditorTile" IsEnabled="False"
-                            Click="OpenDatEditor_Click" Margin="0,0,8,8">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-cube"/>
-                                <TextBlock Classes="tileTitle" Text="DAT / Appearances"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Outfits, items, effects, missiles — full appearance editor with sprites and flags."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Classes="hubTile" x:Name="OpenSpriteEditorTile" IsEnabled="False"
-                            Click="OpenSpriteEditor_Click" Margin="0,0,8,8">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-palette"/>
-                                <TextBlock Classes="tileTitle" Text="Sprite Editor"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Raw sprite sheet viewer — edit, replace and export sprites."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Classes="hubTile" Click="OpenMonsterEditor_Click" Margin="0,0,0,8">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-dragon"/>
-                                <TextBlock Classes="tileTitle" Text="Monster Editor"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Load a Canary monster/ folder; edit stats, outfit, flags, bestiary, bosstiary."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Classes="hubTile" Click="OpenProficienciesEditor_Click" Margin="0,0,8,8">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-bolt"/>
-                                <TextBlock Classes="tileTitle" Text="Proficiencies"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Canary proficiencies.json editor with typed perks, presets and weapon templates."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Classes="hubTile" Click="OpenItemsXmlEditor_Click" Margin="0,0,8,8">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-file-code"/>
-                                <TextBlock Classes="tileTitle" Text="Items XML"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Edit OpenTibia items.xml — typed fields + unknown-attr preservation."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Classes="hubTile" Click="OpenOtbEditor_Click" Margin="0,0,0,8">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-database"/>
-                                <TextBlock Classes="tileTitle" Text="OTB Editor"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Server-side items.otb binary editor — server IDs, stack order, attributes."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-
-                    <!-- Requires a legacy (8.60) client loaded -->
-                    <Button Classes="hubTile" x:Name="OpenNewEraToolsTile" IsEnabled="False"
-                            Click="OpenNewEraTools_Click" Margin="0,0,8,0">
-                        <StackPanel Spacing="4">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <i:Icon Value="fa-clipboard-check"/>
-                                <TextBlock Classes="tileTitle" Text="NewEra Tools"/>
-                            </StackPanel>
-                            <TextBlock Classes="dim"
-                                       Text="Consistency report (dat / otb / items.xml / monsters), things hashes, diff and export for approval."
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Button>
-                </UniformGrid>
+                <TextBlock Grid.Row="2" Classes="sectionTitle" Text="Tools" Margin="0,22,0,8"/>
+                <UniformGrid Grid.Row="3" Columns="3">
+            
+                                <!-- Requires assets loaded -->
+                                <Button Classes="hubTile" x:Name="OpenDatEditorTile" IsEnabled="False"
+                                        Click="OpenDatEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-cube"/>
+                                            <TextBlock Classes="tileTitle" Text="DAT / Appearances"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Outfits, items, effects, missiles — full appearance editor with sprites and flags."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+            
+                                <Button Classes="hubTile" x:Name="OpenSpriteEditorTile" IsEnabled="False"
+                                        Click="OpenSpriteEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-palette"/>
+                                            <TextBlock Classes="tileTitle" Text="Sprite Editor"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Raw sprite sheet viewer — edit, replace and export sprites."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+            
+                                <Button Classes="hubTile" Click="OpenMonsterEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-dragon"/>
+                                            <TextBlock Classes="tileTitle" Text="Monster Editor"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Load a Canary monster/ folder; edit stats, outfit, flags, bestiary, bosstiary."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+            
+                                <Button Classes="hubTile" Click="OpenProficienciesEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-bolt"/>
+                                            <TextBlock Classes="tileTitle" Text="Proficiencies"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Canary proficiencies.json editor with typed perks, presets and weapon templates."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+            
+                                <Button Classes="hubTile" Click="OpenItemsXmlEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-file-code"/>
+                                            <TextBlock Classes="tileTitle" Text="Items XML"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Edit OpenTibia items.xml — typed fields + unknown-attr preservation."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+            
+                                <Button Classes="hubTile" Click="OpenOtbEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-database"/>
+                                            <TextBlock Classes="tileTitle" Text="OTB Editor"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Server-side items.otb binary editor — server IDs, stack order, attributes."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+            
+                                <!-- Requires a legacy (8.60) client loaded -->
+                                <Button Classes="hubTile" x:Name="OpenNewEraToolsTile" IsEnabled="False"
+                                        Click="OpenNewEraTools_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-clipboard-check"/>
+                                            <TextBlock Classes="tileTitle" Text="NewEra Tools"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="Consistency report (dat / otb / items.xml / monsters), things hashes, diff and export for approval."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+                            </UniformGrid>
+                <TextBlock Grid.Row="4" Classes="dim" Margin="0,4,0,0"
+                           Text="Greyed-out tools need a loaded client: choose its folder above and press Load Assets."/>
             </Grid>
         </ScrollViewer>
 

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Fonts bundled with the editor. A separate assembly because avares:// URIs cannot carry the spaces
+    in the editor's own assembly name ("Tibia MultiTool Editor").
+    Noto Emoji: SIL Open Font License 1.1 (NotoEmoji-OFL.txt).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <AvaloniaResource Include="NotoEmoji.ttf" />
+    <None Include="NotoEmoji-OFL.txt" />
+  </ItemGroup>
+</Project>
