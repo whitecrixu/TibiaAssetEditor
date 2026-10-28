@@ -108,6 +108,11 @@ namespace Assets_Editor
         private void SaveCurrent_Click(object? sender, RoutedEventArgs e)
         {
             if (_current == null) { ErrorManager.ShowInfo("No monster selected."); return; }
+            if (_current.ReadOnly)
+            {
+                ErrorManager.ShowWarning($"{_current.Name} uses the revscript format (mType:...) of this server. The editor can only read it - saving would overwrite its loot, attacks and defenses. Edit the .lua file directly.");
+                return;
+            }
             if (string.IsNullOrEmpty(_current.SourcePath))
             {
                 // Newly-added monster — drop it into the loaded folder under a
@@ -122,13 +127,13 @@ namespace Assets_Editor
             }
 
             if (LuaMonsterGenerator.SaveToFile(_current))
-                StatusText.Text = $"Saved {_current.Name} → {_current.SourcePath}  |  server auto-loads on /reload monsters";
+                StatusText.Text = $"Saved {_current.Name} → {_current.SourcePath}  |  reload the server scripts to apply";
             else ErrorManager.ShowError("Save failed.");
         }
 
         private void SaveAll_Click(object? sender, RoutedEventArgs e)
         {
-            int ok = 0, fail = 0;
+            int ok = 0, fail = 0, readOnly = 0;
             foreach (var m in MonsterRegistry.Monsters)
             {
                 if (string.IsNullOrEmpty(m.SourcePath))
@@ -136,9 +141,11 @@ namespace Assets_Editor
                     // Skip new unsaved monsters — user should Save Current first.
                     continue;
                 }
+                if (m.ReadOnly) { readOnly++; continue; }
                 if (LuaMonsterGenerator.SaveToFile(m)) ok++; else fail++;
             }
-            StatusText.Text = fail == 0 ? $"Saved {ok} monsters" : $"Saved {ok}, failed {fail}";
+            StatusText.Text = (fail == 0 ? $"Saved {ok} monsters" : $"Saved {ok}, failed {fail}")
+                + (readOnly > 0 ? $", skipped {readOnly} read-only (mType:) monsters" : "");
         }
 
         private void AddNew_Click(object? sender, RoutedEventArgs e)

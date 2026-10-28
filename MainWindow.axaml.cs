@@ -322,12 +322,26 @@ public partial class MainWindow : Window
         UpdateAppearancesCount();
     }
 
+    // dat signature -> Appearances.xml structure
+    private static readonly Dictionary<uint, int> KnownDatStructures = new()
+    {
+        [0x4C2C7993] = 5, // 8.60 (NewEra / WolfOTS client, data/things/860)
+    };
+
     private void LoadLegacyDat()
     {
         using FileStream stream = File.OpenRead(_datPath);
         using BinaryReader r = new(stream);
         DatInfo info = DatStructure.ReadAppearanceInfo(r);
         DatSignature = info.Signature;
+
+        // known signatures pick their dat structure, so the first load attempt uses the right flag table
+        if (currentPreset != null && KnownDatStructures.TryGetValue(info.Signature, out int structure))
+        {
+            currentPreset.Version = structure;
+            RefreshUIToggles();
+        }
+
         ObjectCount = info.ObjectCount;
         OutfitCount = info.OutfitCount;
         EffectCount = info.EffectCount;
@@ -581,9 +595,15 @@ public partial class MainWindow : Window
                 }
                 catch { }
 
+                // the otfi flags describe the file exactly; try every structure with them before guessing flags
                 if (!datFound)
                 {
                     SetLoadingStatus(AssetsLoadingStatus.ASSETS_LOADING_WIP, "Searching for matching version ...");
+                    datFound = InternalTryLoadDat();
+                }
+
+                if (!datFound)
+                {
                     currentPreset.Extended = false;
                     currentPreset.FrameDurations = false;
                     currentPreset.FrameGroups = false;

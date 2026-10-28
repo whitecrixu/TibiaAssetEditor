@@ -8,6 +8,21 @@ Linux / macOS / Windows port of the original Windows WPF editor, rebuilt on
 **.NET 9.0 + Avalonia 11** with **Semi.Avalonia** theming, SkiaSharp for image
 work and Magick.NET for GIF/APNG handling.
 
+## What's new in v2.1
+
+Compatibility update for **TFS 1.x / protocol 8.60** servers with OTClient
+8.60 clients (extended sprites, frame durations, frame groups):
+
+- Legacy DAT/SPR **Compile** works; untouched `Tibia.dat` / `Tibia.spr` /
+  `items.otb` are written back byte-identical.
+- Fixes for data lost on save: Market, Lens help, animation loop counts,
+  non-ASCII market names, empty sprites, and id shifts when deleting objects.
+- `items.xml` is patched in place (ranges, comments, `decayTo="0"`, nested
+  `field` attributes and encoding are kept).
+- Monster Editor treats TFS revscript (`mType:`) monsters as read-only.
+
+See [`CHANGELOG.md`](CHANGELOG.md).
+
 ## What's new in v2.0
 
 Major release. The app is no longer just a DAT/sprite editor — it's a full

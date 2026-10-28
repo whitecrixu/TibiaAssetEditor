@@ -22,11 +22,16 @@ namespace Assets_Editor
         public uint BuildNumber { get; set; }
         public uint ClientVersion { get; set; }
 
+        public string? LastError { get; private set; }
+
         public bool Write(string path)
         {
+            // written to a temp file first: a failure half-way must not leave the server with a truncated items.otb
+            string tempFile = path + ".tmp";
+            LastError = null;
             try
             {
-                using (BinaryTreeWriter writer = new BinaryTreeWriter(path))
+                using (BinaryTreeWriter writer = new BinaryTreeWriter(tempFile))
                 {
                     writer.WriteUInt32(0, false); // version, always 0
 
@@ -138,7 +143,7 @@ namespace Assets_Editor
                                 break;
 
                             default:
-                                writer.CreateNode((byte)ServerItemGroup.None);
+                                writer.CreateNode(item.Type == ServerItemType.None ? item.RawGroup : (byte)ServerItemGroup.None);
                                 break;
                         }
 
@@ -329,10 +334,14 @@ namespace Assets_Editor
 
                     writer.CloseNode();
                 }
+
+                File.Move(tempFile, path, overwrite: true);
             }
             catch (Exception ex)
             {
+                LastError = ex.Message;
                 Debug.WriteLine("An exception occurred: {0}", ex.Message);
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
                 return false;
             }
 

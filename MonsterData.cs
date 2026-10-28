@@ -82,6 +82,11 @@ namespace Assets_Editor
 
         public string? SourcePath { get; set; }
 
+        // true for files in the TFS revscript style (mType:health(...) calls, used by the NewEra server).
+        // Only a few fields are read from them; regenerating the file from this model would wipe the
+        // rest (loot, attacks, defenses, ...), so such monsters are never saved.
+        public bool ReadOnly { get; set; }
+
         // Bitmap derived from lookType (or lookTypeEx for item-based monsters).
         // Populated lazily by MonsterEditor; stays null if DAT isn't loaded.
         private Bitmap? _image;
@@ -126,6 +131,9 @@ namespace Assets_Editor
             if (!nameMatch.Success) return null;
 
             var d = new LuaMonsterData { Name = nameMatch.Groups[1].Value };
+
+            if (!Regex.IsMatch(lua, @"\bmonster\.(health|maxHealth|experience|outfit)\s*="))
+                return ParseRevscriptLua(lua, d);
 
             d.Description = ExtStr(lua, @"monster\.description\s*=\s*""([^""]+)""");
             d.RaceId = ExtUint(lua, @"monster\.raceId\s*=\s*(\d+)");
@@ -208,6 +216,43 @@ namespace Assets_Editor
             d.RawSummon = ExtRawBlock(lua, @"monster\.summons?\s*=\s*\{");
             d.RawLight = ExtRawBlock(lua, @"monster\.light\s*=\s*\{");
 
+            return d;
+        }
+
+        // TFS 1.x revscript monsters: `local mType = Game.createMonsterType(..)` followed by mType:xxx(..) calls
+        private static LuaMonsterData ParseRevscriptLua(string lua, LuaMonsterData d)
+        {
+            d.ReadOnly = true;
+            d.Description = ExtStr(lua, @"mType:nameDescription\(\s*""([^""]+)""");
+            d.Experience = ExtUint(lua, @"mType:experience\(\s*(\d+)");
+            d.MaxHealth = ExtUint(lua, @"mType:maxHealth\(\s*(\d+)");
+            d.Health = ExtUint(lua, @"mType:health\(\s*(\d+)");
+            d.Speed = ExtUint(lua, @"mType:baseSpeed\(\s*(\d+)");
+            d.Corpse = ExtUint(lua, @"mType:corpseId\(\s*(\d+)");
+            d.Race = ExtStr(lua, @"mType:race\(\s*""([^""]+)""") ?? "blood";
+            d.ManaCost = ExtUint(lua, @"mType:manaCost\(\s*(\d+)");
+            d.RunHealth = ExtUint(lua, @"mType:runHealth\(\s*(\d+)");
+            d.TargetDistance = ExtUint(lua, @"mType:targetDistance\(\s*(\d+)");
+            d.StaticAttackChance = ExtUint(lua, @"mType:staticAttackChance\(\s*(\d+)");
+            d.Attackable = ExtBool(lua, @"mType:isAttackable\(\s*(true|false)", true);
+            d.Hostile = ExtBool(lua, @"mType:isHostile\(\s*(true|false)", true);
+            d.Summonable = ExtBool(lua, @"mType:isSummonable\(\s*(true|false)");
+            d.Convinceable = ExtBool(lua, @"mType:isConvinceable\(\s*(true|false)");
+            d.Illusionable = ExtBool(lua, @"mType:isIllusionable\(\s*(true|false)");
+            d.Pushable = ExtBool(lua, @"mType:isPushable\(\s*(true|false)");
+
+            string? outfit = ExtBlock(lua, @"mType:outfit\(\s*\{");
+            if (outfit != null)
+            {
+                d.LookType = ExtUint(outfit, @"lookType\s*=\s*(\d+)");
+                d.LookTypeEx = ExtUint(outfit, @"lookTypeEx\s*=\s*(\d+)");
+                d.LookHead = ExtUint(outfit, @"lookHead\s*=\s*(\d+)");
+                d.LookBody = ExtUint(outfit, @"lookBody\s*=\s*(\d+)");
+                d.LookLegs = ExtUint(outfit, @"lookLegs\s*=\s*(\d+)");
+                d.LookFeet = ExtUint(outfit, @"lookFeet\s*=\s*(\d+)");
+                d.LookAddons = ExtUint(outfit, @"lookAddons\s*=\s*(\d+)");
+                d.LookMount = ExtUint(outfit, @"lookMount\s*=\s*(\d+)");
+            }
             return d;
         }
 
@@ -525,6 +570,11 @@ namespace Assets_Editor
         {
             path ??= d.SourcePath;
             if (string.IsNullOrEmpty(path)) return false;
+            if (d.ReadOnly)
+            {
+                MainWindow.Log($"SaveToFile({path}) refused: {d.Name} is a revscript (mType:) monster, which this editor can only read.");
+                return false;
+            }
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);

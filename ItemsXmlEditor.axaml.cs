@@ -273,6 +273,12 @@ namespace Assets_Editor
             if (_currentEntry == null) return;
 
             ushort newId = (ushort)(IdBox.Value ?? _currentEntry.Id);
+            if (newId != _currentEntry.Id && ItemsXml.Items.ContainsKey(newId))
+            {
+                ErrorManager.ShowError($"Item {newId} already exists in items.xml; pick a free id.");
+                IdBox.Value = _currentEntry.Id;
+                return;
+            }
             if (newId != _currentEntry.Id)
             {
                 ItemsXml.Items.Remove(_currentEntry.Id);

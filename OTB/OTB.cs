@@ -213,6 +213,9 @@ namespace Assets_Editor
             public ushort ServerId { get; set; }
             public ushort ClientId { get; set; }
             public ServerItemType Type { get; set; }
+            // group byte as read from the file; groups the editor has no type for (weapon, door,
+            // teleport, magic field, ...) are written back unchanged while Type stays None
+            public byte RawGroup { get; set; }
             public bool HasStackOrder { get; set; }
             public TileStackOrder StackOrder { get; set; }
             public bool Unpassable { get; set; }

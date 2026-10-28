@@ -56,8 +56,9 @@ namespace Assets_Editor
                         MajorVersion = node.ReadUInt32(); // major, file version
                         MinorVersion = node.ReadUInt32(); // minor, client version
                         BuildNumber = node.ReadUInt32();  // build number, revision
-                        ClientVersion = 1290;
-                        node.BaseStream.Seek(128, SeekOrigin.Current);
+                        // the 128-byte label ("OTB 3.20.1-8.60") carries the client version
+                        string label = System.Text.Encoding.ASCII.GetString(node.ReadBytes(128)).TrimEnd('\0');
+                        ClientVersion = ParseClientVersion(label) ?? 1290;
                     }
 
                     node = reader.GetChildNode();
@@ -71,6 +72,7 @@ namespace Assets_Editor
                         ServerItem item = new ServerItem();
 
                         ServerItemGroup itemGroup = (ServerItemGroup)node.ReadByte();
+                        item.RawGroup = (byte)itemGroup;
                         switch (itemGroup)
                         {
                             case ServerItemGroup.None:
@@ -215,5 +217,15 @@ namespace Assets_Editor
             return true;
         }
 
+
+        private static uint? ParseClientVersion(string label)
+        {
+            int dash = label.LastIndexOf('-');
+            if (dash < 0) return null;
+            string[] parts = label[(dash + 1)..].Split('.');
+            if (parts.Length == 2 && uint.TryParse(parts[0], out uint major) && uint.TryParse(parts[1], out uint minor))
+                return major * 100 + minor;
+            return null;
+        }
     }
 }

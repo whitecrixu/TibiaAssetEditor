@@ -83,7 +83,7 @@
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
                                     <CheckBox x:Name="A_FlagGround" Content="Ground" Width="130"/>
                                     <TextBlock Text="Speed:" VerticalAlignment="Center" Width="50" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagGroundSpeed" Width="80" Minimum="0" Maximum="1000" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagGroundSpeed" Width="80" Minimum="0" Maximum="65535" FormatString="0"/>
                                 </StackPanel>
                                 <CheckBox x:Name="A_FlagClip" Content="Clip" Margin="0,5,0,0"/>
                                 <CheckBox x:Name="A_FlagBottom" Content="Bottom" Margin="0,5,0,0"/>
@@ -96,12 +96,12 @@
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
                                     <CheckBox x:Name="A_FlagWrite" Content="Write" Width="130"/>
                                     <TextBlock Text="Max Text:" VerticalAlignment="Center" Width="60" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagMaxTextLength" Width="80" Minimum="0" Maximum="1024" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagMaxTextLength" Width="80" Minimum="0" Maximum="65535" FormatString="0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
                                     <CheckBox x:Name="A_FlagWriteOnce" Content="Write Once" Width="130"/>
                                     <TextBlock Text="Max Text:" VerticalAlignment="Center" Width="60" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagMaxTextLengthOnce" Width="80" Minimum="0" Maximum="1024" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagMaxTextLengthOnce" Width="80" Minimum="0" Maximum="65535" FormatString="0"/>
                                 </StackPanel>
                                 <CheckBox x:Name="A_FlagLiquidpool" Content="Liquid Pool" Margin="0,5,0,0"/>
                                 <CheckBox x:Name="A_FlagUnpass" Content="Unpass" Margin="0,5,0,0"/>
@@ -120,7 +120,7 @@
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
                                     <CheckBox x:Name="A_FlagLight" Content="Light" Width="60"/>
                                     <TextBlock Text="Brightness:" VerticalAlignment="Center" Width="60" Margin="5,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagLightBrightness" Width="50" Minimum="0" Maximum="10" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagLightBrightness" Width="50" Minimum="0" Maximum="255" FormatString="0"/>
                                     <TextBlock Text="Color:" VerticalAlignment="Center" Width="35" Margin="10,0,0,0"/>
                                     <NumericUpDown x:Name="A_FlagLightColor" Width="50" Minimum="0" Maximum="215" FormatString="0"/>
                                 </StackPanel>
@@ -131,14 +131,14 @@
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
                                     <CheckBox x:Name="A_FlagShift" Content="Shift" Width="130"/>
                                     <TextBlock Text="X:" VerticalAlignment="Center" Width="15" Margin="5,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagShiftX" Width="50" Minimum="0" Maximum="32" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagShiftX" Width="50" Minimum="-32768" Maximum="32767" FormatString="0"/>
                                     <TextBlock Text="Y:" VerticalAlignment="Center" Width="15" Margin="5,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagShiftY" Width="50" Minimum="0" Maximum="32" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagShiftY" Width="50" Minimum="-32768" Maximum="32767" FormatString="0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
                                     <CheckBox x:Name="A_FlagHeight" Content="Height" Width="130"/>
                                     <TextBlock Text="Elevation:" VerticalAlignment="Center" Width="60" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_FlagElevation" Width="60" Minimum="0" Maximum="32" FormatString="0"/>
+                                    <NumericUpDown x:Name="A_FlagElevation" Width="60" Minimum="0" Maximum="65535" FormatString="0"/>
                                 </StackPanel>
                                 <CheckBox x:Name="A_FlagLyingObject" Content="Lying Object" Margin="0,5,0,0"/>
                                 <CheckBox x:Name="A_FlagAnimateAlways" Content="Animate Always" Margin="0,5,0,0"/>
@@ -183,6 +183,8 @@
                                         <ComboBoxItem Content="Boots"/>
                                         <ComboBoxItem Content="Ring"/>
                                         <ComboBoxItem Content="Arrow"/>
+                                        <ComboBoxItem Content="Slot 11"/>
+                                        <ComboBoxItem Content="Slot 12"/>
                                     </ComboBox>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
@@ -204,6 +206,27 @@
                                         <ComboBoxItem Content="Containers"/>
                                         <ComboBoxItem Content="Decoration"/>
                                         <ComboBoxItem Content="Food"/>
+                                        <ComboBoxItem Content="Helmets/Hats"/>
+                                        <ComboBoxItem Content="Legs"/>
+                                        <ComboBoxItem Content="Others"/>
+                                        <ComboBoxItem Content="Potions"/>
+                                        <ComboBoxItem Content="Rings"/>
+                                        <ComboBoxItem Content="Runes"/>
+                                        <ComboBoxItem Content="Shields"/>
+                                        <ComboBoxItem Content="Tools"/>
+                                        <ComboBoxItem Content="Valuables"/>
+                                        <ComboBoxItem Content="Ammunition"/>
+                                        <ComboBoxItem Content="Axes"/>
+                                        <ComboBoxItem Content="Clubs"/>
+                                        <ComboBoxItem Content="Distance Weapons"/>
+                                        <ComboBoxItem Content="Swords"/>
+                                        <ComboBoxItem Content="Wands/Rods"/>
+                                        <ComboBoxItem Content="Premium Scrolls"/>
+                                        <ComboBoxItem Content="Tibia Coins"/>
+                                        <ComboBoxItem Content="Creature Products"/>
+                                        <ComboBoxItem Content="Quiver"/>
+                                        <ComboBoxItem Content="Soul Cores"/>
+                                        <ComboBoxItem Content="Fist Weapons"/>
                                     </ComboBox>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Height="25">

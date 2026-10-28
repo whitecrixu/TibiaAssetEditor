@@ -134,6 +134,14 @@ namespace Assets_Editor
             };
         }
 
+        // lens help ids in the dat start at 1100 (ladders); the combo box lists them in order
+        private const int LensHelpBaseId = 1100;
+
+        private static int ComboIndexOrNone(ComboBox combo, int index)
+        {
+            return index >= 0 && index < combo.ItemCount ? index : -1;
+        }
+
         private void LoadCurrentObjectAppearances()
         {
             if (CurrentObjectAppearance == null) return;
@@ -180,15 +188,15 @@ namespace Assets_Editor
             A_FlagAutomap.IsChecked = flags.Automap != null;
             A_FlagAutomapColor.Value = (int)(flags.Automap?.Color ?? 0);
             A_FlagLenshelp.IsChecked = flags.Lenshelp != null;
-            A_FlagLenshelpId.SelectedIndex = flags.Lenshelp != null ? Math.Max(0, (int)flags.Lenshelp.Id - 1) : -1;
+            A_FlagLenshelpId.SelectedIndex = flags.Lenshelp != null ? ComboIndexOrNone(A_FlagLenshelpId, (int)flags.Lenshelp.Id - LensHelpBaseId) : -1;
             A_FlagFullGround.IsChecked = flags.HasFullbank;
             A_FlagIgnoreLook.IsChecked = flags.HasIgnoreLook;
             A_FlagClothes.IsChecked = flags.Clothes != null;
-            A_FlagClothesSlot.SelectedIndex = flags.Clothes != null ? (int)flags.Clothes.Slot : -1;
+            A_FlagClothesSlot.SelectedIndex = flags.Clothes != null ? ComboIndexOrNone(A_FlagClothesSlot, (int)flags.Clothes.Slot) : -1;
             A_FlagDefaultAction.IsChecked = flags.DefaultAction != null;
-            A_FlagDefaultActionType.SelectedIndex = flags.DefaultAction != null ? (int)flags.DefaultAction.Action : -1;
+            A_FlagDefaultActionType.SelectedIndex = flags.DefaultAction != null ? ComboIndexOrNone(A_FlagDefaultActionType, (int)flags.DefaultAction.Action) : -1;
             A_FlagMarket.IsChecked = flags.Market != null;
-            A_FlagMarketCategory.SelectedIndex = flags.Market != null ? Math.Max(0, (int)flags.Market.Category - 1) : -1;
+            A_FlagMarketCategory.SelectedIndex = flags.Market != null ? ComboIndexOrNone(A_FlagMarketCategory, (int)flags.Market.Category - 1) : -1;
             A_FlagWrap.IsChecked = flags.HasWrap;
             A_FlagUnwrap.IsChecked = flags.HasUnwrap;
             A_FlagTopeffect.IsChecked = flags.HasTopeffect;
@@ -279,22 +287,36 @@ namespace Assets_Editor
             flags.Automap = A_FlagAutomap.IsChecked == true
                 ? new AppearanceFlagAutomap { Color = (uint)(A_FlagAutomapColor.Value ?? 0) }
                 : null;
-            flags.Lenshelp = A_FlagLenshelp.IsChecked == true && A_FlagLenshelpId.SelectedIndex >= 0
-                ? new AppearanceFlagLenshelp { Id = (uint)(A_FlagLenshelpId.SelectedIndex + 1) }
-                : null;
+            // a value the combo box has no entry for is kept as it was instead of dropping the flag
+            flags.Lenshelp = A_FlagLenshelp.IsChecked != true ? null
+                : A_FlagLenshelpId.SelectedIndex >= 0 ? new AppearanceFlagLenshelp { Id = (uint)(A_FlagLenshelpId.SelectedIndex + LensHelpBaseId) }
+                : flags.Lenshelp ?? new AppearanceFlagLenshelp { Id = (uint)LensHelpBaseId };
 
             if (A_FlagFullGround.IsChecked == true) flags.Fullbank = true; else flags.ClearFullbank();
             if (A_FlagIgnoreLook.IsChecked == true) flags.IgnoreLook = true; else flags.ClearIgnoreLook();
 
-            flags.Clothes = A_FlagClothes.IsChecked == true && A_FlagClothesSlot.SelectedIndex >= 0
-                ? new AppearanceFlagClothes { Slot = (uint)A_FlagClothesSlot.SelectedIndex }
-                : null;
-            flags.DefaultAction = A_FlagDefaultAction.IsChecked == true && A_FlagDefaultActionType.SelectedIndex >= 0
-                ? new AppearanceFlagDefaultAction { Action = (PLAYER_ACTION)A_FlagDefaultActionType.SelectedIndex }
-                : null;
-            flags.Market = A_FlagMarket.IsChecked == true && A_FlagMarketCategory.SelectedIndex >= 0
-                ? new AppearanceFlagMarket { Category = (ITEM_CATEGORY)(A_FlagMarketCategory.SelectedIndex + 1) }
-                : null;
+            flags.Clothes = A_FlagClothes.IsChecked != true ? null
+                : A_FlagClothesSlot.SelectedIndex >= 0 ? new AppearanceFlagClothes { Slot = (uint)A_FlagClothesSlot.SelectedIndex }
+                : flags.Clothes ?? new AppearanceFlagClothes { Slot = 0 };
+            flags.DefaultAction = A_FlagDefaultAction.IsChecked != true ? null
+                : A_FlagDefaultActionType.SelectedIndex >= 0 ? new AppearanceFlagDefaultAction { Action = (PLAYER_ACTION)A_FlagDefaultActionType.SelectedIndex }
+                : flags.DefaultAction ?? new AppearanceFlagDefaultAction { Action = PLAYER_ACTION.None };
+
+            // the UI only edits the category: trade-as / show-as / vocation / level must survive a save
+            // (the client's market and the item's "show as" sprite depend on them)
+            if (A_FlagMarket.IsChecked != true) {
+                flags.Market = null;
+            } else {
+                var market = flags.Market?.Clone() ?? new AppearanceFlagMarket {
+                    TradeAsObjectId = CurrentObjectAppearance.Id,
+                    ShowAsObjectId = CurrentObjectAppearance.Id,
+                };
+                if (A_FlagMarketCategory.SelectedIndex >= 0)
+                    market.Category = (ITEM_CATEGORY)(A_FlagMarketCategory.SelectedIndex + 1);
+                else if (!market.HasCategory)
+                    market.Category = ITEM_CATEGORY.Others;
+                flags.Market = market;
+            }
 
             if (A_FlagWrap.IsChecked == true) flags.Wrap = true; else flags.ClearWrap();
             if (A_FlagUnwrap.IsChecked == true) flags.Unwrap = true; else flags.ClearUnwrap();
@@ -340,9 +362,81 @@ namespace Assets_Editor
 
         private void Exit_Click(object? sender, RoutedEventArgs e) => Close();
 
-        private void Compile_Click(object? sender, RoutedEventArgs e)
+        private bool _compiling;
+
+        // Writes the edited dat (and the spr, when sprites changed) back over the client's files.
+        // The first compile keeps the untouched originals as "<file>-bak".
+        private async void Compile_Click(object? sender, RoutedEventArgs e)
         {
-            ErrorManager.ShowInfo("Compile functionality - coming in future update");
+            if (_compiling) return;
+            if (MainWindow.appearances == null || loadedVersion == null)
+            {
+                ErrorManager.ShowWarning("No dat loaded.");
+                return;
+            }
+
+            string datPath = MainWindow._datPath;
+            string sprPath = MainWindow._sprPath;
+            PresetSettings preset = MainWindow.GetCurrentPreset() ?? new();
+            SpriteStorage storage = MainWindow.MainSprStorage;
+            bool sprChanged;
+            lock (storage.Modified)
+                sprChanged = storage.Modified.Count > 0 || storage.SprLists.Count - 1 != storage.FileSpriteCount;
+
+            if (!await ErrorManager.ConfirmAsync("Compile",
+                    $"Write {Path.GetFileName(datPath)}" + (sprChanged ? $" and {Path.GetFileName(sprPath)}" : "") +
+                    $" in\n{Path.GetDirectoryName(datPath)}?\n\nThe running client must be restarted to see the changes."))
+                return;
+
+            _compiling = true;
+            try
+            {
+                string? error = null;
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        BackupOnce(datPath);
+                        if (!LegacyAppearance.WriteLegacyDat(datPath, MainWindow.DatSignature, MainWindow.appearances, loadedVersion.Structure))
+                        {
+                            error = "dat";
+                            return;
+                        }
+
+                        if (sprChanged)
+                        {
+                            BackupOnce(sprPath);
+                            storage.Compile(sprPath, MainWindow.SprSignature, storage.Transparency, preset.Extended, null);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        error = ex.Message;
+                    }
+                });
+
+                if (error == "dat")
+                    return; // WriteLegacyDat already reported it
+                if (error != null)
+                {
+                    ErrorManager.ShowError($"Compile failed: {error}");
+                    return;
+                }
+
+                MainWindow.Log($"Compiled {datPath}" + (sprChanged ? $" and {sprPath}" : ""));
+                ErrorManager.ShowInfo("Compiled successfully." + (sprChanged ? "" : " (no sprite changes - spr untouched)"));
+            }
+            finally
+            {
+                _compiling = false;
+            }
+        }
+
+        private static void BackupOnce(string path)
+        {
+            string backup = path + "-bak";
+            if (File.Exists(path) && !File.Exists(backup))
+                File.Copy(path, backup);
         }
 
         private void OTBEditor_Click(object? sender, RoutedEventArgs e)
@@ -446,7 +540,7 @@ namespace Assets_Editor
             }
             try
             {
-                CurrentObjectAppearance.Flags.MergeFrom(_copiedFlagsSource.Flags);
+                CurrentObjectAppearance.Flags = _copiedFlagsSource.Flags.Clone();
                 LoadCurrentObjectAppearances();
                 ErrorManager.ShowInfo("Flags pasted.");
             }
@@ -493,34 +587,14 @@ namespace Assets_Editor
                 if (collection == null) return;
 
                 uint newId = collection.Count > 0 ? collection.Max(a => a.Id) + 1 : 100;
-                var newAppearance = new Appearance
+                var newAppearance = CreateEmptyAppearance(newId, ObjectMenu.SelectedIndex switch
                 {
-                    Id = newId,
-                    AppearanceType = ObjectMenu.SelectedIndex switch
-                    {
-                        0 => APPEARANCE_TYPE.AppearanceOutfit,
-                        1 => APPEARANCE_TYPE.AppearanceObject,
-                        2 => APPEARANCE_TYPE.AppearanceEffect,
-                        3 => APPEARANCE_TYPE.AppearanceMissile,
-                        _ => APPEARANCE_TYPE.AppearanceObject
-                    }
-                };
-
-                var frameGroup = new FrameGroup
-                {
-                    SpriteInfo = new SpriteInfo
-                    {
-                        PatternWidth = 1,
-                        PatternHeight = 1,
-                        PatternLayers = 1,
-                        PatternX = 1,
-                        PatternY = 1,
-                        PatternZ = 1,
-                        PatternFrames = 1
-                    }
-                };
-                frameGroup.SpriteInfo.SpriteId.Add(0);
-                newAppearance.FrameGroup.Add(frameGroup);
+                    0 => APPEARANCE_TYPE.AppearanceOutfit,
+                    1 => APPEARANCE_TYPE.AppearanceObject,
+                    2 => APPEARANCE_TYPE.AppearanceEffect,
+                    3 => APPEARANCE_TYPE.AppearanceMissile,
+                    _ => APPEARANCE_TYPE.AppearanceObject
+                });
 
                 collection.Add(newAppearance);
                 showList.Add(new ShowList { Id = newId });
@@ -531,6 +605,35 @@ namespace Assets_Editor
             {
                 ErrorManager.ShowError($"New object failed: {ex.Message}");
             }
+        }
+
+        private static Appearance CreateEmptyAppearance(uint id, APPEARANCE_TYPE type)
+        {
+            var appearance = new Appearance
+            {
+                Id = id,
+                AppearanceType = type,
+                Flags = new AppearanceFlags()
+            };
+
+            var frameGroup = new FrameGroup
+            {
+                FixedFrameGroup = FIXED_FRAME_GROUP.OutfitIdle,
+                SpriteInfo = new SpriteInfo
+                {
+                    PatternWidth = 1,
+                    PatternHeight = 1,
+                    PatternSize = 32,
+                    PatternLayers = 1,
+                    PatternX = 1,
+                    PatternY = 1,
+                    PatternZ = 1,
+                    PatternFrames = 1
+                }
+            };
+            frameGroup.SpriteInfo.SpriteId.Add(0);
+            appearance.FrameGroup.Add(frameGroup);
+            return appearance;
         }
 
         private void DeleteObject_Click(object? sender, RoutedEventArgs e)
@@ -544,16 +647,28 @@ namespace Assets_Editor
 
                 int selectedIndex = ObjListView.SelectedIndex;
                 var toRemove = collection.FirstOrDefault(a => a.Id == CurrentObjectAppearance.Id);
-                if (toRemove != null)
+                if (toRemove == null) return;
+
+                // the dat has no ids - an object's id is its position. Removing one from the middle would
+                // renumber every later object and break items.otb, the map and all server scripts, so only
+                // the last object is really removed; any other one is cleared to an empty object.
+                if (toRemove.Id == collection.Max(a => a.Id))
+                {
                     collection.Remove(toRemove);
-
-                if (selectedIndex < showList.Count)
-                    showList.RemoveAt(Math.Max(0, selectedIndex));
-
-                if (ObjListView.ItemCount > 0)
-                    ObjListView.SelectedIndex = Math.Min(selectedIndex, ObjListView.ItemCount - 1);
-
-                ErrorManager.ShowInfo("Object deleted.");
+                    if (selectedIndex >= 0 && selectedIndex < showList.Count)
+                        showList.RemoveAt(selectedIndex);
+                    if (ObjListView.ItemCount > 0)
+                        ObjListView.SelectedIndex = Math.Min(selectedIndex, ObjListView.ItemCount - 1);
+                    ErrorManager.ShowInfo($"Object {toRemove.Id} deleted.");
+                }
+                else
+                {
+                    int index = collection.IndexOf(toRemove);
+                    collection[index] = CreateEmptyAppearance(toRemove.Id, toRemove.AppearanceType);
+                    CurrentObjectAppearance = collection[index].Clone();
+                    LoadCurrentObjectAppearances();
+                    ErrorManager.ShowInfo($"Object {toRemove.Id} cleared (ids are positional, so only the last object can be removed).");
+                }
             }
             catch (Exception ex)
             {
@@ -645,6 +760,7 @@ namespace Assets_Editor
 
                 MainWindow.MainSprStorage.Sprites[spriteId] = newSprite;
                 MainWindow.MainSprStorage.SprLists[(int)spriteId] = newSprite.MemoryStream;
+                MainWindow.MainSprStorage.MarkModified(spriteId);
 
                 if ((int)spriteId < MainWindow.AllSprList.Count)
                     MainWindow.AllSprList[(int)spriteId].Image = Utils.MemoryStreamToBitmap(newSprite.MemoryStream);
@@ -675,6 +791,7 @@ namespace Assets_Editor
 
                 MainWindow.MainSprStorage.Sprites[newId] = blankSprite;
                 MainWindow.MainSprStorage.SprLists[(int)newId] = blankSprite.MemoryStream;
+                MainWindow.MainSprStorage.MarkModified(newId);
 
                 var entry = new ShowList { Id = newId };
                 MainWindow.AllSprList.Add(entry);
@@ -705,6 +822,7 @@ namespace Assets_Editor
 
                 MainWindow.MainSprStorage.Sprites[spriteId] = blankSprite;
                 MainWindow.MainSprStorage.SprLists[(int)spriteId] = blankSprite.MemoryStream;
+                MainWindow.MainSprStorage.MarkModified(spriteId);
 
                 if ((int)spriteId < MainWindow.AllSprList.Count)
                     MainWindow.AllSprList[(int)spriteId].Image = null;

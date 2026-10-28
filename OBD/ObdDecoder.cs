@@ -346,12 +346,8 @@ public class ObdDecoder
 
         if (spriteInfo.PatternFrames > 1) {
             byte animationMode = (byte)spriteInfo.Animation.AnimationMode;
-            int loopCount = (int)spriteInfo.Animation.LoopCount;
-
-            // infinite animation does not use loop count
-            if (animationMode == (byte)ANIMATION_LOOP_TYPE.Infinite) {
-                loopCount = 0;
-            }
+            // stored as-is (0 = infinite, -1 = ping-pong, n = counted); unrelated to the animation mode
+            uint loopCount = spriteInfo.Animation.LoopCount;
 
             writer.Write(animationMode);
             writer.Write(loopCount);
@@ -425,12 +421,8 @@ public class ObdDecoder
 
             if (spriteInfo.PatternFrames > 1) {
                 byte animationMode = (byte)spriteInfo.Animation.AnimationMode;
-                int loopCount = (int)spriteInfo.Animation.LoopCount;
-
-                // infinite animation does not use loop count
-                if (animationMode == (byte)ANIMATION_LOOP_TYPE.Infinite) {
-                    loopCount = 0;
-                }
+                // stored as-is (0 = infinite, -1 = ping-pong, n = counted); unrelated to the animation mode
+                uint loopCount = spriteInfo.Animation.LoopCount;
 
                 writer.Write(animationMode);
                 writer.Write(loopCount);

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Xml.Linq;
 using Tibia.Protobuf.Appearances;
@@ -631,21 +632,17 @@ namespace Assets_Editor
                 if (hasFrameDurations && spriteInfo.PatternFrames > 1) {
                     SpriteAnimation animation = spriteInfo.Animation;
 
-                    byte animationMode = (byte)spriteInfo.Animation.AnimationMode;
-                    int loopCount = (int)spriteInfo.Animation.LoopCount;
-
-                    // infinite animation does not use loop count
-                    if (animationMode == (byte)ANIMATION_LOOP_TYPE.Infinite) {
-                        loopCount = 0;
-                    }
-
-                    w.Write(Convert.ToByte(animationMode));
-                    w.Write(loopCount);
+                    // loop count is stored as-is: 0 = infinite, 0xFFFFFFFF (-1) = ping-pong, n = counted;
+                    // it is independent of the (a)synchronous animation mode
+                    w.Write((byte)animation.AnimationMode);
+                    w.Write(animation.LoopCount);
                     w.Write((byte)animation.DefaultStartPhase);
 
-                    for (int k = 0; k < animation.SpritePhase.Count; k++) {
-                        w.Write(animation.SpritePhase[k].DurationMin);
-                        w.Write(animation.SpritePhase[k].DurationMax);
+                    // the reader expects exactly PatternFrames phases
+                    for (int k = 0; k < spriteInfo.PatternFrames; k++) {
+                        SpritePhase? phase = k < animation.SpritePhase.Count ? animation.SpritePhase[k] : null;
+                        w.Write(phase?.DurationMin ?? 100u);
+                        w.Write(phase?.DurationMax ?? 100u);
                     }
                 }
 
@@ -676,107 +673,119 @@ namespace Assets_Editor
             }
         }
 
-        public static void WriteAppearanceAttr(BinaryWriter w, Appearance item, VersionInfo versionInfo)
+        public static void WriteAppearanceAttr(BinaryWriter output, Appearance item, VersionInfo versionInfo)
         {
             // some appearances may have flags not set
             if (item.Flags == null)
             {
                 // end of flags
-                w.Write((byte)0xFF);
+                output.Write((byte)0xFF);
                 return;
+            }
+
+            // flags are collected first and emitted in ascending id order, like the original files;
+            // the order of the checks below does not match the id order of every structure
+            using var buffer = new MemoryStream();
+            using var w = new BinaryWriter(buffer);
+            var segments = new List<(byte Id, long Start)>();
+            void Begin(string name)
+            {
+                byte id = (byte)versionInfo.GetFlagId(name);
+                segments.Add((id, buffer.Position));
+                w.Write(id);
             }
 
             if (item.Flags.Bank != null && versionInfo.HasFlag("Ground"))
             {
-                w.Write((byte)versionInfo.GetFlagId("Ground"));
-                if (item.Flags.Bank.HasWaypoints)
-                    w.Write((ushort)item.Flags.Bank.Waypoints);
+                Begin("Ground");
+                // the ground speed is mandatory in the dat - omitting it shifts every following byte
+                w.Write((ushort)item.Flags.Bank.Waypoints);
             }
 
             if (item.Flags.Clip && versionInfo.HasFlag("Clip"))
-                w.Write((byte)versionInfo.GetFlagId("Clip"));
+                Begin("Clip");
 
             if (item.Flags.Top && versionInfo.HasFlag("Top"))
-                w.Write((byte)versionInfo.GetFlagId("Top"));
+                Begin("Top");
 
             if (item.Flags.Bottom && versionInfo.HasFlag("Bottom"))
-                w.Write((byte)versionInfo.GetFlagId("Bottom"));
+                Begin("Bottom");
 
             if (item.Flags.Container && versionInfo.HasFlag("Container"))
-                w.Write((byte)versionInfo.GetFlagId("Container"));
+                Begin("Container");
 
             if (item.Flags.Cumulative && versionInfo.HasFlag("Stackable"))
-                w.Write((byte)versionInfo.GetFlagId("Stackable"));
+                Begin("Stackable");
 
             if (item.Flags.Usable && versionInfo.HasFlag("Usable"))
-                w.Write((byte)versionInfo.GetFlagId("Usable"));
+                Begin("Usable");
 
             if (item.Flags.Forceuse && versionInfo.HasFlag("ForceUse"))
-                w.Write((byte)versionInfo.GetFlagId("ForceUse"));
+                Begin("ForceUse");
 
             if (item.Flags.Multiuse && versionInfo.HasFlag("Multiuse"))
-                w.Write((byte)versionInfo.GetFlagId("Multiuse"));
+                Begin("Multiuse");
 
             if (item.Flags.Write != null && versionInfo.HasFlag("Writeable"))
             {
-                w.Write((byte)versionInfo.GetFlagId("Writeable"));
+                Begin("Writeable");
                 w.Write((ushort)item.Flags.Write.MaxTextLength);
             }
 
             if (item.Flags.WriteOnce != null && versionInfo.HasFlag("WriteableOnce"))
             {
-                w.Write((byte)versionInfo.GetFlagId("WriteableOnce"));
+                Begin("WriteableOnce");
                 w.Write((ushort)item.Flags.WriteOnce.MaxTextLengthOnce);
             }
 
             if (item.Flags.Liquidpool && versionInfo.HasFlag("LiquidPool"))
-                w.Write((byte)versionInfo.GetFlagId("LiquidPool"));
+                Begin("LiquidPool");
 
             if (item.Flags.Liquidcontainer && versionInfo.HasFlag("LiquidContainer"))
-                w.Write((byte)versionInfo.GetFlagId("LiquidContainer"));
+                Begin("LiquidContainer");
 
             if (item.Flags.Unpass && versionInfo.HasFlag("Impassable"))
-                w.Write((byte)versionInfo.GetFlagId("Impassable"));
+                Begin("Impassable");
 
             if (item.Flags.Unmove && versionInfo.HasFlag("Unmovable"))
-                w.Write((byte)versionInfo.GetFlagId("Unmovable"));
+                Begin("Unmovable");
 
             if (item.Flags.Unsight && versionInfo.HasFlag("BlocksSight"))
-                w.Write((byte)versionInfo.GetFlagId("BlocksSight"));
+                Begin("BlocksSight");
 
             if (item.Flags.Avoid && versionInfo.HasFlag("BlocksPathfinding"))
-                w.Write((byte)versionInfo.GetFlagId("BlocksPathfinding"));
+                Begin("BlocksPathfinding");
 
             if (item.Flags.NoMovementAnimation && versionInfo.HasFlag("NoMovementAnimation"))
-                w.Write((byte)versionInfo.GetFlagId("NoMovementAnimation"));
+                Begin("NoMovementAnimation");
 
             if (item.Flags.Take && versionInfo.HasFlag("Pickupable"))
-                w.Write((byte)versionInfo.GetFlagId("Pickupable"));
+                Begin("Pickupable");
 
             if (item.Flags.Hang && versionInfo.HasFlag("Hangable"))
-                w.Write((byte)versionInfo.GetFlagId("Hangable"));
+                Begin("Hangable");
 
             if (item.Flags.HookSouth && versionInfo.HasFlag("HooksSouth"))
-                w.Write((byte)versionInfo.GetFlagId("HooksSouth"));
+                Begin("HooksSouth");
 
             if (item.Flags.HookEast && versionInfo.HasFlag("HooksEast"))
-                w.Write((byte)versionInfo.GetFlagId("HooksEast"));
+                Begin("HooksEast");
 
             if (item.Flags.Rotate && versionInfo.HasFlag("Rotateable"))
-                w.Write((byte)versionInfo.GetFlagId("Rotateable"));
+                Begin("Rotateable");
 
             if (item.Flags.Light != null && versionInfo.HasFlag("LightSource"))
             {
-                w.Write((byte)versionInfo.GetFlagId("LightSource"));
+                Begin("LightSource");
                 w.Write((ushort)item.Flags.Light.Brightness);
                 w.Write((ushort)item.Flags.Light.Color);
             }
 
             if (item.Flags.DontHide && versionInfo.HasFlag("AlwaysSeen"))
-                w.Write((byte)versionInfo.GetFlagId("AlwaysSeen"));
+                Begin("AlwaysSeen");
 
             if (item.Flags.Translucent && versionInfo.HasFlag("Translucent"))
-                w.Write((byte)versionInfo.GetFlagId("Translucent"));
+                Begin("Translucent");
 
             if (item.Flags.Shift != null && versionInfo.HasFlag("Displaced"))
             {
@@ -785,7 +794,7 @@ namespace Assets_Editor
                     throw new Exception($"Failed to get the structure of flag \"Displaced\".");
                 }
 
-                w.Write((byte)flagId);
+                Begin("Displaced");
                 switch (flagInfo.Version) {
                     case 2:
                         // 1098 standard
@@ -807,79 +816,78 @@ namespace Assets_Editor
 
             if (item.Flags.Height != null && versionInfo.HasFlag("Elevated"))
             {
-                w.Write((byte)versionInfo.GetFlagId("Elevated"));
+                Begin("Elevated");
                 w.Write((ushort)item.Flags.Height.Elevation);
             }
 
             if (item.Flags.LyingObject && versionInfo.HasFlag("LyingObject"))
-                w.Write((byte)versionInfo.GetFlagId("LyingObject"));
+                Begin("LyingObject");
 
             if (item.Flags.AnimateAlways && versionInfo.HasFlag("AlwaysAnimated"))
-                w.Write((byte)versionInfo.GetFlagId("AlwaysAnimated"));
+                Begin("AlwaysAnimated");
 
             if (item.Flags.Automap != null && versionInfo.HasFlag("MinimapColor"))
             {
-                w.Write((byte)versionInfo.GetFlagId("MinimapColor"));
+                Begin("MinimapColor");
                 w.Write((ushort)item.Flags.Automap.Color);
             }
 
             if (item.Flags.Fullbank && versionInfo.HasFlag("FullTile"))
-                w.Write((byte)versionInfo.GetFlagId("FullTile"));
+                Begin("FullTile");
 
             if (item.Flags.Lenshelp != null && versionInfo.HasFlag("HelpInfo"))
             {
-                w.Write((byte)versionInfo.GetFlagId("HelpInfo"));
+                Begin("HelpInfo");
                 w.Write((ushort)item.Flags.Lenshelp.Id);
             }
 
             if (item.Flags.IgnoreLook && versionInfo.HasFlag("Lookthrough"))
-                w.Write((byte)versionInfo.GetFlagId("Lookthrough"));
+                Begin("Lookthrough");
 
             if (item.Flags.Clothes != null && versionInfo.HasFlag("Clothes"))
             {
-                w.Write((byte)versionInfo.GetFlagId("Clothes"));
+                Begin("Clothes");
                 w.Write((ushort)item.Flags.Clothes.Slot);
             }
 
             if (item.Flags.DefaultAction != null && versionInfo.HasFlag("DefaultAction")) {
-                w.Write((byte)versionInfo.GetFlagId("DefaultAction"));
+                Begin("DefaultAction");
                 w.Write((ushort)item.Flags.DefaultAction.Action);
             }
 
             if (item.Flags.Market != null && versionInfo.HasFlag("Market"))
             {
-                w.Write((byte)versionInfo.GetFlagId("Market"));
+                Begin("Market");
 
-                ushort category = (ushort)item.Flags.Market.Category;
-                if (category > 22)
-                    category = 9;
-                w.Write(category);
-
+                w.Write((ushort)item.Flags.Market.Category);
                 w.Write((ushort)item.Flags.Market.TradeAsObjectId);
                 w.Write((ushort)item.Flags.Market.ShowAsObjectId);
-                w.Write((ushort)item.Name.Length);
-                for (UInt16 i = 0; i < item.Name.Length; ++i)
-                    w.Write((char)item.Name[i]);
+
+                // the reader decodes ISO-8859-1; BinaryWriter.Write(char) would emit UTF-8 and
+                // desync the declared length from the bytes written for any non-ASCII name
+                byte[] name = Encoding.GetEncoding("ISO-8859-1").GetBytes(item.Name ?? "");
+                w.Write((ushort)name.Length);
+                w.Write(name);
                 w.Write((ushort)item.Flags.Market.Vocation);
                 w.Write((ushort)item.Flags.Market.MinimumLevel);
             }
 
             if (item.Flags.Wrap && versionInfo.HasFlag("Wrappable"))
-                w.Write((byte)versionInfo.GetFlagId("Wrappable"));
+                Begin("Wrappable");
 
             if (item.Flags.Unwrap && versionInfo.HasFlag("UnWrappable"))
-                w.Write((byte)versionInfo.GetFlagId("UnWrappable"));
+                Begin("UnWrappable");
 
             if (item.Flags.Topeffect && versionInfo.HasFlag("TopEffect"))
-                w.Write((byte)versionInfo.GetFlagId("TopEffect"));
+                Begin("TopEffect");
 
             // flag "rune charges visible" - dat structure 7.8 - 8.54
             if (item.Flags.Wearout && versionInfo.HasFlag("ShowCharges"))
-                w.Write((byte)versionInfo.GetFlagId("ShowCharges"));
+                Begin("ShowCharges");
 
             // otc wings offset
             if (item.Flags.WingsOffset != null && versionInfo.HasFlag("WingsOffset")) {
-                w.Write((byte)versionInfo.GetFlagId("WingsOffset"));
+                Begin("WingsOffset");
                 w.Write((short)item.Flags.WingsOffset.NorthX);
                 w.Write((short)item.Flags.WingsOffset.NorthY);
                 w.Write((short)item.Flags.WingsOffset.EastX);
@@ -889,7 +897,16 @@ namespace Assets_Editor
                 w.Write((short)item.Flags.WingsOffset.WestX);
                 w.Write((short)item.Flags.WingsOffset.WestY);
             }
-            w.Write((byte)0xFF);
+
+            w.Flush();
+            byte[] bytes = buffer.ToArray();
+            // OrderBy is stable, so a flag written twice keeps its relative order
+            foreach (int k in Enumerable.Range(0, segments.Count).OrderBy(i => segments[i].Id)) {
+                long start = segments[k].Start;
+                long end = k + 1 < segments.Count ? segments[k + 1].Start : bytes.Length;
+                output.Write(bytes, (int)start, (int)(end - start));
+            }
+            output.Write((byte)0xFF);
         }
 
     }

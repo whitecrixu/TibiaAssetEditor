@@ -4,6 +4,60 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.1 — 8.60 / TFS 1.x compatibility update
+
+Full audit against a TFS 1.5 (protocol 8.60) server with an OTClient (Mehah)
+8.60 client: extended sprites, frame durations, frame groups, ~55k items,
+~511k sprites. Unchanged `Tibia.dat`, `Tibia.spr` and `items.otb` now come
+back **byte-identical** after a save, and `items.xml` comes back semantically
+identical.
+
+### Legacy DAT/SPR editor
+- **Compile works** (it was a stub). Writes the `.dat` and, only when sprites
+  changed, the `.spr`. The first compile keeps the originals as `*-bak`, and
+  files are written through a temp file and then renamed into place.
+- Fast, lossless `.spr` compile: unchanged sprites are copied raw and only
+  edited ones are re-encoded (511k sprites in ~1.5 s).
+- Empty sprites (spr address 0) no longer read garbage from the file header.
+- Saving an object no longer drops **Market** (the category list was 6 of 27,
+  and trade-as / show-as / vocation / level were discarded) or **Lens help**
+  (ids 1100+), and keeps clothes slots 11–12.
+- Animation loop count is written as-is. Ping-pong and counted animations were
+  turned into infinite ones; the same bug was fixed in OBD export.
+- Market names are written as ISO-8859-1. Non-ASCII names corrupted the dat.
+- Flags are written in ascending id order, like the original files.
+- Ids are positional. Deleting an object in the middle now clears it instead
+  of shifting every later id, and a dat with id gaps is refused.
+- Paste Flags replaces the flags instead of merging them.
+- Wider field ranges (light, text length, shift, elevation, ground speed),
+  so loading and saving no longer clamps real values.
+- A known 8.60 signature selects the right dat structure. When the first load
+  attempt fails, the `.otfi` flags are tried with every structure before
+  guessing, and a read must end exactly at EOF.
+
+### items.xml
+- Saving patches the document in place: only entries you changed are
+  touched. `decayTo="0"`, `showcount="0"`, nested `field` damage,
+  `fromid/toid` ranges, comments and the `iso-8859-1` encoding are kept.
+  Before, a save changed the behaviour of ~1,000 items.
+- The first definition of a duplicate id wins, as on the server. Renaming an
+  item to an id that already exists is refused, and a `-bak` is kept.
+- Form fields no longer clamp values (containerSize 220, charges 14400, ...).
+
+### items.otb
+- Byte-identical round trip: the client version label is read from the file
+  (it was hard-coded to 12.90), and unknown item groups are preserved.
+- Saves go through a temp file, and errors are shown in the UI.
+- *Create missing items* keeps server id = client id on 1:1 mapped OTBs.
+- Warning before saving Podium items (group 15), which TFS 1.x rejects.
+
+### Monster Editor
+- TFS revscript monsters (`mType:health(...)` style) are recognised: their
+  basic stats are shown, and they are read-only. Before, *Save All*
+  overwrote them with empty monsters (health 0, no loot).
+
+---
+
 ## V2.0 — MultiTool release
 
 Major expansion: the app is no longer just a DAT/sprite editor — it's a suite

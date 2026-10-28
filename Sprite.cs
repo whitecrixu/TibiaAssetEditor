@@ -346,68 +346,7 @@ namespace Assets_Editor
 
         public static async Task CompileSpritesAsync(string file, SpriteStorage spriteStorage, bool transparency, uint signature, IProgress<int> progress, bool extended = true)
         {
-            await Task.Run(() =>
-            {
-                int percentageComplete = 0;
-                int currentPercentage = 0;
-                int FullProgress = spriteStorage.SprLists.Count;
-                string tempFile = file + ".tmp";
-                using BinaryWriter writer = new(new FileStream(tempFile, FileMode.Create));
-                uint totalPics = (uint)spriteStorage.SprLists.Count - 1;
-
-                writer.Write(signature);
-                if (extended)
-                    writer.Write(totalPics);
-                else
-                    writer.Write(Convert.ToUInt16(totalPics));
-
-                byte headSize = extended ? (byte)8 : (byte)6;
-                int addressPosition = headSize;
-                int address = (int)((totalPics * 4) + headSize);
-
-                for (uint id = 1; id <= totalPics; id++)
-                {
-                    writer.Seek(addressPosition, SeekOrigin.Begin);
-
-                    using var stream = spriteStorage.getSpriteStream(id);
-                    using var skBmp = SKBitmap.Decode(stream);
-                    var bytes = CompressBitmap(skBmp, transparency);
-
-                    if (bytes.Length > 0)
-                    {
-                        writer.Write((uint)address);
-                        writer.Seek(address, SeekOrigin.Begin);
-                        writer.Write((byte)0xFF);
-                        writer.Write((byte)0x00);
-                        writer.Write((byte)0xFF);
-                        writer.Write((short)bytes.Length);
-                        if (bytes.Length > 0)
-                            writer.Write(bytes);
-                    }
-                    else
-                    {
-                        writer.Write((uint)0);
-                        writer.Seek(address, SeekOrigin.Begin);
-                    }
-
-                    address = (int)writer.BaseStream.Position;
-                    addressPosition += 4;
-
-                    percentageComplete = (int)(id * 100 / FullProgress);
-                    if (percentageComplete > currentPercentage)
-                    {
-                        progress?.Report(percentageComplete);
-                        currentPercentage = percentageComplete;
-                    }
-                }
-
-                writer.Close();
-                File.Move(tempFile, file, overwrite: true);
-                if (File.Exists(tempFile))
-                {
-                    try { File.Delete(tempFile); } catch { }
-                }
-            });
+            await Task.Run(() => spriteStorage.Compile(file, signature, transparency, extended, progress));
         }
     }
 
@@ -419,6 +358,18 @@ namespace Assets_Editor
         public IProgress<int>? ProgressListener { get; set; }
         public Dictionary<uint, Sprite> Sprites { get; set; }
         public ConcurrentDictionary<int, MemoryStream> SprLists { get; set; }
+
+        // sprites changed in the editor since the file was loaded or last compiled;
+        // everything else is copied byte-for-byte from SprPath on compile
+        public HashSet<uint> Modified { get; } = [];
+        public uint FileSpriteCount { get; private set; }
+        private bool _fileExtended;
+
+        public void MarkModified(uint id)
+        {
+            lock (Modified)
+                Modified.Add(id);
+        }
 
         public SpriteStorage()
         {
@@ -453,6 +404,10 @@ namespace Assets_Editor
             Signature = reader.ReadUInt32();
             bool isExtended = MainWindow.GetCurrentPreset()?.Extended ?? false;
             uint totalPics = isExtended ? reader.ReadUInt32() : reader.ReadUInt16();
+            _fileExtended = isExtended;
+            FileSpriteCount = totalPics;
+            lock (Modified)
+                Modified.Clear();
 
             Sprite blankSpr = new() { ID = 0, CompressedPixels = [] };
             using var bmp = blankSpr.GetBitmap();
@@ -480,31 +435,143 @@ namespace Assets_Editor
 
         public MemoryStream getSpriteStream(uint id)
         {
-            if (SprLists[(int)id] != null && SprLists[(int)id].Length > 0)
-                return SprLists[(int)id];
-
-            bool isExtended = MainWindow.GetCurrentPreset()?.Extended ?? false;
-
-            Sprite sprite = Sprites[id];
-            using FileStream fileStream = new(SprPath, FileMode.Open, FileAccess.Read);
-            using BinaryReader reader = new(fileStream);
-
-            reader.BaseStream.Seek((isExtended ? 8 : 6) + (id - 1) * 4, SeekOrigin.Begin);
-            uint index = reader.ReadUInt32() + 3;
-            reader.BaseStream.Seek(index, SeekOrigin.Begin);
-            sprite.Size = reader.ReadUInt16();
-
-            if (sprite.Size > 0)
-            {
-                sprite.CompressedPixels = reader.ReadBytes((int)sprite.Size);
-                using var bmp = sprite.GetBitmap();
-                using var img = SKImage.FromBitmap(bmp);
-                using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
-                sprite.MemoryStream = new MemoryStream(dat.ToArray());
-                SprLists[(int)id] = sprite.MemoryStream;
+            // callers hand the stream to SKBitmap.Decode, which disposes it on Linux; always give out a
+            // fresh stream and keep only the bytes cached (ToArray works on a disposed MemoryStream)
+            if (SprLists.TryGetValue((int)id, out MemoryStream? cached) && cached != null) {
+                byte[] bytes = cached.ToArray();
+                if (bytes.Length > 0)
+                    return new MemoryStream(bytes, false);
             }
 
-            return SprLists[(int)id];
+            Sprite sprite = Sprites[id];
+            byte[]? compressed = id >= 1 && id <= FileSpriteCount ? ReadRawSprite(id) : null;
+
+            // address 0 marks an empty sprite: there is no record to read
+            sprite.CompressedPixels = compressed ?? [];
+            sprite.Size = (uint)sprite.CompressedPixels.Length;
+
+            using var bmp = sprite.GetBitmap();
+            using var img = SKImage.FromBitmap(bmp);
+            using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
+            byte[] png = dat.ToArray();
+            sprite.MemoryStream = new MemoryStream(png);
+            SprLists[(int)id] = sprite.MemoryStream;
+            return new MemoryStream(png, false);
+        }
+
+        // compressed pixel data of sprite id as stored in SprPath, or null for an empty sprite
+        private byte[]? ReadRawSprite(uint id)
+        {
+            using FileStream fileStream = new(SprPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using BinaryReader reader = new(fileStream);
+            return ReadRawSprite(reader, id);
+        }
+
+        private byte[]? ReadRawSprite(BinaryReader reader, uint id)
+        {
+            reader.BaseStream.Seek((_fileExtended ? 8 : 6) + (id - 1) * 4, SeekOrigin.Begin);
+            uint address = reader.ReadUInt32();
+            if (address == 0)
+                return null;
+
+            // 3 bytes colour key, u16 size, pixels
+            reader.BaseStream.Seek(address + 3, SeekOrigin.Begin);
+            ushort size = reader.ReadUInt16();
+            return size > 0 ? reader.ReadBytes(size) : null;
+        }
+
+        // Writes the sprite file. Unchanged sprites are copied verbatim from SprPath (fast and lossless);
+        // only sprites in Modified, or beyond the loaded file, are re-encoded.
+        public void Compile(string file, uint signature, bool transparency, bool extended, IProgress<int>? progress)
+        {
+            uint totalPics = (uint)Math.Max(0, SprLists.Count - 1);
+            if (!extended && totalPics > ushort.MaxValue)
+                throw new InvalidOperationException($"{totalPics} sprites do not fit a non-extended spr (max {ushort.MaxValue}). Enable 'Extended'.");
+
+            HashSet<uint> modified;
+            lock (Modified)
+                modified = [.. Modified];
+
+            string tempFile = file + ".tmp";
+            int headSize = extended ? 8 : 6;
+            try
+            {
+                using (var source = File.Exists(SprPath) ? new BinaryReader(new FileStream(SprPath, FileMode.Open, FileAccess.Read, FileShare.Read)) : null)
+                using (var writer = new BinaryWriter(new FileStream(tempFile, FileMode.Create, FileAccess.Write)))
+                {
+                    writer.Write(signature);
+                    if (extended)
+                        writer.Write(totalPics);
+                    else
+                        writer.Write((ushort)totalPics);
+
+                    // address table is filled in as we go, data follows it
+                    uint[] addresses = new uint[totalPics];
+                    writer.Write(new byte[totalPics * 4]);
+
+                    int lastReported = -1;
+                    for (uint id = 1; id <= totalPics; id++)
+                    {
+                        byte[]? bytes;
+                        bool fromFile = source != null && id <= FileSpriteCount && !modified.Contains(id)
+                                        && transparency == Transparency;
+                        if (fromFile)
+                        {
+                            bytes = ReadRawSprite(source!, id);
+                        }
+                        else if (Sprites.TryGetValue(id, out Sprite? sprite) && sprite.CompressedPixels != null
+                                 && sprite.Transparent == transparency && modified.Contains(id))
+                        {
+                            bytes = sprite.CompressedPixels;
+                        }
+                        else
+                        {
+                            using var stream = getSpriteStream(id);
+                            using var skBmp = SKBitmap.Decode(stream.ToArray());
+                            bytes = skBmp != null ? Sprite.CompressBitmap(skBmp, transparency) : null;
+                        }
+
+                        if (bytes != null && bytes.Length > 0)
+                        {
+                            if (bytes.Length > ushort.MaxValue)
+                                throw new InvalidOperationException($"Sprite {id} is too large ({bytes.Length} bytes).");
+                            addresses[id - 1] = (uint)writer.BaseStream.Position;
+                            writer.Write((byte)0xFF);
+                            writer.Write((byte)0x00);
+                            writer.Write((byte)0xFF);
+                            writer.Write((ushort)bytes.Length);
+                            writer.Write(bytes);
+                        }
+
+                        int percent = (int)((long)id * 100 / totalPics);
+                        if (percent != lastReported)
+                        {
+                            progress?.Report(percent);
+                            lastReported = percent;
+                        }
+                    }
+
+                    writer.Seek(headSize, SeekOrigin.Begin);
+                    foreach (uint address in addresses)
+                        writer.Write(address);
+                }
+
+                File.Move(tempFile, file, overwrite: true);
+            }
+            catch
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+                throw;
+            }
+
+            // the written file is now the source of truth for raw reads
+            SprPath = file;
+            Signature = signature;
+            Transparency = transparency;
+            _fileExtended = extended;
+            FileSpriteCount = totalPics;
+            lock (Modified)
+                Modified.Clear();
         }
     }
 }

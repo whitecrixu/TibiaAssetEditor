@@ -84,6 +84,13 @@ namespace Assets_Editor
             set { if (_image != value) { _image = value; OnChanged(nameof(Image)); } }
         }
 
+        // Where this entry came from in the loaded document, and its values at load time. Save only
+        // touches the XML of entries whose values differ, so everything the model does not represent
+        // (ranges, comments, nested <attribute>s, explicit defaults such as decayTo="0") survives.
+        internal XElement? Source;
+        internal ushort OriginalId;
+        internal Dictionary<string, string>? Original;
+
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnChanged(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
 
@@ -94,6 +101,12 @@ namespace Assets_Editor
     {
         public static Dictionary<ushort, ItemEntry> Items { get; private set; } = new();
         public static string? LoadedPath { get; private set; }
+
+        private static XDocument? _doc;
+        // the entries as loaded, by their original id (first definition wins, like the engine)
+        private static Dictionary<ushort, ItemEntry> _loaded = new();
+        // entries that share one fromid/toid element
+        private static Dictionary<XElement, List<ItemEntry>> _rangeMembers = new();
         public static bool IsLoaded => Items.Count > 0;
 
         // Known attribute keys we promote to typed fields on ItemEntry.
@@ -121,9 +134,12 @@ namespace Assets_Editor
             try
             {
                 Items.Clear();
+                _loaded.Clear();
+                _rangeMembers.Clear();
                 LoadedPath = path;
 
-                var doc = XDocument.Load(path);
+                var doc = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+                _doc = doc;
                 var root = doc.Root;
                 if (root == null) return false;
 
@@ -154,20 +170,33 @@ namespace Assets_Editor
                             Article = article,
                             Name = name,
                             Plural = plural,
+                            Source = el,
+                            OriginalId = id,
                         };
                         ApplyAttributes(entry, allAttrs);
+                        entry.Original = Snapshot(entry);
                         return entry;
                     }
 
+                    // the engine keeps the first definition of an id and ignores later ones
                     if (idAttr != null && ushort.TryParse(idAttr.Value, out ushort id))
-                        Items[id] = BuildEntry(id);
+                    {
+                        if (!Items.ContainsKey(id))
+                            _loaded[id] = Items[id] = BuildEntry(id);
+                    }
                     else if (fromAttr != null && toAttr != null &&
                         ushort.TryParse(fromAttr.Value, out ushort from) &&
                         ushort.TryParse(toAttr.Value, out ushort to))
                     {
-                        for (ushort i = from; i <= to; i++)
-                            if (!Items.ContainsKey(i))
-                                Items[i] = BuildEntry(i);
+                        var members = new List<ItemEntry>();
+                        for (int i = from; i <= to; i++)
+                        {
+                            if (Items.ContainsKey((ushort)i)) continue;
+                            var entry = BuildEntry((ushort)i);
+                            _loaded[(ushort)i] = Items[(ushort)i] = entry;
+                            members.Add(entry);
+                        }
+                        _rangeMembers[el] = members;
                     }
                 }
 
@@ -249,40 +278,228 @@ namespace Assets_Editor
             path ??= LoadedPath;
             if (string.IsNullOrEmpty(path)) return false;
 
+            string tempFile = path + ".tmp";
             try
             {
-                var doc = new XDocument(new XDeclaration("1.0", "UTF-8", null));
-                var root = new XElement("items");
-                doc.Add(root);
+                var doc = _doc ?? new XDocument(new XDeclaration("1.0", "iso-8859-1", null), new XElement("items"));
+                var root = doc.Root!;
 
-                foreach (var kv in Items.OrderBy(k => k.Key))
+                // 1. entries that were in the file: drop the removed ones, patch the changed ones
+                foreach (var (originalId, entry) in _loaded.ToList())
                 {
-                    var entry = kv.Value;
+                    bool present = Items.TryGetValue(entry.Id, out var current) && ReferenceEquals(current, entry);
+                    if (!present)
+                    {
+                        XElement gone = Isolate(entry);
+                        if (gone.PreviousNode is XText ws && string.IsNullOrWhiteSpace(ws.Value))
+                            ws.Remove();
+                        gone.Remove();
+                        _loaded.Remove(originalId);
+                        continue;
+                    }
+
+                    var now = Snapshot(entry);
+                    if (entry.Id == entry.OriginalId && SameValues(entry.Original!, now))
+                        continue;
+
+                    XElement el = Isolate(entry);
+                    if (entry.Id != entry.OriginalId)
+                        el = WithId(el, entry.Id);
+                    Patch(el, entry.Original!, now);
+                    entry.Original = now;
+                }
+
+                // 2. entries added in the editor
+                foreach (var entry in Items.Values.Where(e => e.Source == null).OrderBy(e => e.Id))
+                {
                     var el = new XElement("item", new XAttribute("id", entry.Id));
                     if (!string.IsNullOrEmpty(entry.Article)) el.Add(new XAttribute("article", entry.Article));
                     if (!string.IsNullOrEmpty(entry.Name))    el.Add(new XAttribute("name", entry.Name));
                     if (!string.IsNullOrEmpty(entry.Plural))  el.Add(new XAttribute("plural", entry.Plural));
-
                     WriteAttrs(el, entry);
-
-                    root.Add(el);
+                    InsertSorted(root, el, entry.Id);
+                    entry.Source = el;
+                    entry.Original = Snapshot(entry);
                 }
 
-                using var writer = XmlWriter.Create(path, new XmlWriterSettings
+                // re-key what is now in the file
+                _loaded = Items.Values.Where(e => e.Source != null).ToDictionary(e => e.Id);
+                foreach (var e in _loaded.Values) e.OriginalId = e.Id;
+
+                // keep the file's own encoding (iso-8859-1 on TFS: names reach the 8.60 client as Latin-1)
+                var encoding = System.Text.Encoding.Latin1;
+                try { if (doc.Declaration?.Encoding is string enc) encoding = System.Text.Encoding.GetEncoding(enc); } catch { }
+                doc.Declaration ??= new XDeclaration("1.0", encoding.WebName, null);
+
+                using (var writer = XmlWriter.Create(tempFile, new XmlWriterSettings
                 {
-                    Indent = true,
-                    IndentChars = "\t",
-                    Encoding = System.Text.Encoding.UTF8,
+                    Indent = false, // whitespace was preserved on load
+                    Encoding = encoding is System.Text.UTF8Encoding ? new System.Text.UTF8Encoding(false) : encoding,
                     OmitXmlDeclaration = false,
-                });
-                doc.Save(writer);
+                }))
+                {
+                    doc.Save(writer);
+                }
+
+                if (File.Exists(path) && !File.Exists(path + "-bak"))
+                    File.Copy(path, path + "-bak");
+                File.Move(tempFile, path, overwrite: true);
+                _doc = doc;
+                LoadedPath = path;
                 return true;
             }
             catch (Exception ex)
             {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
                 MainWindow.Log($"Failed to save items.xml: {ex.Message}");
                 return false;
             }
+        }
+
+        // Every value the editor models, as text, so two snapshots compare equal exactly when nothing changed.
+        private static Dictionary<string, string> Snapshot(ItemEntry e)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["@article"] = e.Article, ["@name"] = e.Name, ["@plural"] = e.Plural,
+                ["description"] = e.Description, ["type"] = e.Type, ["slotType"] = e.SlotType,
+                ["weaponType"] = e.WeaponType, ["shootType"] = e.ShootType, ["effect"] = e.Effect,
+                ["corpseType"] = e.CorpseType, ["fluidSource"] = e.FluidSource,
+            };
+            void I(string k, int v) => map[k] = v.ToString();
+            void B(string k, bool v) => map[k] = v ? "1" : "0";
+            I("weight", e.Weight); I("attack", e.Attack); I("defense", e.Defense); I("extraDef", e.ExtraDef);
+            I("armor", e.Armor); I("range", e.Range); I("charges", e.Charges); I("duration", e.Duration);
+            I("decayTo", e.DecayTo); I("containerSize", e.ContainerSize); I("maxHitChance", e.MaxHitChance);
+            I("breakChance", e.BreakChance); I("maxTextLen", e.MaxTextLen); I("writeOnceItemId", e.WriteOnceItemId);
+            I("rotateTo", e.RotateTo); I("speed", e.Speed); I("level", e.RequiredLevel); I("magLevel", e.RequiredMagLevel);
+            I("wrapable", e.Wrapable); I("unwrapable", e.Unwrapable);
+            I("skillSword", e.SkillSword); I("skillAxe", e.SkillAxe); I("skillClub", e.SkillClub); I("skillDist", e.SkillDist);
+            I("skillShield", e.SkillShield); I("skillFish", e.SkillFish); I("magicpoints", e.MagicPoints);
+            B("stopDuration", e.StopDuration); B("showCount", e.ShowCount); B("showAttributes", e.ShowAttributes);
+            B("readable", e.Readable); B("writeable", e.Writeable); B("allowDistRead", e.AllowDistRead);
+            B("replaceable", e.ReplaceAble); B("blockprojectile", e.BlockProjectile);
+            B("moveable", e.MoveAble); B("pickupable", e.PickupAble);
+            foreach (var kv in e.CustomAttributes)
+                map["custom:" + kv.Key] = kv.Value;
+            return map;
+        }
+
+        private static bool SameValues(Dictionary<string, string> a, Dictionary<string, string> b) =>
+            a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out var v) && v == kv.Value);
+
+        // Applies only the differences between two snapshots to an <item> element.
+        private static void Patch(XElement el, Dictionary<string, string> before, Dictionary<string, string> after)
+        {
+            foreach (var key in before.Keys.Union(after.Keys, StringComparer.OrdinalIgnoreCase).ToList())
+            {
+                before.TryGetValue(key, out var oldValue);
+                after.TryGetValue(key, out var newValue);
+                if (oldValue == newValue) continue;
+
+                if (key.StartsWith('@'))
+                {
+                    el.SetAttributeValue(key[1..], string.IsNullOrEmpty(newValue) ? null : newValue);
+                    continue;
+                }
+
+                string attrKey = key.StartsWith("custom:") ? key["custom:".Length..] : key;
+                var existing = el.Elements("attribute").FirstOrDefault(a =>
+                    string.Equals(a.Attribute("key")?.Value, attrKey, StringComparison.OrdinalIgnoreCase));
+
+                // numbers and flags are written explicitly once edited (0 / false are meaningful to the
+                // engine, e.g. decayTo="0"); text and custom keys are removed when cleared
+                if (newValue == null || (newValue.Length == 0 && !IsNumeric(oldValue)))
+                {
+                    existing?.Remove();
+                }
+                else if (existing != null)
+                {
+                    existing.SetAttributeValue("value", newValue);
+                }
+                else
+                {
+                    var added = new XElement("attribute", new XAttribute("key", attrKey), new XAttribute("value", newValue));
+                    var last = el.Elements("attribute").LastOrDefault();
+                    if (last != null)
+                    {
+                        string indent = last.PreviousNode is XText ws && string.IsNullOrWhiteSpace(ws.Value) ? ws.Value : "\n\t\t";
+                        last.AddAfterSelf(new XText(indent), added);
+                    }
+                    else
+                    {
+                        el.Add(new XText("\n\t\t"), added, new XText("\n\t"));
+                    }
+                }
+            }
+        }
+
+        private static bool IsNumeric(string? v) => v != null && int.TryParse(v, out _);
+
+        // The element that holds only this entry: a fromid/toid range is split around it first.
+        private static XElement Isolate(ItemEntry entry)
+        {
+            XElement el = entry.Source!;
+            if (el.Attribute("id") != null || !_rangeMembers.TryGetValue(el, out var members))
+                return el;
+
+            ushort id = entry.OriginalId;
+            var lower = members.Where(m => m.OriginalId < id).ToList();
+            var upper = members.Where(m => m.OriginalId > id).ToList();
+            _rangeMembers.Remove(el);
+
+            XElement MakeRange(List<ItemEntry> part)
+            {
+                ushort from = part.Min(m => m.OriginalId), to = part.Max(m => m.OriginalId);
+                XElement copy;
+                if (from == to)
+                {
+                    copy = WithId(new XElement(el), from);
+                }
+                else
+                {
+                    copy = new XElement(el);
+                    copy.SetAttributeValue("fromid", from);
+                    copy.SetAttributeValue("toid", to);
+                    _rangeMembers[copy] = part;
+                }
+                foreach (var m in part) m.Source = copy;
+                return copy;
+            }
+
+            var single = WithId(new XElement(el), id);
+            entry.Source = single;
+
+            string indent = (el.PreviousNode as XText)?.Value is string ws && string.IsNullOrWhiteSpace(ws) ? ws : "\n\t";
+            var replacement = new List<object>();
+            if (lower.Count > 0) { replacement.Add(MakeRange(lower)); replacement.Add(new XText(indent)); }
+            replacement.Add(single);
+            if (upper.Count > 0) { replacement.Add(new XText(indent)); replacement.Add(MakeRange(upper)); }
+            el.ReplaceWith(replacement.ToArray());
+            return single;
+        }
+
+        // copy of an <item> element with a single id attribute placed first (fromid/toid dropped)
+        private static XElement WithId(XElement el, ushort id)
+        {
+            var copy = new XElement("item", new XAttribute("id", id),
+                el.Attributes().Where(a => a.Name != "id" && a.Name != "fromid" && a.Name != "toid"),
+                el.Nodes());
+            if (el.Parent != null)
+            {
+                el.ReplaceWith(copy);
+                foreach (var e in Items.Values.Where(e => e.Source == el)) e.Source = copy;
+            }
+            return copy;
+        }
+
+        private static void InsertSorted(XElement root, XElement el, ushort id)
+        {
+            static int FirstId(XElement e) =>
+                int.TryParse((e.Attribute("id") ?? e.Attribute("fromid"))?.Value, out int v) ? v : -1;
+            var before = root.Elements("item").LastOrDefault(e => FirstId(e) >= 0 && FirstId(e) < id);
+            if (before != null) before.AddAfterSelf(new XText("\n\t"), el);
+            else root.AddFirst(new XText("\n\t"), el);
         }
 
         private static void WriteAttrs(XElement el, ItemEntry e)

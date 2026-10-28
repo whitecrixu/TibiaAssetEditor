@@ -84,6 +84,11 @@ namespace Assets_Editor
                     appearance.Id = (uint)i;
                     Appearances.Missile.Add(appearance);
                 }
+
+                // a wrong structure/feature combination can parse a prefix of the file by accident;
+                // only a read that ends exactly at EOF is a real match
+                if (stream.Position != stream.Length)
+                    throw new Exception($"{stream.Length - stream.Position} trailing bytes after the last missile");
             }
             catch (Exception e)
             {
@@ -92,57 +97,70 @@ namespace Assets_Editor
         }
         public static bool WriteLegacyDat(string fn, uint signature, Appearances appearances, int version)
         {
+            string tempFile = fn + ".tmp";
             try
             {
-                VersionInfo versionInfo = MainWindow.datStructure.GetVersionInfo(version);
-                FileStream datFile = new(fn, FileMode.Create, FileAccess.Write);
-                using var w = new BinaryWriter(datFile);
-                w.Write(signature);
-                w.Write((ushort)(appearances.Object.Count + 99));
-                w.Write((ushort)appearances.Outfit.Count);
-                w.Write((ushort)appearances.Effect.Count);
-                w.Write((ushort)appearances.Missile.Count);
+                // the dat stores no ids: an object's id is its position. The server (items.otb maps
+                // client id -> server id 1:1 on NewEra) and the map reference these ids, so a gap
+                // would silently shift every later object. Refuse to write instead.
+                ValidateContiguousIds(appearances.Object, 100, "object");
+                ValidateContiguousIds(appearances.Outfit, 1, "outfit");
+                ValidateContiguousIds(appearances.Effect, 1, "effect");
+                ValidateContiguousIds(appearances.Missile, 1, "missile");
+                if (appearances.Object.Count + 99 > ushort.MaxValue)
+                    throw new InvalidOperationException($"Too many objects ({appearances.Object.Count}); the dat header is limited to {ushort.MaxValue}.");
 
+                VersionInfo versionInfo = MainWindow.datStructure.GetVersionInfo(version);
                 PresetSettings preset = MainWindow.GetCurrentPreset() ?? new();
 
                 // raw rd file has 2 bytes at the front of every item
                 bool rdBytes = versionInfo.UseRDBytes;
 
-                foreach (Appearance appearance in appearances.Object.OrderBy(a => a.Id)) {
-                    if (rdBytes) {
-                        w.Write((ushort)0);
-                    }
+                using (var w = new BinaryWriter(new FileStream(tempFile, FileMode.Create, FileAccess.Write)))
+                {
+                    w.Write(signature);
+                    w.Write((ushort)(appearances.Object.Count + 99));
+                    w.Write((ushort)appearances.Outfit.Count);
+                    w.Write((ushort)appearances.Effect.Count);
+                    w.Write((ushort)appearances.Missile.Count);
 
-                    DatStructure.WriteAppearance(w, appearance, versionInfo, preset);
-                }
-                foreach (Appearance appearance in appearances.Outfit.OrderBy(a => a.Id)) {
-                    if (rdBytes) {
-                        w.Write((ushort)0);
-                    }
+                    var groups = new (Google.Protobuf.Collections.RepeatedField<Appearance> list, APPEARANCE_TYPE type)[] {
+                        (appearances.Object, APPEARANCE_TYPE.AppearanceObject),
+                        (appearances.Outfit, APPEARANCE_TYPE.AppearanceOutfit),
+                        (appearances.Effect, APPEARANCE_TYPE.AppearanceEffect),
+                        (appearances.Missile, APPEARANCE_TYPE.AppearanceMissile),
+                    };
+                    foreach (var (list, type) in groups) {
+                        foreach (Appearance appearance in list.OrderBy(a => a.Id)) {
+                            if (rdBytes) {
+                                w.Write((ushort)0);
+                            }
 
-                    DatStructure.WriteAppearance(w, appearance, versionInfo, preset);
-                }
-                foreach (Appearance appearance in appearances.Effect.OrderBy(a => a.Id)) {
-                    if (rdBytes) {
-                        w.Write((ushort)0);
+                            // AppearanceType decides whether frame groups are written; never trust an unset field
+                            appearance.AppearanceType = type;
+                            DatStructure.WriteAppearance(w, appearance, versionInfo, preset);
+                        }
                     }
-
-                    DatStructure.WriteAppearance(w, appearance, versionInfo, preset);
-                }
-                foreach (Appearance appearance in appearances.Missile.OrderBy(a => a.Id)) {
-                    if (rdBytes) {
-                        w.Write((ushort)0);
-                    }
-
-                    DatStructure.WriteAppearance(w, appearance, versionInfo, preset);
                 }
 
+                File.Move(tempFile, fn, overwrite: true);
                 return true;
             }
-            catch (UnauthorizedAccessException exception)
+            catch (Exception exception)
             {
-                ErrorManager.ShowError(exception.Message);
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+                ErrorManager.ShowError($"Unable to write {Path.GetFileName(fn)}:\n\n{exception.Message}");
                 return false;
+            }
+        }
+
+        private static void ValidateContiguousIds(Google.Protobuf.Collections.RepeatedField<Appearance> list, uint firstId, string what)
+        {
+            uint expected = firstId;
+            foreach (Appearance appearance in list.OrderBy(a => a.Id)) {
+                if (appearance.Id != expected)
+                    throw new InvalidOperationException($"The {what} list is not contiguous: expected id {expected}, found {appearance.Id}. Ids are positional in the dat, so writing would shift every later {what}.");
+                expected++;
             }
         }
 

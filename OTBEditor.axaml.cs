@@ -125,21 +125,27 @@ namespace Assets_Editor
             if (!OTBLoaded || MainWindow.appearances == null) return;
 
             int lastServerId = OTBItems.Max(i => (int)i.ServerId);
-            ushort lastCid = OTBItems.Max(i => i.ClientId);
             uint maxCid = MainWindow.appearances.Object.Last().Id;
             lastServerId++;
 
+            // servers like NewEra map every client id to the same server id; keep that invariant for new items
+            bool identity = OTBItems.All(x => x.ServerId == x.ClientId);
+            var knownCids = OTBItems.Select(x => (int)x.ClientId).ToHashSet();
+            var usedSids = OTBItems.Select(x => (int)x.ServerId).ToHashSet();
+
             var newItems = new List<ShowList>();
-            for (ushort i = 100; i <= maxCid; i++)
+            for (int i = 100; i <= maxCid && i <= ushort.MaxValue; i++)
             {
-                if (!OTBItems.Any(x => x.ClientId == i) && appearanceByClientId.ContainsKey(i))
+                if (!knownCids.Contains(i) && appearanceByClientId.ContainsKey((ushort)i))
                 {
-                    ServerItem item = new ServerItem(appearanceByClientId[i]);
-                    item.ClientId = i;
-                    item.ServerId = (ushort)lastServerId;
+                    int sid = identity && !usedSids.Contains(i) ? i : lastServerId++;
+                    if (sid > ushort.MaxValue) break;
+                    ServerItem item = new ServerItem(appearanceByClientId[(ushort)i]);
+                    item.ClientId = (ushort)i;
+                    item.ServerId = (ushort)sid;
                     OTBItems.Add(item);
+                    usedSids.Add(sid);
                     newItems.Add(new ShowList() { Id = item.ServerId, Cid = item.ClientId });
-                    lastServerId++;
                 }
             }
             NewItemListView.ItemsSource = newItems;
@@ -165,11 +171,8 @@ namespace Assets_Editor
             if (ItemListView.SelectedItems == null) return;
             foreach (ShowList selectedItem in ItemListView.SelectedItems.Cast<ShowList>())
             {
-                int idx = 0;
-                for (int i = 0; i < OTBItems.Count; i++)
-                {
-                    if (OTBItems[i].ServerId == selectedItem.Id) { idx = i; break; }
-                }
+                int idx = OTBItems.FindIndex(x => x.ServerId == selectedItem.Id);
+                if (idx < 0) continue;
                 ServerItem item = OTBItems[idx];
                 if (appearanceByClientId.ContainsKey(item.ClientId))
                 {
@@ -194,6 +197,12 @@ namespace Assets_Editor
 
             if (file != null)
             {
+                // group 15 is unknown to TFS 1.x (NewEra): Items::loadFromOtb fails and the server does not start
+                int podiums = OTBItems.Count(x => x.Type == ServerItemType.Podium);
+                if (podiums > 0 && !await ErrorManager.ConfirmAsync("Podium items",
+                        $"{podiums} item(s) have type Podium (group 15). TFS 1.x based servers such as NewEra refuse to load an items.otb containing it. Save anyway?"))
+                    return;
+
                 try
                 {
                     OTBWriter writer = new OTBWriter(OTBItems);
@@ -203,6 +212,8 @@ namespace Assets_Editor
                     writer.ClientVersion = ClientVersion;
                     if (writer.Write(file.Path.LocalPath))
                         Debug.WriteLine("OTB saved");
+                    else
+                        ErrorManager.ShowError($"Saving the OTB failed: {writer.LastError}");
                 }
                 catch (UnauthorizedAccessException exception)
                 {
