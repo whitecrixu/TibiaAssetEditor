@@ -4,21 +4,29 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         x:Class="Assets_Editor.ImportManager"
-        Title="Import Manager" Width="800" Height="860">
+        Title="Import Manager" Width="820" Height="860">
     <Grid>
         <TabControl>
             <TabItem Header="Import From Client">
-                <Grid RowDefinitions="60,20,20,*">
+                <Grid RowDefinitions="60,Auto,20,*">
                     <StackPanel Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Center" Margin="5,10,5,5">
                         <TextBlock Text="Client Path:" VerticalAlignment="Center"/>
                         <TextBox x:Name="ClientPathText" Width="300" IsEnabled="False" Margin="5,0,5,0"/>
-                        <Button Content="📂" Width="40" Height="40" Click="OpenClient_Click"/>
+                        <Button Content="📂" Width="40" Height="40" Click="OpenClient_Click" ToolTip.Tip="Select the source client folder (Tibia.dat / Tibia.spr)"/>
+                        <Button x:Name="ReloadClientButton" Content="Reload" Height="40" Margin="5,0,0,0" Click="ReloadClient_Click" IsEnabled="False" ToolTip.Tip="Load the source client again with the flags below"/>
                     </StackPanel>
-                    <CheckBox Grid.Row="1" x:Name="SprTransparent" Content="Transparent" HorizontalAlignment="Center"/>
+                    <WrapPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="5,0,5,5">
+                        <TextBlock Text="Source:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <ComboBox x:Name="SourceStructure" Width="130" ToolTip.Tip="Dat structure of the source client"/>
+                        <CheckBox x:Name="SourceExtended" Content="Extended" Margin="10,0,0,0"/>
+                        <CheckBox x:Name="SprTransparent" Content="Transparent" Margin="10,0,0,0"/>
+                        <CheckBox x:Name="SourceFrameDurations" Content="Frame durations" Margin="10,0,0,0"/>
+                        <CheckBox x:Name="SourceFrameGroups" Content="Frame groups" Margin="10,0,0,0"/>
+                    </WrapPanel>
                     <ProgressBar x:Name="LoadProgress" Grid.Row="2" Minimum="0" Maximum="100" Value="0" Margin="50,0,50,5" Height="10"/>
                     <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,Auto" Margin="5,0,5,0">
                         <!-- Object List -->
-                        <Border Grid.Column="0" Classes="card" Margin="10,5,0,10">
+                        <Border Grid.Column="0" Classes="card" Width="240" Margin="10,5,0,10">
                             <Grid RowDefinitions="45,*,40,45">
                                 <ComboBox Grid.Row="0" x:Name="ObjectMenu" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="ObjectMenuChanged">
                                     <ComboBoxItem Content="Outfits"/>
@@ -36,9 +44,9 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <NumericUpDown Grid.Row="2" x:Name="ObjListViewSelectedIndex" Minimum="0" FormatString="0" Margin="0,5,0,0"/>
+                                <NumericUpDown Grid.Row="2" x:Name="ObjListViewSelectedIndex" Minimum="0" FormatString="0" Margin="0,5,0,0" ValueChanged="ObjListViewSelectedIndex_Changed" ToolTip.Tip="Go to id"/>
                                 <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
-                                    <Button Content="📥 Import" Width="80" Click="ObjectImport_Click"/>
+                                    <Button Content="📥 Import" Width="80" Click="ObjectImport_Click" ToolTip.Tip="Import the object with its sprites under the next free id"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -46,7 +54,7 @@
                         <Border Grid.Column="1" Classes="card" Width="225" Margin="10,5,0,10">
                             <Grid RowDefinitions="Auto,*,40">
                                 <TextBlock Grid.Row="0" Classes="panelHeader" Text="Sprite List" HorizontalAlignment="Center"/>
-                                <ListBox Grid.Row="1" x:Name="SprListView" Margin="0,5,0,0">
+                                <ListBox Grid.Row="1" x:Name="SprListView" SelectionMode="Multiple" Margin="0,5,0,0">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal">
@@ -57,24 +65,27 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <Button Content="📥 Import Spr" Width="100" Click="ImportSpr_Click"/>
+                                    <Button Content="📥 Import Spr" Width="100" Click="ImportSpr_Click" ToolTip.Tip="Append the selected sprites to the loaded spr"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
                         <!-- OBD Import -->
-                        <Border Grid.Column="2" Classes="card" Width="300" Height="300" Margin="10,5,10,10" VerticalAlignment="Top">
-                            <Grid RowDefinitions="Auto,150,50,50">
+                        <Border Grid.Column="2" Classes="card" Width="300" Margin="10,5,10,10" VerticalAlignment="Top">
+                            <Grid RowDefinitions="Auto,150,Auto,50,50,Auto">
                                 <TextBlock Grid.Row="0" Classes="panelHeader" Text="Import OBD File" HorizontalAlignment="Center"/>
                                 <Border Grid.Row="1" Classes="card" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,5,10,10">
-                                    <Image x:Name="OBDImage" MinWidth="32" MinHeight="32"/>
+                                    <Image x:Name="OBDImage" MinWidth="32" MinHeight="32" Stretch="None"/>
                                 </Border>
-                                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Grid.Row="2" x:Name="OBDInfo" HorizontalAlignment="Center" TextWrapping="Wrap" Margin="5,0,5,5" Text="No file selected."/>
+                                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
                                     <TextBlock Text="Select File:" VerticalAlignment="Center"/>
-                                    <Button Content="📂" Width="40" Height="30" Click="ImportObject_Click"/>
+                                    <Button Content="📂" Width="40" Height="30" Margin="5,0,0,0" Click="ImportObject_Click"/>
+                                    <Button x:Name="OBDImportButton" Content="📥 Import" Height="30" Margin="5,0,0,0" Click="OBDImport_Click" IsEnabled="False"/>
                                 </StackPanel>
-                                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
+                                <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
                                     <TextBlock Text="View" VerticalAlignment="Center"/>
-                                    <Slider x:Name="ObjImportSlider" Width="40" IsSnapToTickEnabled="True" TickFrequency="1" Minimum="0" Maximum="1" Margin="15,0,15,0"/>
+                                    <Slider x:Name="ObjImportSlider" Width="40" IsSnapToTickEnabled="True" TickFrequency="1" Minimum="0" Maximum="1" Margin="15,0,15,0"
+                                            ToolTip.Tip="View: only preview the selected file. Import: import it right after selecting."/>
                                     <TextBlock Text="Import" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Grid>

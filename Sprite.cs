@@ -16,7 +16,6 @@ namespace Assets_Editor
             Size = 0;
             CompressedPixels = null;
             Transparent = false;
-            MemoryStream = new MemoryStream();
         }
 
         public const byte DefaultSize = 32;
@@ -27,7 +26,9 @@ namespace Assets_Editor
         public uint Size { get; set; }
         public byte[]? CompressedPixels { get; set; }
         public bool Transparent { get; set; }
-        public MemoryStream MemoryStream { get; set; }
+        // png of the sprite once it has been decoded; null until then (a 511k sprite file would
+        // otherwise allocate half a million empty streams at load)
+        public MemoryStream? MemoryStream { get; set; }
 
         private static byte[] BlankRGBSprite = new byte[RGBPixelsDataSize];
         private static byte[] BlankARGBSprite = new byte[ARGBPixelsDataSize];
@@ -350,13 +351,30 @@ namespace Assets_Editor
         }
     }
 
+
     public class SpriteStorage
     {
-        public string SprPath { get; set; } = "";
+        private string _sprPath = "";
+        public string SprPath
+        {
+            get => _sprPath;
+            set
+            {
+                lock (_fileLock)
+                {
+                    if (_sprPath != value)
+                        CloseFileLocked();
+                    _sprPath = value;
+                }
+            }
+        }
         public uint Signature;
         public bool Transparency;
         public IProgress<int>? ProgressListener { get; set; }
+        // guarded by SyncRoot: Compile reads it from a worker thread
         public Dictionary<uint, Sprite> Sprites { get; set; }
+        // png cache; a key exists for every sprite id (0..SpriteCount), the value stays null until
+        // the sprite is first decoded
         public ConcurrentDictionary<int, MemoryStream> SprLists { get; set; }
 
         // sprites changed in the editor since the file was loaded or last compiled;
@@ -365,10 +383,29 @@ namespace Assets_Editor
         public uint FileSpriteCount { get; private set; }
         private bool _fileExtended;
 
+        // Sprites is a plain Dictionary: every access that may race with Compile locks this
+        public object SyncRoot { get; } = new();
+
+        // one shared read-only handle for raw sprite reads (opening a FileStream per sprite is far
+        // too slow with 511k sprites); reopened whenever SprPath changes or Compile replaces the file
+        private readonly object _fileLock = new();
+        private BinaryReader? _reader;
+
+        // edit generation of every modified id, so a compile only clears what it actually wrote
+        private readonly Dictionary<uint, long> _modifiedGeneration = [];
+        private long _generation;
+
+        private static byte[]? _blankPng;
+
+        public uint SpriteCount => (uint)Math.Max(0, SprLists.Count - 1);
+
         public void MarkModified(uint id)
         {
             lock (Modified)
+            {
                 Modified.Add(id);
+                _modifiedGeneration[id] = ++_generation;
+            }
         }
 
         public SpriteStorage()
@@ -376,95 +413,214 @@ namespace Assets_Editor
             Sprites = new Dictionary<uint, Sprite>();
             SprLists = new ConcurrentDictionary<int, MemoryStream>();
             Transparency = false;
-            Sprite blankSpr = new Sprite { ID = 0, CompressedPixels = Array.Empty<byte>() };
-            using var bmp = blankSpr.GetBitmap();
-            using var image = SKImage.FromBitmap(bmp);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            blankSpr.MemoryStream = new MemoryStream(data.ToArray());
-            blankSpr.CompressedPixels = null;
-            Sprites[0] = blankSpr;
-            SprLists[0] = blankSpr.MemoryStream;
+            AddBlankSpriteZero();
         }
 
         public SpriteStorage(string path, bool transparency, IProgress<int>? progressListener = null)
         {
-            SprPath = path;
+            _sprPath = path;
             Sprites = [];
             SprLists = [];
             Transparency = transparency;
             ProgressListener = progressListener;
         }
 
-        public void LoadSprites()
+        private void AddBlankSpriteZero()
         {
-            Sprite.CreateBlankSprite();
-            using FileStream fileStream = new(SprPath, FileMode.Open, FileAccess.Read);
-            using BinaryReader reader = new(fileStream);
-
-            Signature = reader.ReadUInt32();
-            bool isExtended = MainWindow.GetCurrentPreset()?.Extended ?? false;
-            uint totalPics = isExtended ? reader.ReadUInt32() : reader.ReadUInt16();
-            _fileExtended = isExtended;
-            FileSpriteCount = totalPics;
-            lock (Modified)
-                Modified.Clear();
-
-            Sprite blankSpr = new() { ID = 0, CompressedPixels = [] };
-            using var bmp = blankSpr.GetBitmap();
-            using var image = SKImage.FromBitmap(bmp);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            blankSpr.MemoryStream = new MemoryStream(data.ToArray());
-            blankSpr.CompressedPixels = null;
+            Sprite blankSpr = new() { ID = 0, MemoryStream = new MemoryStream(BlankPng(), false) };
             Sprites[0] = blankSpr;
             SprLists[0] = blankSpr.MemoryStream;
+        }
 
-            int lastReportedProgress = -1;
-            for (uint i = 0; i < totalPics; ++i)
+        private static byte[] BlankPng()
+        {
+            return _blankPng ??= EncodePng(null, false);
+        }
+
+        // png of a sprite given its compressed pixels (null/empty = fully transparent)
+        public static byte[] EncodePng(byte[]? compressedPixels, bool transparent)
+        {
+            Sprite sprite = new() { CompressedPixels = compressedPixels ?? [], Transparent = transparent };
+            sprite.Size = (uint)sprite.CompressedPixels.Length;
+            using var bmp = sprite.GetBitmap();
+            using var image = SKImage.FromBitmap(bmp);
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+            return data.ToArray();
+        }
+
+        // re-encodes compressed pixels between the RGB and RGBA (transparent) spr layouts
+        public static byte[] ConvertCompressed(byte[] compressedPixels, bool fromTransparent, bool toTransparent)
+        {
+            if (fromTransparent == toTransparent || compressedPixels.Length == 0)
+                return compressedPixels;
+            return Sprite.CompressPixelsBGRA(Sprite.UncompressPixelsBGRA(compressedPixels, fromTransparent), toTransparent);
+        }
+
+        public void LoadSprites()
+        {
+            LoadSprites(MainWindow.GetCurrentPreset()?.Extended ?? false);
+        }
+
+        public void LoadSprites(bool isExtended)
+        {
+            Sprite.CreateBlankSprite();
+            uint totalPics;
+            lock (_fileLock)
             {
-                Sprite sprite = new() { ID = i + 1, Transparent = Transparency };
-                Sprites[sprite.ID] = sprite;
-                SprLists[(int)sprite.ID] = sprite.MemoryStream;
-                int progress = (int)(i * 100 / totalPics);
-                if (progress != lastReportedProgress && ProgressListener != null)
+                CloseFileLocked();
+                using FileStream fileStream = new(SprPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using BinaryReader reader = new(fileStream);
+                Signature = reader.ReadUInt32();
+                totalPics = isExtended ? reader.ReadUInt32() : reader.ReadUInt16();
+                _fileExtended = isExtended;
+                FileSpriteCount = totalPics;
+            }
+            lock (Modified)
+            {
+                Modified.Clear();
+                _modifiedGeneration.Clear();
+            }
+
+            lock (SyncRoot)
+            {
+                Sprites.Clear();
+                SprLists.Clear();
+                AddBlankSpriteZero();
+
+                int lastReportedProgress = -1;
+                for (uint i = 0; i < totalPics; ++i)
                 {
-                    ProgressListener.Report(progress);
-                    lastReportedProgress = progress;
+                    Sprite sprite = new() { ID = i + 1, Transparent = Transparency };
+                    Sprites[sprite.ID] = sprite;
+                    // decoded lazily by getSpriteStream
+                    SprLists[(int)sprite.ID] = null!;
+                    int progress = (int)(i * 100 / totalPics);
+                    if (progress != lastReportedProgress && ProgressListener != null)
+                    {
+                        ProgressListener.Report(progress);
+                        lastReportedProgress = progress;
+                    }
                 }
             }
         }
 
+        // Returns a fresh png stream for the sprite on every call: callers hand it to SKBitmap.Decode,
+        // which disposes it on Linux. Only the bytes are cached (ToArray works on a disposed MemoryStream).
         public MemoryStream getSpriteStream(uint id)
         {
-            // callers hand the stream to SKBitmap.Decode, which disposes it on Linux; always give out a
-            // fresh stream and keep only the bytes cached (ToArray works on a disposed MemoryStream)
             if (SprLists.TryGetValue((int)id, out MemoryStream? cached) && cached != null) {
                 byte[] bytes = cached.ToArray();
                 if (bytes.Length > 0)
                     return new MemoryStream(bytes, false);
             }
 
-            Sprite sprite = Sprites[id];
-            byte[]? compressed = id >= 1 && id <= FileSpriteCount ? ReadRawSprite(id) : null;
+            byte[] png;
+            try
+            {
+                png = EncodePng(GetCompressedPixels(id), Transparency);
+            }
+            catch
+            {
+                // a corrupt record must not take the whole list down
+                png = BlankPng();
+            }
 
-            // address 0 marks an empty sprite: there is no record to read
-            sprite.CompressedPixels = compressed ?? [];
-            sprite.Size = (uint)sprite.CompressedPixels.Length;
-
-            using var bmp = sprite.GetBitmap();
-            using var img = SKImage.FromBitmap(bmp);
-            using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
-            byte[] png = dat.ToArray();
-            sprite.MemoryStream = new MemoryStream(png);
-            SprLists[(int)id] = sprite.MemoryStream;
+            // only ids that exist get cached: adding a key would change the sprite count
+            if (SprLists.ContainsKey((int)id))
+                SprLists[(int)id] = new MemoryStream(png, false);
             return new MemoryStream(png, false);
+        }
+
+        // Compressed pixels of a sprite in this storage's layout (Transparency), or null when the
+        // sprite is empty. Edited sprites come from memory, everything else from the file.
+        public byte[]? GetCompressedPixels(uint id)
+        {
+            if (id == 0)
+                return null;
+
+            lock (SyncRoot)
+            {
+                if (Sprites.TryGetValue(id, out Sprite? sprite) && sprite.CompressedPixels != null)
+                {
+                    byte[] pixels = sprite.CompressedPixels;
+                    if (pixels.Length == 0)
+                        return null;
+                    return ConvertCompressed(pixels, sprite.Transparent, Transparency);
+                }
+            }
+
+            return id <= FileSpriteCount ? ReadRawSprite(id) : null;
+        }
+
+        // Appends a new sprite (compressed in this storage's layout; null = empty) and returns its id.
+        public uint AddSprite(byte[]? compressedPixels)
+        {
+            byte[] png = EncodePng(compressedPixels, Transparency);
+            uint id;
+            lock (SyncRoot)
+            {
+                // ids are contiguous: the next one is the current count
+                id = (uint)SprLists.Count;
+                Sprite sprite = new()
+                {
+                    ID = id,
+                    Transparent = Transparency,
+                    CompressedPixels = compressedPixels ?? [],
+                    MemoryStream = new MemoryStream(png, false),
+                };
+                sprite.Size = (uint)sprite.CompressedPixels.Length;
+                Sprites[id] = sprite;
+                SprLists[(int)id] = sprite.MemoryStream;
+                MarkModified(id);
+            }
+            return id;
+        }
+
+        // Replaces the pixels of an existing sprite (compressed in this storage's layout; null = empty).
+        public void SetSprite(uint id, byte[]? compressedPixels)
+        {
+            if (id == 0)
+                throw new InvalidOperationException("Sprite 0 is the reserved empty sprite.");
+
+            byte[] png = EncodePng(compressedPixels, Transparency);
+            lock (SyncRoot)
+            {
+                if (!Sprites.ContainsKey(id))
+                    throw new KeyNotFoundException($"Sprite {id} does not exist.");
+                Sprite sprite = new()
+                {
+                    ID = id,
+                    Transparent = Transparency,
+                    CompressedPixels = compressedPixels ?? [],
+                    MemoryStream = new MemoryStream(png, false),
+                };
+                sprite.Size = (uint)sprite.CompressedPixels.Length;
+                Sprites[id] = sprite;
+                SprLists[(int)id] = sprite.MemoryStream;
+                MarkModified(id);
+            }
+        }
+
+        public void CloseFile()
+        {
+            lock (_fileLock)
+                CloseFileLocked();
+        }
+
+        private void CloseFileLocked()
+        {
+            _reader?.Dispose();
+            _reader = null;
         }
 
         // compressed pixel data of sprite id as stored in SprPath, or null for an empty sprite
         private byte[]? ReadRawSprite(uint id)
         {
-            using FileStream fileStream = new(SprPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using BinaryReader reader = new(fileStream);
-            return ReadRawSprite(reader, id);
+            lock (_fileLock)
+            {
+                _reader ??= new BinaryReader(new FileStream(SprPath, FileMode.Open, FileAccess.Read, FileShare.Read));
+                return ReadRawSprite(_reader, id);
+            }
         }
 
         private byte[]? ReadRawSprite(BinaryReader reader, uint id)
@@ -481,16 +637,45 @@ namespace Assets_Editor
         }
 
         // Writes the sprite file. Unchanged sprites are copied verbatim from SprPath (fast and lossless);
-        // only sprites in Modified, or beyond the loaded file, are re-encoded.
+        // only edited sprites, or sprites beyond the loaded file, are re-encoded. Works from a snapshot
+        // taken up front, so the editor may keep reading (and even editing) while it runs.
         public void Compile(string file, uint signature, bool transparency, bool extended, IProgress<int>? progress)
         {
-            uint totalPics = (uint)Math.Max(0, SprLists.Count - 1);
+            uint totalPics;
+            uint fileSpriteCount = FileSpriteCount;
+            bool fileTransparency = Transparency;
+            long generation;
+            HashSet<uint> modified;
+            var edited = new Dictionary<uint, (byte[] pixels, bool transparent)>();
+            var cachedPngs = new Dictionary<uint, byte[]>();
+
+            lock (SyncRoot)
+            {
+                totalPics = SpriteCount;
+                lock (Modified)
+                {
+                    modified = [.. Modified];
+                    generation = _generation;
+                }
+
+                void Capture(uint id)
+                {
+                    if (Sprites.TryGetValue(id, out Sprite? sprite) && sprite.CompressedPixels != null)
+                        edited[id] = (sprite.CompressedPixels, sprite.Transparent);
+                    else if (SprLists.TryGetValue((int)id, out MemoryStream? png) && png != null)
+                        cachedPngs[id] = png.ToArray();
+                }
+
+                foreach (uint id in modified)
+                    if (id >= 1 && id <= totalPics)
+                        Capture(id);
+                for (uint id = fileSpriteCount + 1; id <= totalPics; id++)
+                    if (!modified.Contains(id))
+                        Capture(id);
+            }
+
             if (!extended && totalPics > ushort.MaxValue)
                 throw new InvalidOperationException($"{totalPics} sprites do not fit a non-extended spr (max {ushort.MaxValue}). Enable 'Extended'.");
-
-            HashSet<uint> modified;
-            lock (Modified)
-                modified = [.. Modified];
 
             string tempFile = file + ".tmp";
             int headSize = extended ? 8 : 6;
@@ -512,23 +697,21 @@ namespace Assets_Editor
                     int lastReported = -1;
                     for (uint id = 1; id <= totalPics; id++)
                     {
-                        byte[]? bytes;
-                        bool fromFile = source != null && id <= FileSpriteCount && !modified.Contains(id)
-                                        && transparency == Transparency;
-                        if (fromFile)
+                        byte[]? bytes = null;
+                        if (edited.TryGetValue(id, out var edit))
                         {
-                            bytes = ReadRawSprite(source!, id);
+                            bytes = ConvertCompressed(edit.pixels, edit.transparent, transparency);
                         }
-                        else if (Sprites.TryGetValue(id, out Sprite? sprite) && sprite.CompressedPixels != null
-                                 && sprite.Transparent == transparency && modified.Contains(id))
+                        else if (cachedPngs.TryGetValue(id, out byte[]? png))
                         {
-                            bytes = sprite.CompressedPixels;
-                        }
-                        else
-                        {
-                            using var stream = getSpriteStream(id);
-                            using var skBmp = SKBitmap.Decode(stream.ToArray());
+                            using var skBmp = SKBitmap.Decode(png);
                             bytes = skBmp != null ? Sprite.CompressBitmap(skBmp, transparency) : null;
+                        }
+                        else if (source != null && id <= fileSpriteCount)
+                        {
+                            bytes = ReadRawSprite(source, id);
+                            if (bytes != null)
+                                bytes = ConvertCompressed(bytes, fileTransparency, transparency);
                         }
 
                         if (bytes != null && bytes.Length > 0)
@@ -556,7 +739,19 @@ namespace Assets_Editor
                         writer.Write(address);
                 }
 
-                File.Move(tempFile, file, overwrite: true);
+                // the shared reader must not hold the file that is being replaced
+                lock (_fileLock)
+                {
+                    CloseFileLocked();
+                    File.Move(tempFile, file, overwrite: true);
+
+                    // the written file is now the source of truth for raw reads
+                    _sprPath = file;
+                    Signature = signature;
+                    Transparency = transparency;
+                    _fileExtended = extended;
+                    FileSpriteCount = totalPics;
+                }
             }
             catch
             {
@@ -564,14 +759,30 @@ namespace Assets_Editor
                 throw;
             }
 
-            // the written file is now the source of truth for raw reads
-            SprPath = file;
-            Signature = signature;
-            Transparency = transparency;
-            _fileExtended = extended;
-            FileSpriteCount = totalPics;
-            lock (Modified)
-                Modified.Clear();
+            // forget only what was written: edits made while compiling stay pending
+            lock (SyncRoot)
+            {
+                foreach (var (id, edit) in edited)
+                {
+                    if (Sprites.TryGetValue(id, out Sprite? sprite) && ReferenceEquals(sprite.CompressedPixels, edit.pixels))
+                    {
+                        sprite.CompressedPixels = null;
+                        sprite.Size = 0;
+                        sprite.Transparent = transparency;
+                    }
+                }
+                lock (Modified)
+                {
+                    foreach (uint id in modified)
+                    {
+                        if (_modifiedGeneration.TryGetValue(id, out long g) && g <= generation)
+                        {
+                            Modified.Remove(id);
+                            _modifiedGeneration.Remove(id);
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -6,7 +7,10 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -23,13 +27,26 @@ namespace Assets_Editor
         public ObservableCollection<ShowList> ThingsMissile = [];
         public Appearance? CurrentObjectAppearance;
         public AppearanceFlags? CurrentFlags = null;
-        private int CurrentSprDir = 2;
         private bool isPageLoaded = false;
         private VersionInfo? loadedVersion;
         private static Appearance? _copiedFlagsSource = null;
 
+        // texture tab state: which frame group is shown, the selected slot (w, h) of the slot grid,
+        // and a guard so programmatic control updates do not write back into the object
+        private int _viewGroup;
+        private (int w, int h)? _selectedSlot;
+        private bool _loadingTexture;
+        private DispatcherTimer? _animationTimer;
+        private const int MaxSlotGridSide = 16;
+
+        // sprite drag from the sprite list onto a slot (raw pointer events: DoDragDrop is flaky on X11)
+        private ShowList? _dragSprite;
+        private Point _dragStart;
+        private bool _dragging;
+
         protected override void OnClosed(EventArgs e)
         {
+            StopAnimation();
             base.OnClosed(e);
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                 desktop.Shutdown();
@@ -42,6 +59,10 @@ namespace Assets_Editor
 
             ObjListView.LayoutUpdated += ObjListView_LayoutUpdated;
             SprListView.LayoutUpdated += SprListView_LayoutUpdated;
+
+            SprListView.AddHandler(PointerPressedEvent, SprListView_PointerPressed, RoutingStrategies.Tunnel, true);
+            AddHandler(PointerMovedEvent, Window_PointerMoved, RoutingStrategies.Tunnel, true);
+            AddHandler(PointerReleasedEvent, Window_PointerReleased, RoutingStrategies.Tunnel, true);
         }
 
         public LegacyDatEditor(Appearances appearances, VersionInfo versionInfo) : this()
@@ -56,9 +77,9 @@ namespace Assets_Editor
                 ThingsMissile.Add(new ShowList() { Id = missile.Id });
 
             SprListView.ItemsSource = MainWindow.AllSprList;
-            UpdateShowList(ObjectMenu.SelectedIndex);
             loadedVersion = versionInfo;
             isPageLoaded = true;
+            UpdateShowList(ObjectMenu.SelectedIndex);
 
             Dispatcher.UIThread.Post(() =>
             {
@@ -67,9 +88,21 @@ namespace Assets_Editor
             }, DispatcherPriority.Loaded);
         }
 
+        public bool IsCompiling => _compiling;
+
         public void UpdateShowList(int selection)
         {
             if (ObjListView == null) return;
+
+            // drop the thumbnails of the list being left; its visible range must never be applied to
+            // the next list (it may be shorter: ArgumentOutOfRange on the unload loop)
+            if (ObjListView.ItemsSource is IList<ShowList> previous)
+            {
+                for (int i = Math.Max(0, _lastObjStart); i < _lastObjEnd && i < previous.Count; i++)
+                    previous[i].Image = null;
+            }
+            _lastObjStart = -1;
+            _lastObjEnd = -1;
 
             if (selection == 0)
                 ObjListView.ItemsSource = ThingsOutfit;
@@ -81,7 +114,13 @@ namespace Assets_Editor
                 ObjListView.ItemsSource = ThingsMissile;
 
             if (ObjListView.ItemCount > 0)
+            {
                 ObjListView.SelectedIndex = 0;
+                ObjListView.ScrollIntoView(0);
+            }
+
+            if (isPageLoaded)
+                Dispatcher.UIThread.Post(LoadVisibleObjectImages, DispatcherPriority.Background);
         }
 
         private void ObjectMenuChanged(object? sender, SelectionChangedEventArgs e)
@@ -95,24 +134,66 @@ namespace Assets_Editor
             if (!isPageLoaded) return;
             if (ObjListView.SelectedItem is not ShowList selected) return;
 
-            Appearance? appearance = ObjectMenu.SelectedIndex switch
-            {
-                0 => MainWindow.appearances?.Outfit.ElementAtOrDefault(ObjListView.SelectedIndex),
-                1 => MainWindow.appearances?.Object.ElementAtOrDefault(ObjListView.SelectedIndex),
-                2 => MainWindow.appearances?.Effect.ElementAtOrDefault(ObjListView.SelectedIndex),
-                3 => MainWindow.appearances?.Missile.ElementAtOrDefault(ObjListView.SelectedIndex),
-                _ => null
-            };
-
+            var collection = GetCurrentCollection();
+            Appearance? appearance = collection != null ? FindAppearance(collection, ObjListView.SelectedIndex, selected.Id) : null;
             if (appearance == null) return;
+
+            // AppearanceType is not stored in the dat; the category decides it
             CurrentObjectAppearance = appearance.Clone();
+            CurrentObjectAppearance.AppearanceType = CategoryType(ObjectMenu.SelectedIndex);
             LoadCurrentObjectAppearances();
         }
 
-        private Google.Protobuf.Collections.RepeatedField<Appearance>? GetCurrentCollection()
+        // Appearance shown in row `index` of a category list. Ids are positional, so the row (or the id
+        // relative to the first id) is the index; the linear search is only a fallback.
+        private static Appearance? FindAppearance(Google.Protobuf.Collections.RepeatedField<Appearance> collection, int index, uint id)
+        {
+            int found = FindAppearanceIndex(collection, index, id);
+            return found >= 0 ? collection[found] : null;
+        }
+
+        private static int FindAppearanceIndex(Google.Protobuf.Collections.RepeatedField<Appearance> collection, int index, uint id)
+        {
+            if (index >= 0 && index < collection.Count && collection[index].Id == id)
+                return index;
+            if (collection.Count > 0)
+            {
+                long guess = (long)id - collection[0].Id;
+                if (guess >= 0 && guess < collection.Count && collection[(int)guess].Id == id)
+                    return (int)guess;
+            }
+            for (int i = 0; i < collection.Count; i++)
+                if (collection[i].Id == id)
+                    return i;
+            return -1;
+        }
+
+        private static int FindShowListIndex(IList<ShowList> list, uint id)
+        {
+            if (list.Count > 0)
+            {
+                long guess = (long)id - list[0].Id;
+                if (guess >= 0 && guess < list.Count && list[(int)guess].Id == id)
+                    return (int)guess;
+            }
+            for (int i = 0; i < list.Count; i++)
+                if (list[i].Id == id)
+                    return i;
+            return -1;
+        }
+
+        private static APPEARANCE_TYPE CategoryType(int category) => category switch
+        {
+            0 => APPEARANCE_TYPE.AppearanceOutfit,
+            2 => APPEARANCE_TYPE.AppearanceEffect,
+            3 => APPEARANCE_TYPE.AppearanceMissile,
+            _ => APPEARANCE_TYPE.AppearanceObject,
+        };
+
+        private static Google.Protobuf.Collections.RepeatedField<Appearance>? GetCollection(int category)
         {
             if (MainWindow.appearances == null) return null;
-            return ObjectMenu.SelectedIndex switch
+            return category switch
             {
                 0 => MainWindow.appearances.Outfit,
                 1 => MainWindow.appearances.Object,
@@ -122,9 +203,9 @@ namespace Assets_Editor
             };
         }
 
-        private ObservableCollection<ShowList> GetCurrentShowList()
+        private ObservableCollection<ShowList> GetShowList(int category)
         {
-            return ObjectMenu.SelectedIndex switch
+            return category switch
             {
                 0 => ThingsOutfit,
                 1 => ThingsItem,
@@ -132,6 +213,67 @@ namespace Assets_Editor
                 3 => ThingsMissile,
                 _ => ThingsOutfit
             };
+        }
+
+        private Google.Protobuf.Collections.RepeatedField<Appearance>? GetCurrentCollection() => GetCollection(ObjectMenu.SelectedIndex);
+
+        private ObservableCollection<ShowList> GetCurrentShowList() => GetShowList(ObjectMenu.SelectedIndex);
+
+        // first id of a category: items start at 100, everything else at 1
+        private static uint NextFreeId(Google.Protobuf.Collections.RepeatedField<Appearance> collection, int category)
+        {
+            return collection.Count > 0 ? collection.Max(a => a.Id) + 1 : (category == 1 ? 100u : 1u);
+        }
+
+        // Selects (and scrolls to) an object of a category, switching the category if needed.
+        public void SelectObject(int category, uint id)
+        {
+            if (category < 0 || category > 3) return;
+            if (ObjectMenu.SelectedIndex != category)
+                ObjectMenu.SelectedIndex = category;
+
+            int index = FindShowListIndex(GetShowList(category), id);
+            if (index < 0) return;
+            ObjListView.SelectedIndex = index;
+            ObjListView.ScrollIntoView(index);
+        }
+
+        // Adds an object imported from elsewhere under the next free id of its category and shows it.
+        public uint AddImportedAppearance(Appearance appearance, int category)
+        {
+            var collection = GetCollection(category) ?? throw new InvalidOperationException("No dat loaded.");
+            uint newId = NextFreeId(collection, category);
+            appearance.Id = newId;
+            appearance.AppearanceType = CategoryType(category);
+            collection.Add(appearance);
+            GetShowList(category).Add(new ShowList { Id = newId });
+            SelectObject(category, newId);
+            return newId;
+        }
+
+        // Appends a sprite to the loaded spr (compressed in its layout, null = empty) and to
+        // MainWindow.AllSprList, which is indexed by sprite id. Call RefreshSpriteList afterwards.
+        public static uint AddSprite(byte[]? compressedPixels)
+        {
+            uint id = MainWindow.MainSprStorage.AddSprite(compressedPixels);
+            while (MainWindow.AllSprList.Count <= id)
+                MainWindow.AllSprList.Add(new ShowList { Id = (uint)MainWindow.AllSprList.Count });
+            return id;
+        }
+
+        // AllSprList is a plain List: the ListBox only sees new entries after ItemsSource is reset
+        public void RefreshSpriteList(uint? focusId = null)
+        {
+            _lastSprStart = -1;
+            _lastSprEnd = -1;
+            SprListView.ItemsSource = null;
+            SprListView.ItemsSource = MainWindow.AllSprList;
+            if (focusId is uint id && id < MainWindow.AllSprList.Count)
+            {
+                SprListView.SelectedIndex = (int)id;
+                SprListView.ScrollIntoView((int)id);
+            }
+            Dispatcher.UIThread.Post(LoadVisibleSpriteImages, DispatcherPriority.Background);
         }
 
         // lens help ids in the dat start at 1100 (ladders); the combo box lists them in order
@@ -203,20 +345,7 @@ namespace Assets_Editor
             A_FlagWearout.IsChecked = flags.HasWearout;
             A_FlagName.Text = CurrentObjectAppearance.Name ?? "";
 
-            // Load sprite info
-            if (CurrentObjectAppearance.FrameGroup.Count > 0)
-            {
-                var spriteInfo = CurrentObjectAppearance.FrameGroup[0].SpriteInfo;
-                A_SprWidth.Value = spriteInfo.PatternWidth;
-                A_SprHeight.Value = spriteInfo.PatternHeight;
-                A_SprLayers.Value = spriteInfo.PatternLayers;
-                A_SprPaternX.Value = spriteInfo.PatternX;
-                A_SprPaternY.Value = spriteInfo.PatternY;
-                A_SprPaternZ.Value = spriteInfo.PatternZ;
-                A_SprAnimation.Value = spriteInfo.PatternFrames;
-
-                UpdatePreview();
-            }
+            LoadTextureView(true);
 
             A_FullInfo.Text = CurrentObjectAppearance.ToString();
         }
@@ -326,34 +455,631 @@ namespace Assets_Editor
             CurrentObjectAppearance.Name = A_FlagName.Text ?? "";
         }
 
+        #region Texture tab
+
+        private bool IsOutfitCategory => ObjectMenu.SelectedIndex == 0;
+
+        private FrameGroup? CurrentGroup
+        {
+            get
+            {
+                if (CurrentObjectAppearance == null || CurrentObjectAppearance.FrameGroup.Count == 0)
+                    return null;
+                return CurrentObjectAppearance.FrameGroup[Math.Clamp(_viewGroup, 0, CurrentObjectAppearance.FrameGroup.Count - 1)];
+            }
+        }
+
+        private int ViewLayer => (int)(SlotLayer.Value ?? 0);
+        private int ViewPatternX => (int)(SlotPatternX.Value ?? 0);
+        private int ViewPatternY => (int)(SlotPatternY.Value ?? 0);
+        private int ViewPatternZ => (int)(SlotPatternZ.Value ?? 0);
+        private int ViewFrame => (int)SprFramesSlider.Value;
+
+        private static string FrameGroupName(FIXED_FRAME_GROUP group) => group switch
+        {
+            FIXED_FRAME_GROUP.OutfitIdle => "Idle",
+            FIXED_FRAME_GROUP.OutfitMoving => "Moving",
+            FIXED_FRAME_GROUP.ObjectInitial => "Initial",
+            _ => ((int)group).ToString()
+        };
+
+        // Fills the texture tab from CurrentObjectAppearance. resetView puts the frame group, slot
+        // selectors and frame back to the start (a different object was selected).
+        private void LoadTextureView(bool resetView)
+        {
+            _loadingTexture = true;
+            try
+            {
+                var appearance = CurrentObjectAppearance;
+                int groupCount = appearance?.FrameGroup.Count ?? 0;
+                if (resetView)
+                {
+                    _viewGroup = 0;
+                    _selectedSlot = null;
+                }
+                _viewGroup = Math.Clamp(_viewGroup, 0, Math.Max(0, groupCount - 1));
+
+                FrameGroupSelector.ItemsSource = appearance?.FrameGroup
+                    .Select((g, i) => $"{i}: {FrameGroupName(g.FixedFrameGroup)}").ToList() ?? [];
+                FrameGroupSelector.SelectedIndex = groupCount > 0 ? _viewGroup : -1;
+                FrameGroupSelector.IsEnabled = groupCount > 1;
+
+                SpriteInfo? info = CurrentGroup?.SpriteInfo;
+                if (info != null)
+                {
+                    LoadDimensionControls(info);
+                    SlotLayer.Maximum = Math.Max(0, (int)info.PatternLayers - 1);
+                    SlotPatternX.Maximum = Math.Max(0, (int)info.PatternX - 1);
+                    SlotPatternY.Maximum = Math.Max(0, (int)info.PatternY - 1);
+                    SlotPatternZ.Maximum = Math.Max(0, (int)info.PatternZ - 1);
+                    SprFramesSlider.Maximum = Math.Max(0, (int)info.PatternFrames - 1);
+                    if (resetView)
+                    {
+                        SlotLayer.Value = 0;
+                        // outfits face south (pattern x 2) like the list thumbnail
+                        SlotPatternX.Value = IsOutfitCategory && info.PatternX > 2 ? 2 : 0;
+                        SlotPatternY.Value = 0;
+                        SlotPatternZ.Value = 0;
+                        SprFramesSlider.Value = 0;
+                    }
+                    if (_selectedSlot is (int w, int h) && (w >= info.PatternWidth || h >= info.PatternHeight))
+                        _selectedSlot = null;
+                }
+                LoadAnimationControls();
+            }
+            finally
+            {
+                _loadingTexture = false;
+            }
+
+            UpdatePreview();
+            BuildSlotGrid();
+        }
+
+        private void LoadDimensionControls(SpriteInfo info)
+        {
+            bool wasLoading = _loadingTexture;
+            _loadingTexture = true;
+            A_SprWidth.Value = info.PatternWidth;
+            A_SprHeight.Value = info.PatternHeight;
+            A_SprLayers.Value = info.PatternLayers;
+            A_SprPaternX.Value = info.PatternX;
+            A_SprPaternY.Value = info.PatternY;
+            A_SprPaternZ.Value = info.PatternZ;
+            A_SprAnimation.Value = info.PatternFrames;
+            _loadingTexture = wasLoading;
+        }
+
+        private void LoadAnimationControls()
+        {
+            bool wasLoading = _loadingTexture;
+            _loadingTexture = true;
+            try
+            {
+                SpriteInfo? info = CurrentGroup?.SpriteInfo;
+                bool frameDurations = MainWindow.GetCurrentPreset()?.FrameDurations ?? false;
+                SpriteAnimation? animation = info != null && info.PatternFrames > 1 ? info.Animation : null;
+                bool animated = animation != null;
+
+                AnimationPanel.IsEnabled = animated && frameDurations;
+                AnimationPanelTitle.Text = !frameDurations ? "Animation (this client stores no frame durations)"
+                    : animated ? "Animation" : "Animation (single frame)";
+
+                if (animation != null)
+                {
+                    AnimModeSelector.SelectedIndex = animation.AnimationMode == ANIMATION_ANIMATION_MODE.AnimationSynchronized ? 1 : 0;
+                    AnimLoopCount.Value = animation.LoopCount;
+                    AnimStartPhase.Value = Math.Min(animation.DefaultStartPhase, 255u);
+                }
+                else
+                {
+                    AnimModeSelector.SelectedIndex = -1;
+                    AnimLoopCount.Value = 0;
+                    AnimStartPhase.Value = 0;
+                }
+                LoadPhaseControls();
+            }
+            finally
+            {
+                _loadingTexture = wasLoading;
+            }
+        }
+
+        private void LoadPhaseControls()
+        {
+            bool wasLoading = _loadingTexture;
+            _loadingTexture = true;
+            int frame = ViewFrame;
+            SpritePhase? phase = CurrentGroup?.SpriteInfo?.Animation?.SpritePhase.ElementAtOrDefault(frame);
+            PhaseLabel.Text = $"Phase {frame + 1} (ms):";
+            PhaseDurationMin.Value = phase?.DurationMin ?? 0;
+            PhaseDurationMax.Value = phase?.DurationMax ?? 0;
+            _loadingTexture = wasLoading;
+        }
+
         private void UpdatePreview()
         {
-            if (CurrentObjectAppearance == null || CurrentObjectAppearance.FrameGroup.Count == 0) return;
+            if (CurrentObjectAppearance == null || CurrentObjectAppearance.FrameGroup.Count == 0)
+            {
+                SpriteViewerImge.Source = null;
+                SprFrameLabel.Text = "";
+                return;
+            }
 
             try
             {
-                var frameGroup = CurrentObjectAppearance.FrameGroup[0];
-                int dir = Math.Min(CurrentSprDir, (int)frameGroup.SpriteInfo.PatternX - 1);
-                int spriteIndex = DatEditor.GetSpriteIndex(frameGroup, 0, dir, 0, 0, 0);
-
-                if (spriteIndex < frameGroup.SpriteInfo.SpriteId.Count)
-                {
-                    MemoryStream? stream = LegacyAppearance.GetObjectImage(CurrentObjectAppearance, MainWindow.MainSprStorage);
-                    if (stream != null)
-                        SpriteViewerImge.Source = Utils.MemoryStreamToBitmap(stream);
-                }
+                SpriteInfo info = CurrentGroup!.SpriteInfo;
+                // outfits show one layer (layer 1 is the colour mask); items stack all their layers
+                MemoryStream stream = LegacyAppearance.GetObjectImage(CurrentObjectAppearance, MainWindow.MainSprStorage,
+                    _viewGroup, ViewPatternX, ViewPatternY, ViewPatternZ, ViewFrame, IsOutfitCategory ? ViewLayer : -1);
+                SpriteViewerImge.Source = Utils.MemoryStreamToBitmap(stream);
+                SprFrameLabel.Text = $"{ViewFrame + 1}/{Math.Max(1u, info.PatternFrames)}";
             }
-            catch { }
+            catch (Exception ex)
+            {
+                SpriteViewerImge.Source = null;
+                StatusBar.Text = $"Preview failed: {ex.Message}";
+            }
         }
 
+        // arrows pick the direction (pattern x: 0 north, 1 east, 2 south, 3 west) for outfits; for other
+        // objects they step through pattern x the same way
         private void ChangeDirection(object? sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is string dir)
+            if (sender is not Button { Tag: string tag } || !int.TryParse(tag, out int dir)) return;
+            SpriteInfo? info = CurrentGroup?.SpriteInfo;
+            if (info == null || info.PatternX == 0) return;
+            SlotPatternX.Value = dir % (int)info.PatternX;
+        }
+
+        private void SprFramesSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (_loadingTexture || !isPageLoaded) return;
+            UpdatePreview();
+            BuildSlotGrid();
+            LoadPhaseControls();
+        }
+
+        private void SlotView_Changed(object? sender, NumericUpDownValueChangedEventArgs e)
+        {
+            if (_loadingTexture || !isPageLoaded) return;
+            UpdatePreview();
+            BuildSlotGrid();
+        }
+
+        private void FrameGroupSelector_Changed(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingTexture || !isPageLoaded || CurrentObjectAppearance == null) return;
+            int selected = FrameGroupSelector.SelectedIndex;
+            if (selected < 0 || selected == _viewGroup) return;
+
+            // keep size changes typed for the group being left
+            TryApplyTextureSize();
+            _viewGroup = selected;
+            _selectedSlot = null;
+            LoadTextureView(false);
+        }
+
+        private void ApplyTextureSize_Click(object? sender, RoutedEventArgs e)
+        {
+            if (CurrentGroup == null) return;
+            if (TryApplyTextureSize())
             {
-                CurrentSprDir = int.Parse(dir);
-                UpdatePreview();
+                LoadTextureView(false);
+                StatusBar.Text = "Size applied (not saved yet).";
             }
         }
+
+        // Rebuilds the sprite list of the shown frame group from the size controls; existing sprites
+        // keep their (w, h, layer, x, y, z, frame) slot.
+        private bool TryApplyTextureSize()
+        {
+            SpriteInfo? info = CurrentGroup?.SpriteInfo;
+            if (info == null) return true;
+            try
+            {
+                LegacyAppearance.ResizeSpriteInfo(info,
+                    (uint)(A_SprWidth.Value ?? 1), (uint)(A_SprHeight.Value ?? 1), (uint)(A_SprLayers.Value ?? 1),
+                    (uint)(A_SprPaternX.Value ?? 1), (uint)(A_SprPaternY.Value ?? 1), (uint)(A_SprPaternZ.Value ?? 1),
+                    (uint)(A_SprAnimation.Value ?? 1));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ErrorManager.ShowError($"Invalid size: {ex.Message}");
+                LoadDimensionControls(info);
+                return false;
+            }
+        }
+
+        // Applies the texture tab to CurrentObjectAppearance before a save.
+        private bool ApplyTextureFromUI()
+        {
+            if (CurrentObjectAppearance == null) return false;
+            if (!TryApplyTextureSize()) return false;
+
+            // every group must carry one phase per frame (the writer needs them with frame durations)
+            foreach (FrameGroup group in CurrentObjectAppearance.FrameGroup)
+            {
+                SpriteInfo info = group.SpriteInfo;
+                LegacyAppearance.ResizeSpriteInfo(info, info.PatternWidth, info.PatternHeight, info.PatternLayers,
+                    info.PatternX, info.PatternY, info.PatternZ, info.PatternFrames);
+                if (info.Animation != null)
+                    foreach (SpritePhase phase in info.Animation.SpritePhase)
+                        if (phase.DurationMax < phase.DurationMin)
+                            phase.DurationMax = phase.DurationMin;
+            }
+            return true;
+        }
+
+        private void AnimationField_Changed(object? sender, SelectionChangedEventArgs e) => StoreAnimationFromUI();
+
+        private void AnimationValue_Changed(object? sender, NumericUpDownValueChangedEventArgs e) => StoreAnimationFromUI();
+
+        private void StoreAnimationFromUI()
+        {
+            if (_loadingTexture || !isPageLoaded) return;
+            SpriteAnimation? animation = CurrentGroup?.SpriteInfo?.Animation;
+            if (animation == null) return;
+
+            if (AnimModeSelector.SelectedIndex >= 0)
+                animation.AnimationMode = AnimModeSelector.SelectedIndex == 1 ? ANIMATION_ANIMATION_MODE.AnimationSynchronized : ANIMATION_ANIMATION_MODE.AnimationAsynchronized;
+            animation.LoopCount = (uint)(AnimLoopCount.Value ?? 0);
+            animation.DefaultStartPhase = (uint)(AnimStartPhase.Value ?? 0);
+
+            int frame = ViewFrame;
+            if (frame < animation.SpritePhase.Count)
+            {
+                animation.SpritePhase[frame].DurationMin = (uint)(PhaseDurationMin.Value ?? 0);
+                animation.SpritePhase[frame].DurationMax = (uint)(PhaseDurationMax.Value ?? 0);
+            }
+        }
+
+        private void ApplyDurationToAllPhases_Click(object? sender, RoutedEventArgs e)
+        {
+            SpriteAnimation? animation = CurrentGroup?.SpriteInfo?.Animation;
+            if (animation == null) return;
+            uint min = (uint)(PhaseDurationMin.Value ?? 0);
+            uint max = Math.Max(min, (uint)(PhaseDurationMax.Value ?? 0));
+            foreach (SpritePhase phase in animation.SpritePhase)
+            {
+                phase.DurationMin = min;
+                phase.DurationMax = max;
+            }
+            LoadPhaseControls();
+            StatusBar.Text = $"All {animation.SpritePhase.Count} phases set to {min}-{max} ms (not saved yet).";
+        }
+
+        private void PlayAnimation_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_animationTimer != null)
+            {
+                StopAnimation();
+                return;
+            }
+
+            SpriteInfo? info = CurrentGroup?.SpriteInfo;
+            if (info == null || info.PatternFrames <= 1)
+            {
+                StatusBar.Text = "This frame group has a single frame.";
+                return;
+            }
+
+            _animationTimer = new DispatcherTimer { Interval = PhaseDuration(ViewFrame) };
+            _animationTimer.Tick += AnimationTimer_Tick;
+            _animationTimer.Start();
+            PlayAnimationButton.Content = "■ Stop";
+        }
+
+        private void StopAnimation()
+        {
+            if (_animationTimer == null) return;
+            _animationTimer.Stop();
+            _animationTimer.Tick -= AnimationTimer_Tick;
+            _animationTimer = null;
+            PlayAnimationButton.Content = "▶ Play";
+        }
+
+        private void AnimationTimer_Tick(object? sender, EventArgs e)
+        {
+            SpriteInfo? info = CurrentGroup?.SpriteInfo;
+            if (info == null || info.PatternFrames <= 1 || _animationTimer == null)
+            {
+                StopAnimation();
+                return;
+            }
+            int next = (ViewFrame + 1) % (int)info.PatternFrames;
+            SprFramesSlider.Value = next;
+            _animationTimer.Interval = PhaseDuration(next);
+        }
+
+        // duration of an animation phase (random between min and max, like the client), 100 ms default
+        private TimeSpan PhaseDuration(int frame)
+        {
+            SpritePhase? phase = CurrentGroup?.SpriteInfo?.Animation?.SpritePhase.ElementAtOrDefault(frame);
+            long ms = 100;
+            if (phase != null)
+            {
+                uint min = phase.DurationMin;
+                uint max = Math.Max(min, phase.DurationMax);
+                ms = min == max ? min : Random.Shared.NextInt64(min, (long)max + 1);
+            }
+            return TimeSpan.FromMilliseconds(Math.Clamp(ms, 20, 5000));
+        }
+
+        // index into SpriteId of slot (w, h) of the shown layer / pattern / frame, or -1
+        private int SlotIndex(int w, int h)
+        {
+            FrameGroup? group = CurrentGroup;
+            if (group == null) return -1;
+            SpriteInfo info = group.SpriteInfo;
+            if (w >= info.PatternWidth || h >= info.PatternHeight || info.PatternFrames == 0) return -1;
+            int index = LegacyAppearance.GetSpriteIndex(group, w, h,
+                Math.Min(ViewLayer, (int)info.PatternLayers - 1), Math.Min(ViewPatternX, (int)info.PatternX - 1),
+                Math.Min(ViewPatternY, (int)info.PatternY - 1), Math.Min(ViewPatternZ, (int)info.PatternZ - 1),
+                Math.Min(ViewFrame, (int)info.PatternFrames - 1));
+            return index >= 0 && index < info.SpriteId.Count ? index : -1;
+        }
+
+        // One cell per tile of the shown view, laid out like the image: tile (w, h) sits at column
+        // width-1-w, row height-1-h (the client draws tiles from the bottom-right).
+        private void BuildSlotGrid()
+        {
+            SlotGrid.Children.Clear();
+            SlotGrid.RowDefinitions.Clear();
+            SlotGrid.ColumnDefinitions.Clear();
+
+            SpriteInfo? info = CurrentGroup?.SpriteInfo;
+            if (info == null)
+            {
+                SlotInfo.Text = "This object has no sprites.";
+                return;
+            }
+
+            int width = (int)info.PatternWidth;
+            int height = (int)info.PatternHeight;
+            if (width > MaxSlotGridSide || height > MaxSlotGridSide)
+            {
+                SlotInfo.Text = $"{width}x{height} tiles is too large to show here.";
+                return;
+            }
+
+            for (int r = 0; r < height; r++)
+                SlotGrid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            for (int c = 0; c < width; c++)
+                SlotGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    int index = SlotIndex(w, h);
+                    uint spriteId = index >= 0 ? info.SpriteId[index] : 0;
+
+                    var image = new Image { Width = 32, Height = 32, Stretch = Stretch.None };
+                    if (spriteId != 0)
+                    {
+                        try { image.Source = Utils.MemoryStreamToBitmap(MainWindow.MainSprStorage.getSpriteStream(spriteId)); }
+                        catch { }
+                    }
+
+                    var cell = new Border
+                    {
+                        Width = 56,
+                        Margin = new Thickness(1),
+                        Padding = new Thickness(2),
+                        BorderThickness = new Thickness(2),
+                        Background = Brushes.Transparent,
+                        Tag = (w, h),
+                        Child = new StackPanel
+                        {
+                            Children =
+                            {
+                                image,
+                                new TextBlock { Text = spriteId.ToString(), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Center }
+                            }
+                        }
+                    };
+                    ToolTip.SetTip(cell, $"w {w}, h {h}: sprite {spriteId}");
+                    cell.PointerPressed += SlotCell_PointerPressed;
+                    Grid.SetRow(cell, height - 1 - h);
+                    Grid.SetColumn(cell, width - 1 - w);
+                    SlotGrid.Children.Add(cell);
+                }
+            }
+            UpdateSlotSelectionVisual();
+        }
+
+        private void UpdateSlotSelectionVisual()
+        {
+            foreach (var child in SlotGrid.Children)
+            {
+                if (child is Border { Tag: ValueTuple<int, int> slot } cell)
+                    cell.BorderBrush = _selectedSlot == slot ? Brushes.DodgerBlue : Brushes.Transparent;
+            }
+
+            if (_selectedSlot is (int w, int h))
+            {
+                int index = SlotIndex(w, h);
+                uint id = index >= 0 ? CurrentGroup!.SpriteInfo.SpriteId[index] : 0;
+                SlotInfo.Text = $"Slot w {w}, h {h} (index {index}) = sprite {id}. Double-click a sprite in the sprite list or drag it here to assign.";
+            }
+            else
+            {
+                SlotInfo.Text = "Select a slot, then double-click a sprite in the sprite list (or drag it onto the slot).";
+            }
+        }
+
+        private void SlotCell_PointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (sender is not Border { Tag: ValueTuple<int, int> slot }) return;
+            _selectedSlot = slot;
+            UpdateSlotSelectionVisual();
+        }
+
+        private void AssignSpriteToSlot(uint spriteId)
+        {
+            if (_selectedSlot is not (int w, int h))
+            {
+                ErrorManager.ShowInfo("Select a slot in the Texture tab first.");
+                return;
+            }
+            if (spriteId > MainWindow.MainSprStorage.SpriteCount)
+            {
+                ErrorManager.ShowError($"Sprite {spriteId} does not exist.");
+                return;
+            }
+            int index = SlotIndex(w, h);
+            if (index < 0) return;
+
+            CurrentGroup!.SpriteInfo.SpriteId[index] = spriteId;
+            UpdatePreview();
+            BuildSlotGrid();
+            StatusBar.Text = $"Slot w {w}, h {h} = sprite {spriteId} (not saved yet).";
+        }
+
+        private void AssignSpriteToSlot_Click(object? sender, RoutedEventArgs e)
+        {
+            if (SprListView.SelectedItem is not ShowList selected)
+            {
+                ErrorManager.ShowInfo("Select a sprite in the sprite list first.");
+                return;
+            }
+            AssignSpriteToSlot(selected.Id);
+        }
+
+        private void ClearSlot_Click(object? sender, RoutedEventArgs e) => AssignSpriteToSlot(0);
+
+        private void SprListView_DoubleTapped(object? sender, TappedEventArgs e)
+        {
+            if (SprListView.SelectedItem is ShowList selected && _selectedSlot != null)
+                AssignSpriteToSlot(selected.Id);
+        }
+
+        private void SprListView_PointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            _dragging = false;
+            _dragSprite = null;
+            if (!e.GetCurrentPoint(SprListView).Properties.IsLeftButtonPressed) return;
+            _dragSprite = (e.Source as StyledElement)?.DataContext as ShowList;
+            _dragStart = e.GetPosition(this);
+        }
+
+        private void Window_PointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (_dragSprite == null || _dragging) return;
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _dragSprite = null;
+                return;
+            }
+            Point p = e.GetPosition(this);
+            if (Math.Abs(p.X - _dragStart.X) + Math.Abs(p.Y - _dragStart.Y) > 8)
+            {
+                _dragging = true;
+                Cursor = new Cursor(StandardCursorType.DragCopy);
+            }
+        }
+
+        private void Window_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            ShowList? sprite = _dragSprite;
+            bool dragging = _dragging;
+            _dragSprite = null;
+            _dragging = false;
+            if (!dragging || sprite == null) return;
+            Cursor = Cursor.Default;
+
+            foreach (var child in SlotGrid.Children)
+            {
+                if (child is not Border { Tag: ValueTuple<int, int> slot } cell || !cell.IsEffectivelyVisible) continue;
+                Point p = e.GetPosition(cell);
+                if (p.X >= 0 && p.Y >= 0 && p.X < cell.Bounds.Width && p.Y < cell.Bounds.Height)
+                {
+                    _selectedSlot = slot;
+                    AssignSpriteToSlot(sprite.Id);
+                    return;
+                }
+            }
+        }
+
+        // Splits an image into 32x32 tiles, stores them as new sprites and puts them into the slots of
+        // the shown layer / pattern / frame. Fully transparent tiles become sprite 0.
+        private async void ImportImageToObject_Click(object? sender, RoutedEventArgs e)
+        {
+            if (CurrentObjectAppearance == null || CurrentGroup == null) return;
+            try
+            {
+                var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Import Image Into Object",
+                    AllowMultiple = false,
+                    FileTypeFilter = [new FilePickerFileType("Image files") { Patterns = ["*.png", "*.bmp", "*.jpg", "*.jpeg", "*.gif"] }]
+                });
+                if (files.Count == 0) return;
+
+                using SKBitmap? image = await DecodeImageFile(files[0]);
+                if (image == null) { ErrorManager.ShowError("Failed to load image."); return; }
+                if (image.Width % Sprite.DefaultSize != 0 || image.Height % Sprite.DefaultSize != 0)
+                {
+                    ErrorManager.ShowError($"The image is {image.Width}x{image.Height}; both sides must be multiples of {Sprite.DefaultSize}.");
+                    return;
+                }
+
+                var tiles = LegacyAppearance.SplitIntoTiles(image, MainWindow.MainSprStorage.Transparency, out int tilesWide, out int tilesHigh);
+                SpriteInfo info = CurrentGroup.SpriteInfo;
+                if (tilesWide != info.PatternWidth || tilesHigh != info.PatternHeight)
+                {
+                    if (!await ErrorManager.ConfirmAsync("Import image",
+                            $"The image is {tilesWide}x{tilesHigh} tiles but the object is {info.PatternWidth}x{info.PatternHeight}.\n\nResize the object to {tilesWide}x{tilesHigh}?"))
+                        return;
+                    LegacyAppearance.ResizeSpriteInfo(info, (uint)tilesWide, (uint)tilesHigh, info.PatternLayers,
+                        info.PatternX, info.PatternY, info.PatternZ, info.PatternFrames);
+                    LoadTextureView(false);
+                }
+
+                uint firstNew = 0, lastNew = 0;
+                for (int h = 0; h < tilesHigh; h++)
+                {
+                    for (int w = 0; w < tilesWide; w++)
+                    {
+                        byte[]? tile = tiles[h * tilesWide + w];
+                        uint id = 0;
+                        if (tile != null)
+                        {
+                            id = AddSprite(tile);
+                            if (firstNew == 0) firstNew = id;
+                            lastNew = id;
+                        }
+                        int index = SlotIndex(w, h);
+                        if (index >= 0)
+                            info.SpriteId[index] = id;
+                    }
+                }
+
+                RefreshSpriteList(lastNew != 0 ? lastNew : null);
+                UpdatePreview();
+                BuildSlotGrid();
+                StatusBar.Text = firstNew != 0
+                    ? $"Imported {tilesWide}x{tilesHigh} tiles as sprites {firstNew}-{lastNew} (object not saved yet)."
+                    : "The image is fully transparent; slots cleared (object not saved yet).";
+            }
+            catch (Exception ex)
+            {
+                ErrorManager.ShowError($"Import image failed: {ex.Message}");
+            }
+        }
+
+        private static async Task<SKBitmap?> DecodeImageFile(IStorageFile file)
+        {
+            await using var fs = await file.OpenReadAsync();
+            using var ms = new MemoryStream();
+            await fs.CopyToAsync(ms);
+            // decode from bytes: SKBitmap.Decode(Stream) disposes the stream
+            return SKBitmap.Decode(ms.ToArray());
+        }
+
+        #endregion
 
         private void DarkModeToggle_Changed(object? sender, RoutedEventArgs e)
         {
@@ -381,14 +1107,19 @@ namespace Assets_Editor
             SpriteStorage storage = MainWindow.MainSprStorage;
             bool sprChanged;
             lock (storage.Modified)
-                sprChanged = storage.Modified.Count > 0 || storage.SprLists.Count - 1 != storage.FileSpriteCount;
+                sprChanged = storage.Modified.Count > 0 || storage.SpriteCount != storage.FileSpriteCount;
 
             if (!await ErrorManager.ConfirmAsync("Compile",
                     $"Write {Path.GetFileName(datPath)}" + (sprChanged ? $" and {Path.GetFileName(sprPath)}" : "") +
                     $" in\n{Path.GetDirectoryName(datPath)}?\n\nThe running client must be restarted to see the changes."))
                 return;
 
+            // nothing may edit the appearances or sprites while they are written from the worker thread
             _compiling = true;
+            StopAnimation();
+            EditorRoot.IsEnabled = false;
+            string previousStatus = StatusBar.Text ?? "";
+            StatusBar.Text = "Compiling...";
             try
             {
                 string? error = null;
@@ -429,6 +1160,8 @@ namespace Assets_Editor
             finally
             {
                 _compiling = false;
+                EditorRoot.IsEnabled = true;
+                StatusBar.Text = previousStatus;
             }
         }
 
@@ -480,24 +1213,39 @@ namespace Assets_Editor
             try
             {
                 ApplyCurrentFlagsFromUI();
+                if (!ApplyTextureFromUI()) return;
+
                 var collection = GetCurrentCollection();
                 if (collection != null)
                 {
-                    for (int i = 0; i < collection.Count; i++)
-                    {
-                        if (collection[i].Id == CurrentObjectAppearance.Id)
-                        {
-                            collection[i] = CurrentObjectAppearance.Clone();
-                            break;
-                        }
-                    }
+                    int index = FindAppearanceIndex(collection, ObjListView.SelectedIndex, CurrentObjectAppearance.Id);
+                    if (index >= 0)
+                        collection[index] = CurrentObjectAppearance.Clone();
                 }
+                LoadTextureView(false);
+                RefreshObjectThumbnail(CurrentObjectAppearance);
                 A_FullInfo.Text = CurrentObjectAppearance.ToString();
                 ErrorManager.ShowInfo($"Object {CurrentObjectAppearance.Id} saved.");
             }
             catch (Exception ex)
             {
                 ErrorManager.ShowError($"Save failed: {ex.Message}");
+            }
+        }
+
+        // redraws the list thumbnail of one object of the current category
+        private void RefreshObjectThumbnail(Appearance appearance)
+        {
+            var showList = GetCurrentShowList();
+            int index = FindShowListIndex(showList, appearance.Id);
+            if (index < 0) return;
+            try
+            {
+                showList[index].Image = Utils.MemoryStreamToBitmap(LegacyAppearance.GetObjectImage(appearance, MainWindow.MainSprStorage));
+            }
+            catch
+            {
+                showList[index].Image = null;
             }
         }
 
@@ -510,12 +1258,12 @@ namespace Assets_Editor
                 var showList = GetCurrentShowList();
                 if (collection == null) return;
 
-                uint newId = collection.Count > 0 ? collection.Max(a => a.Id) + 1 : 1;
+                uint newId = NextFreeId(collection, ObjectMenu.SelectedIndex);
                 var clone = CurrentObjectAppearance.Clone();
                 clone.Id = newId;
                 collection.Add(clone);
                 showList.Add(new ShowList { Id = newId });
-                ObjListView.SelectedIndex = ObjListView.ItemCount - 1;
+                SelectObject(ObjectMenu.SelectedIndex, newId);
                 ErrorManager.ShowInfo($"Object cloned as ID {newId}.");
             }
             catch (Exception ex)
@@ -540,7 +1288,23 @@ namespace Assets_Editor
             }
             try
             {
-                CurrentObjectAppearance.Flags = _copiedFlagsSource.Flags.Clone();
+                AppearanceFlags flags = _copiedFlagsSource.Flags.Clone();
+
+                // market trade-as / show-as point at the object itself: keep the target's own values
+                // (or its own id when it had no market) instead of the source object's id
+                if (flags.Market != null)
+                {
+                    AppearanceFlagMarket? own = CurrentObjectAppearance.Flags?.Market;
+                    if (own != null && own.HasTradeAsObjectId) flags.Market.TradeAsObjectId = own.TradeAsObjectId;
+                    else if (own != null) flags.Market.ClearTradeAsObjectId();
+                    else flags.Market.TradeAsObjectId = CurrentObjectAppearance.Id;
+
+                    if (own != null && own.HasShowAsObjectId) flags.Market.ShowAsObjectId = own.ShowAsObjectId;
+                    else if (own != null) flags.Market.ClearShowAsObjectId();
+                    else flags.Market.ShowAsObjectId = CurrentObjectAppearance.Id;
+                }
+
+                CurrentObjectAppearance.Flags = flags;
                 LoadCurrentObjectAppearances();
                 ErrorManager.ShowInfo("Flags pasted.");
             }
@@ -586,19 +1350,13 @@ namespace Assets_Editor
                 var showList = GetCurrentShowList();
                 if (collection == null) return;
 
-                uint newId = collection.Count > 0 ? collection.Max(a => a.Id) + 1 : 100;
-                var newAppearance = CreateEmptyAppearance(newId, ObjectMenu.SelectedIndex switch
-                {
-                    0 => APPEARANCE_TYPE.AppearanceOutfit,
-                    1 => APPEARANCE_TYPE.AppearanceObject,
-                    2 => APPEARANCE_TYPE.AppearanceEffect,
-                    3 => APPEARANCE_TYPE.AppearanceMissile,
-                    _ => APPEARANCE_TYPE.AppearanceObject
-                });
+                int category = ObjectMenu.SelectedIndex;
+                uint newId = NextFreeId(collection, category);
+                var newAppearance = CreateEmptyAppearance(newId, CategoryType(category));
 
                 collection.Add(newAppearance);
                 showList.Add(new ShowList { Id = newId });
-                ObjListView.SelectedIndex = ObjListView.ItemCount - 1;
+                SelectObject(category, newId);
                 ErrorManager.ShowInfo($"New object created with ID {newId}.");
             }
             catch (Exception ex)
@@ -646,27 +1404,29 @@ namespace Assets_Editor
                 if (collection == null) return;
 
                 int selectedIndex = ObjListView.SelectedIndex;
-                var toRemove = collection.FirstOrDefault(a => a.Id == CurrentObjectAppearance.Id);
-                if (toRemove == null) return;
+                int collectionIndex = FindAppearanceIndex(collection, selectedIndex, CurrentObjectAppearance.Id);
+                if (collectionIndex < 0) return;
+                Appearance toRemove = collection[collectionIndex];
 
                 // the dat has no ids - an object's id is its position. Removing one from the middle would
                 // renumber every later object and break items.otb, the map and all server scripts, so only
                 // the last object is really removed; any other one is cleared to an empty object.
                 if (toRemove.Id == collection.Max(a => a.Id))
                 {
-                    collection.Remove(toRemove);
-                    if (selectedIndex >= 0 && selectedIndex < showList.Count)
-                        showList.RemoveAt(selectedIndex);
+                    collection.RemoveAt(collectionIndex);
+                    int showIndex = FindShowListIndex(showList, toRemove.Id);
+                    if (showIndex >= 0)
+                        showList.RemoveAt(showIndex);
                     if (ObjListView.ItemCount > 0)
                         ObjListView.SelectedIndex = Math.Min(selectedIndex, ObjListView.ItemCount - 1);
                     ErrorManager.ShowInfo($"Object {toRemove.Id} deleted.");
                 }
                 else
                 {
-                    int index = collection.IndexOf(toRemove);
-                    collection[index] = CreateEmptyAppearance(toRemove.Id, toRemove.AppearanceType);
-                    CurrentObjectAppearance = collection[index].Clone();
+                    collection[collectionIndex] = CreateEmptyAppearance(toRemove.Id, CategoryType(ObjectMenu.SelectedIndex));
+                    CurrentObjectAppearance = collection[collectionIndex].Clone();
                     LoadCurrentObjectAppearances();
+                    RefreshObjectThumbnail(CurrentObjectAppearance);
                     ErrorManager.ShowInfo($"Object {toRemove.Id} cleared (ids are positional, so only the last object can be removed).");
                 }
             }
@@ -704,10 +1464,68 @@ namespace Assets_Editor
             }
         }
 
+        // Adds images as new sprites at the end of the spr. A 32x32 image is one sprite; larger images
+        // (sides multiple of 32) are split into tiles, left to right and top to bottom, skipping fully
+        // transparent tiles.
         private async void ImportSprite_Click(object? sender, RoutedEventArgs e)
         {
-            if (SprListView.SelectedItem is not ShowList selected) return;
-            await ReplaceSelectedSprite(selected.Id);
+            try
+            {
+                var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = "Import Sprites",
+                    AllowMultiple = true,
+                    FileTypeFilter = [new FilePickerFileType("Image files") { Patterns = ["*.png", "*.bmp", "*.jpg", "*.jpeg", "*.gif"] }]
+                });
+                if (files.Count == 0) return;
+
+                bool transparent = MainWindow.MainSprStorage.Transparency;
+                uint firstNew = 0, lastNew = 0;
+                var skipped = new List<string>();
+                foreach (var file in files)
+                {
+                    using SKBitmap? image = await DecodeImageFile(file);
+                    if (image == null) { skipped.Add($"{file.Name} (not an image)"); continue; }
+
+                    if (image.Width <= Sprite.DefaultSize && image.Height <= Sprite.DefaultSize)
+                    {
+                        using SKBitmap tile = PadToSprite(image);
+                        var single = LegacyAppearance.SplitIntoTiles(tile, transparent, out _, out _);
+                        lastNew = AddSprite(single[0]);
+                        if (firstNew == 0) firstNew = lastNew;
+                        continue;
+                    }
+
+                    if (image.Width % Sprite.DefaultSize != 0 || image.Height % Sprite.DefaultSize != 0)
+                    {
+                        skipped.Add($"{file.Name} ({image.Width}x{image.Height} is not a multiple of {Sprite.DefaultSize})");
+                        continue;
+                    }
+
+                    var tiles = LegacyAppearance.SplitIntoTiles(image, transparent, out int tilesWide, out int tilesHigh);
+                    for (int row = 0; row < tilesHigh; row++)
+                    {
+                        for (int col = 0; col < tilesWide; col++)
+                        {
+                            byte[]? pixels = tiles[(tilesHigh - 1 - row) * tilesWide + (tilesWide - 1 - col)];
+                            if (pixels == null) continue;
+                            lastNew = AddSprite(pixels);
+                            if (firstNew == 0) firstNew = lastNew;
+                        }
+                    }
+                }
+
+                if (firstNew != 0)
+                    RefreshSpriteList(lastNew);
+                string message = firstNew != 0 ? $"Added sprites {firstNew}-{lastNew}." : "No sprites added.";
+                if (skipped.Count > 0)
+                    message += "\n\nSkipped:\n" + string.Join("\n", skipped);
+                ErrorManager.ShowInfo(message);
+            }
+            catch (Exception ex)
+            {
+                ErrorManager.ShowError($"Import failed: {ex.Message}");
+            }
         }
 
         private async void ReplaceSprite_Click(object? sender, RoutedEventArgs e)
@@ -716,8 +1534,23 @@ namespace Assets_Editor
             await ReplaceSelectedSprite(selected.Id);
         }
 
+        // a smaller image is placed top-left on a transparent 32x32 sprite
+        private static SKBitmap PadToSprite(SKBitmap image)
+        {
+            var tile = new SKBitmap(Sprite.DefaultSize, Sprite.DefaultSize, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var canvas = new SKCanvas(tile);
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawBitmap(image, 0, 0);
+            return tile;
+        }
+
         private async Task ReplaceSelectedSprite(uint spriteId)
         {
+            if (spriteId == 0)
+            {
+                ErrorManager.ShowWarning("Sprite 0 is the reserved empty sprite and cannot be replaced.");
+                return;
+            }
             try
             {
                 var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -725,45 +1558,31 @@ namespace Assets_Editor
                     Title = "Select Sprite Image",
                     AllowMultiple = false,
                     FileTypeFilter = [
-                        new FilePickerFileType("Image files") { Patterns = ["*.png", "*.bmp", "*.jpg", "*.jpeg"] }
+                        new FilePickerFileType("Image files") { Patterns = ["*.png", "*.bmp", "*.jpg", "*.jpeg", "*.gif"] }
                     ]
                 });
 
                 if (files.Count == 0) return;
 
-                using var fs = await files[0].OpenReadAsync();
-                using var ms = new MemoryStream();
-                await fs.CopyToAsync(ms);
-                ms.Position = 0;
+                using SKBitmap? image = await DecodeImageFile(files[0]);
+                if (image == null) { ErrorManager.ShowError("Failed to load image."); return; }
 
-                using var skBmp = SKBitmap.Decode(ms);
-                if (skBmp == null) { ErrorManager.ShowError("Failed to load image."); return; }
-
-                using var resized = skBmp.Resize(
-                    new SKImageInfo(Sprite.DefaultSize, Sprite.DefaultSize, SKColorType.Bgra8888, SKAlphaType.Unpremul),
-                    SKFilterQuality.High);
-                if (resized == null) { ErrorManager.ShowError("Failed to resize image."); return; }
-
-                var compressed = Sprite.CompressBitmap(resized, MainWindow.MainSprStorage.Transparency);
-                Sprite newSprite = new Sprite
+                // never squash a bigger picture into one sprite
+                if (image.Width > Sprite.DefaultSize || image.Height > Sprite.DefaultSize)
                 {
-                    ID = spriteId,
-                    Transparent = MainWindow.MainSprStorage.Transparency,
-                    CompressedPixels = compressed,
-                    Size = (uint)compressed.Length
-                };
+                    ErrorManager.ShowWarning($"The image is {image.Width}x{image.Height}; a sprite is {Sprite.DefaultSize}x{Sprite.DefaultSize}.\n\n" +
+                                             "Use \"Import image...\" on the Texture tab to split a larger image into sprites of an object, " +
+                                             "or \"Import Sprite\" to add its tiles as new sprites.");
+                    return;
+                }
 
-                using var bmp = newSprite.GetBitmap();
-                using var img = SKImage.FromBitmap(bmp);
-                using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
-                newSprite.MemoryStream = new MemoryStream(dat.ToArray());
-
-                MainWindow.MainSprStorage.Sprites[spriteId] = newSprite;
-                MainWindow.MainSprStorage.SprLists[(int)spriteId] = newSprite.MemoryStream;
-                MainWindow.MainSprStorage.MarkModified(spriteId);
+                using SKBitmap tile = PadToSprite(image);
+                var pixels = LegacyAppearance.SplitIntoTiles(tile, MainWindow.MainSprStorage.Transparency, out _, out _)[0];
+                MainWindow.MainSprStorage.SetSprite(spriteId, pixels);
 
                 if ((int)spriteId < MainWindow.AllSprList.Count)
-                    MainWindow.AllSprList[(int)spriteId].Image = Utils.MemoryStreamToBitmap(newSprite.MemoryStream);
+                    MainWindow.AllSprList[(int)spriteId].Image = Utils.MemoryStreamToBitmap(MainWindow.MainSprStorage.getSpriteStream(spriteId));
+                RefreshAfterSpriteChange();
 
                 ErrorManager.ShowInfo($"Sprite {spriteId} replaced.");
             }
@@ -777,29 +1596,8 @@ namespace Assets_Editor
         {
             try
             {
-                // Find next free ID
-                uint newId = (uint)(MainWindow.AllSprList.Count > 0
-                    ? MainWindow.AllSprList.Max(s => s.Id) + 1
-                    : 1);
-
-                // Create blank sprite
-                Sprite blankSprite = new Sprite { ID = newId, CompressedPixels = [] };
-                using var bmp = blankSprite.GetBitmap();
-                using var img = SKImage.FromBitmap(bmp);
-                using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
-                blankSprite.MemoryStream = new MemoryStream(dat.ToArray());
-
-                MainWindow.MainSprStorage.Sprites[newId] = blankSprite;
-                MainWindow.MainSprStorage.SprLists[(int)newId] = blankSprite.MemoryStream;
-                MainWindow.MainSprStorage.MarkModified(newId);
-
-                var entry = new ShowList { Id = newId };
-                MainWindow.AllSprList.Add(entry);
-
-                // Scroll to the new sprite
-                SprListView.ScrollIntoView(entry);
-                SprListView.SelectedItem = entry;
-
+                uint newId = AddSprite(null);
+                RefreshSpriteList(newId);
                 ErrorManager.ShowInfo($"Sprite {newId} added. Use Replace to set its image.");
             }
             catch (Exception ex)
@@ -811,21 +1609,16 @@ namespace Assets_Editor
         private void DeleteSprite_Click(object? sender, RoutedEventArgs e)
         {
             if (SprListView.SelectedItem is not ShowList selected) return;
+            if (selected.Id == 0) return;
             try
             {
+                // sprite ids are positional too: the sprite is emptied, not removed
                 uint spriteId = selected.Id;
-                Sprite blankSprite = new Sprite { ID = spriteId, CompressedPixels = [] };
-                using var bmp = blankSprite.GetBitmap();
-                using var img = SKImage.FromBitmap(bmp);
-                using var dat = img.Encode(SKEncodedImageFormat.Png, 100);
-                blankSprite.MemoryStream = new MemoryStream(dat.ToArray());
-
-                MainWindow.MainSprStorage.Sprites[spriteId] = blankSprite;
-                MainWindow.MainSprStorage.SprLists[(int)spriteId] = blankSprite.MemoryStream;
-                MainWindow.MainSprStorage.MarkModified(spriteId);
+                MainWindow.MainSprStorage.SetSprite(spriteId, null);
 
                 if ((int)spriteId < MainWindow.AllSprList.Count)
-                    MainWindow.AllSprList[(int)spriteId].Image = null;
+                    MainWindow.AllSprList[(int)spriteId].Image = Utils.MemoryStreamToBitmap(MainWindow.MainSprStorage.getSpriteStream(spriteId));
+                RefreshAfterSpriteChange();
 
                 ErrorManager.ShowInfo($"Sprite {spriteId} deleted.");
             }
@@ -835,6 +1628,19 @@ namespace Assets_Editor
             }
         }
 
+        // pixels of a sprite changed: redraw everything that may show it
+        private void RefreshAfterSpriteChange()
+        {
+            UpdatePreview();
+            BuildSlotGrid();
+            if (ObjListView.ItemsSource is IList<ShowList> list)
+            {
+                for (int i = Math.Max(0, _lastObjStart); i < _lastObjEnd && i < list.Count; i++)
+                    list[i].Image = null;
+            }
+            LoadVisibleObjectImages();
+        }
+
         private void ObjListViewSelectedIndex_Changed(object? sender, NumericUpDownValueChangedEventArgs e)
         {
             if (!isPageLoaded) return;
@@ -842,7 +1648,7 @@ namespace Assets_Editor
             if (idx >= 0 && idx < ObjListView.ItemCount)
             {
                 ObjListView.SelectedIndex = idx;
-                ObjListView.ScrollIntoView(ObjListView.Items[idx]!);
+                ObjListView.ScrollIntoView(idx);
             }
         }
 
@@ -853,11 +1659,15 @@ namespace Assets_Editor
             if (idx >= 0 && idx < SprListView.ItemCount)
             {
                 SprListView.SelectedIndex = idx;
-                SprListView.ScrollIntoView(SprListView.Items[idx]!);
+                SprListView.ScrollIntoView(idx);
             }
         }
 
         #region Scroll-based image loading
+
+        // row height of both lists: 64px image + ~12px ListBoxItem padding. Must match the rendered
+        // rows or images stop loading while scrolling.
+        private const double ItemHeight = 76;
 
         private bool _objScrollHooked;
         private bool _sprScrollHooked;
@@ -920,48 +1730,37 @@ namespace Assets_Editor
         {
             var sv = FindScrollViewer(ObjListView);
             if (sv == null) return;
+            if (ObjListView.ItemsSource is not IList<ShowList> items || items.Count == 0) return;
+            var collection = GetCurrentCollection();
+            if (collection == null) return;
 
-            int itemCount = ObjListView.ItemCount;
-            if (itemCount == 0) return;
-
-            // Items have 64px images + ~12px Avalonia ListBoxItem padding = ~76px total
-            double itemHeight = 76;
-            int offset = Math.Max(0, (int)(sv.Offset.Y / itemHeight));
-            int visibleCount = (int)(sv.Viewport.Height / itemHeight) + 2;
-            int start = offset;
+            int itemCount = items.Count;
+            int offset = Math.Max(0, (int)(sv.Offset.Y / ItemHeight));
+            int visibleCount = (int)(sv.Viewport.Height / ItemHeight) + 2;
+            int start = Math.Min(offset, itemCount);
             int end = Math.Min(offset + visibleCount, itemCount);
 
-            // Unload items that scrolled out of view
+            // Unload items that scrolled out of view (the list may have shrunk since)
             if (_lastObjStart >= 0)
             {
-                for (int i = _lastObjStart; i < _lastObjEnd; i++)
+                for (int i = _lastObjStart; i < _lastObjEnd && i < itemCount; i++)
                 {
                     if (i < start || i >= end)
-                    {
-                        if (ObjListView.Items[i] is ShowList item)
-                            item.Image = null;
-                    }
+                        items[i].Image = null;
                 }
             }
 
             // Load newly visible items
             for (int i = start; i < end; i++)
             {
-                if (ObjListView.Items[i] is not ShowList visible) continue;
+                ShowList visible = items[i];
                 if (visible.Image != null) continue;
                 try
                 {
-                    Appearance? appearance = ObjectMenu.SelectedIndex switch
-                    {
-                        0 => MainWindow.appearances?.Outfit.FirstOrDefault(o => o.Id == visible.Id),
-                        1 => MainWindow.appearances?.Object.FirstOrDefault(o => o.Id == visible.Id),
-                        2 => MainWindow.appearances?.Effect.FirstOrDefault(o => o.Id == visible.Id),
-                        3 => MainWindow.appearances?.Missile.FirstOrDefault(o => o.Id == visible.Id),
-                        _ => null
-                    };
+                    Appearance? appearance = FindAppearance(collection, i, visible.Id);
                     if (appearance != null)
                     {
-                        MemoryStream? stream = LegacyAppearance.GetObjectImage(appearance, MainWindow.MainSprStorage);
+                        MemoryStream stream = LegacyAppearance.GetObjectImage(appearance, MainWindow.MainSprStorage);
                         visible.Image = Utils.MemoryStreamToBitmap(stream);
                     }
                 }
@@ -977,34 +1776,33 @@ namespace Assets_Editor
             var sv = FindScrollViewer(SprListView);
             if (sv == null) return;
 
-            int itemCount = SprListView.ItemCount;
+            var sprites = MainWindow.AllSprList;
+            int itemCount = Math.Min(SprListView.ItemCount, sprites.Count);
             if (itemCount == 0) return;
 
-            // Items have 64px images + ~12px Avalonia ListBoxItem padding = ~76px total
-            double itemHeight = 76;
-            int offset = Math.Max(0, (int)(sv.Offset.Y / itemHeight));
-            int visibleCount = (int)(sv.Viewport.Height / itemHeight) + 2;
-            int start = offset;
+            int offset = Math.Max(0, (int)(sv.Offset.Y / ItemHeight));
+            int visibleCount = (int)(sv.Viewport.Height / ItemHeight) + 2;
+            int start = Math.Min(offset, itemCount);
             int end = Math.Min(offset + visibleCount, itemCount);
 
             // Unload items that scrolled out of view
             if (_lastSprStart >= 0)
             {
-                for (int i = _lastSprStart; i < _lastSprEnd; i++)
+                for (int i = _lastSprStart; i < _lastSprEnd && i < itemCount; i++)
                 {
                     if (i < start || i >= end)
-                        MainWindow.AllSprList[i].Image = null;
+                        sprites[i].Image = null;
                 }
             }
 
             // Load newly visible items
             for (int i = start; i < end; i++)
             {
-                if (MainWindow.AllSprList[i].Image != null) continue;
+                if (sprites[i].Image != null) continue;
                 try
                 {
-                    MainWindow.AllSprList[i].Image = Utils.MemoryStreamToBitmap(
-                        MainWindow.MainSprStorage.getSpriteStream((uint)i));
+                    sprites[i].Image = Utils.MemoryStreamToBitmap(
+                        MainWindow.MainSprStorage.getSpriteStream(sprites[i].Id));
                 }
                 catch { }
             }
