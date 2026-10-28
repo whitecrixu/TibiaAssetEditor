@@ -6,7 +6,7 @@
         mc:Ignorable="d"
         x:Class="Assets_Editor.LegacyDatEditor"
         Title="Tibia MultiTool Editor — Legacy DAT" Width="1240" Height="900">
-    <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
+    <Grid x:Name="EditorRoot" HorizontalAlignment="Center" VerticalAlignment="Stretch">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
@@ -245,53 +245,116 @@
                 </TabItem>
                 <TabItem Header="Texture">
                     <ScrollViewer>
-                        <WrapPanel Orientation="Horizontal" MaxWidth="700">
-                            <StackPanel HorizontalAlignment="Left" Width="321" Margin="5,0,5,0">
-                                <Grid Margin="20,20,0,0" Width="265" Height="265" HorizontalAlignment="Left">
-                                    <Border BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#FF4F4F4F">
-                                        <Image x:Name="SpriteViewerImge" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="None"/>
+                        <StackPanel Orientation="Vertical" MaxWidth="700" HorizontalAlignment="Left">
+                            <WrapPanel Orientation="Horizontal">
+                                <StackPanel HorizontalAlignment="Left" Width="321" Margin="5,0,5,0">
+                                    <Grid Margin="20,20,0,0" Width="265" Height="265" HorizontalAlignment="Left">
+                                        <Border BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="#FF4F4F4F">
+                                            <Image x:Name="SpriteViewerImge" HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="None"/>
+                                        </Border>
+                                        <Button x:Name="SprUpArrow" Tag="0" Content="▲" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                                        <Button x:Name="SprRightArrow" Tag="1" Content="▶" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        <Button x:Name="SprDownArrow" Tag="2" Content="▼" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
+                                        <Button x:Name="SprLeftArrow" Tag="3" Content="◀" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <TextBlock Text="Frame:" VerticalAlignment="Center" Margin="20,0,10,0"/>
+                                        <Slider x:Name="SprFramesSlider" Width="150" IsSnapToTickEnabled="True" TickFrequency="1" Minimum="0" Maximum="0" ValueChanged="SprFramesSlider_ValueChanged"/>
+                                        <TextBlock x:Name="SprFrameLabel" Text="1/1" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="20,5,0,0">
+                                        <Button x:Name="PlayAnimationButton" Content="▶ Play" Width="80" Click="PlayAnimation_Click" ToolTip.Tip="Play the animation with its frame durations"/>
+                                        <TextBlock Text="Frame group:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                                        <ComboBox x:Name="FrameGroupSelector" Width="110" SelectionChanged="FrameGroupSelector_Changed" ToolTip.Tip="Outfit frame group (idle / moving)"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Width="320" Margin="5,10,5,0">
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Width:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprWidth" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Height:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprHeight" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Layers:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprLayers" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Pattern X:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprPaternX" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Pattern Y:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprPaternY" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Pattern Z:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprPaternZ" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                        <TextBlock Text="Animation:" Width="120" Margin="10,0,0,0"/>
+                                        <NumericUpDown x:Name="A_SprAnimation" Width="110" Minimum="1" Maximum="255" FormatString="0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="10,8,0,0">
+                                        <Button Content="Apply size" Click="ApplyTextureSize_Click" ToolTip.Tip="Resize the sprite list; existing sprites keep their slot"/>
+                                        <TextBlock Text="(also applied on Save)" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.7"/>
+                                    </StackPanel>
+                                    <Border x:Name="AnimationPanel" Classes="card" Margin="5,10,0,0" Padding="8">
+                                        <StackPanel>
+                                            <TextBlock x:Name="AnimationPanelTitle" Text="Animation" FontWeight="Bold"/>
+                                            <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                                <TextBlock Text="Mode:" Width="90" VerticalAlignment="Center"/>
+                                                <ComboBox x:Name="AnimModeSelector" Width="140" SelectionChanged="AnimationField_Changed">
+                                                    <ComboBoxItem Content="Asynchronized"/>
+                                                    <ComboBoxItem Content="Synchronized"/>
+                                                </ComboBox>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                                <TextBlock Text="Loop count:" Width="90" VerticalAlignment="Center"/>
+                                                <NumericUpDown x:Name="AnimLoopCount" Width="140" Minimum="0" Maximum="4294967295" FormatString="0" ValueChanged="AnimationValue_Changed" ToolTip.Tip="0 = infinite, 4294967295 = ping-pong"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                                <TextBlock Text="Start phase:" Width="90" VerticalAlignment="Center"/>
+                                                <NumericUpDown x:Name="AnimStartPhase" Width="140" Minimum="0" Maximum="255" FormatString="0" ValueChanged="AnimationValue_Changed"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
+                                                <TextBlock x:Name="PhaseLabel" Text="Phase 1 (ms):" Width="90" VerticalAlignment="Center"/>
+                                                <NumericUpDown x:Name="PhaseDurationMin" Width="95" Minimum="0" Maximum="4294967295" FormatString="0" ValueChanged="AnimationValue_Changed" ToolTip.Tip="Minimum duration"/>
+                                                <NumericUpDown x:Name="PhaseDurationMax" Width="95" Minimum="0" Maximum="4294967295" FormatString="0" Margin="5,0,0,0" ValueChanged="AnimationValue_Changed" ToolTip.Tip="Maximum duration"/>
+                                            </StackPanel>
+                                            <Button Content="Use this duration for all phases" Margin="0,5,0,0" Click="ApplyDurationToAllPhases_Click"/>
+                                        </StackPanel>
                                     </Border>
-                                    <Button x:Name="SprUpArrow" Tag="0" Content="▲" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Center" VerticalAlignment="Top"/>
-                                    <Button x:Name="SprRightArrow" Tag="1" Content="▶" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    <Button x:Name="SprDownArrow" Tag="2" Content="▼" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Center" VerticalAlignment="Bottom"/>
-                                    <Button x:Name="SprLeftArrow" Tag="3" Content="◀" Width="30" Height="30" Click="ChangeDirection" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                </Grid>
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                    <TextBlock Text="Frame:" VerticalAlignment="Center" Margin="20,0,10,0"/>
-                                    <Slider x:Name="SprFramesSlider" Width="170" IsSnapToTickEnabled="True" TickFrequency="1" Minimum="0"/>
                                 </StackPanel>
-                            </StackPanel>
-                            <StackPanel Width="320" Margin="5,10,5,0">
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
-                                    <TextBlock Text="Width:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprWidth" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
+                            </WrapPanel>
+                            <Border Classes="card" Margin="5,10,5,10" Padding="8">
+                                <StackPanel>
+                                    <TextBlock Text="Sprite slots (current frame group and frame)" FontWeight="Bold"/>
+                                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <TextBlock Text="Layer:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <NumericUpDown x:Name="SlotLayer" Width="70" Minimum="0" Maximum="0" Value="0" FormatString="0" ValueChanged="SlotView_Changed"/>
+                                        <TextBlock Text="X:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                        <NumericUpDown x:Name="SlotPatternX" Width="70" Minimum="0" Maximum="0" Value="0" FormatString="0" ValueChanged="SlotView_Changed"/>
+                                        <TextBlock Text="Y:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                        <NumericUpDown x:Name="SlotPatternY" Width="70" Minimum="0" Maximum="0" Value="0" FormatString="0" ValueChanged="SlotView_Changed"/>
+                                        <TextBlock Text="Z:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                        <NumericUpDown x:Name="SlotPatternZ" Width="70" Minimum="0" Maximum="0" Value="0" FormatString="0" ValueChanged="SlotView_Changed"/>
+                                    </WrapPanel>
+                                    <Border BorderThickness="1" BorderBrush="#FF4F4F4F" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="2">
+                                        <Grid x:Name="SlotGrid"/>
+                                    </Border>
+                                    <TextBlock x:Name="SlotInfo" Margin="0,5,0,0" TextWrapping="Wrap" Opacity="0.8"
+                                               Text="Select a slot, then double-click a sprite in the sprite list (or drag it onto the slot)."/>
+                                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <Button Content="Assign selected sprite" Click="AssignSpriteToSlot_Click" Margin="0,0,5,5"/>
+                                        <Button Content="Clear slot" Click="ClearSlot_Click" Margin="0,0,5,5"/>
+                                        <Button Content="Import image..." Click="ImportImageToObject_Click" Margin="0,0,5,5" ToolTip.Tip="Split an image (sides multiple of 32) into new sprites and put them into these slots"/>
+                                    </WrapPanel>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
-                                    <TextBlock Text="Height:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprHeight" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
-                                    <TextBlock Text="Layers:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprLayers" Width="110" Minimum="1" Maximum="2" FormatString="0"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
-                                    <TextBlock Text="Pattern X:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprPaternX" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
-                                    <TextBlock Text="Pattern Y:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprPaternY" Width="110" Minimum="1" Maximum="10" FormatString="0"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,5,0,0">
-                                    <TextBlock Text="Pattern Z:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprPaternZ" Width="110" Minimum="1" Maximum="2" FormatString="0"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Height="25" Margin="0,10,0,0">
-                                    <TextBlock Text="Animation:" Width="120" Margin="10,0,0,0"/>
-                                    <NumericUpDown x:Name="A_SprAnimation" Width="110" Minimum="1" Maximum="64" FormatString="0"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </WrapPanel>
+                            </Border>
+                        </StackPanel>
                     </ScrollViewer>
                 </TabItem>
                 <TabItem Header="Other">
@@ -307,7 +370,7 @@
         <!-- Right Column: Sprite List -->
         <Border Grid.Column="2" Classes="card" Width="225" Margin="10,5,10,10">
             <Grid RowDefinitions="*,30,40">
-                <ListBox Grid.Row="0" x:Name="SprListView" Margin="0,5,0,0">
+                <ListBox Grid.Row="0" x:Name="SprListView" Margin="0,5,0,0" DoubleTapped="SprListView_DoubleTapped">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
