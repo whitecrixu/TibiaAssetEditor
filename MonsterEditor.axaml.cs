@@ -22,9 +22,26 @@ namespace Assets_Editor
         private Dictionary<uint, Appearance> _outfitById = new();
         private Dictionary<uint, Appearance> _itemById = new();
 
+        // Revscript field key (RevscriptPatcher.PatchableKeys) → the control that edits it.
+        private readonly Dictionary<string, Control> _fieldControls;
+
         public MonsterEditor()
         {
             InitializeComponent();
+            _fieldControls = new Dictionary<string, Control>
+            {
+                ["name"] = NameBox, ["nameDescription"] = DescriptionBox,
+                ["experience"] = ExperienceBox, ["maxHealth"] = MaxHealthBox, ["health"] = HealthBox,
+                ["race"] = RaceBox, ["manaCost"] = ManaCostBox, ["baseSpeed"] = SpeedBox, ["corpseId"] = CorpseBox,
+                ["isAttackable"] = AttackableCb, ["isConvinceable"] = ConvinceableCb, ["isSummonable"] = SummonableCb,
+                ["isIllusionable"] = IllusionableCb, ["isHostile"] = HostileCb, ["isHealthHidden"] = HealthHiddenCb,
+                ["isPushable"] = PushableCb, ["canPushItems"] = CanPushItemsCb, ["canPushCreatures"] = CanPushCreaturesCb,
+                ["targetDistance"] = TargetDistanceBox, ["runHealth"] = RunHealthBox, ["staticAttackChance"] = StaticAttackBox,
+                ["canWalkOnEnergy"] = CanWalkOnEnergyCb, ["canWalkOnFire"] = CanWalkOnFireCb, ["canWalkOnPoison"] = CanWalkOnPoisonCb,
+                ["lookType"] = LookTypeBox, ["lookTypeEx"] = LookTypeExBox, ["lookHead"] = LookHeadBox,
+                ["lookBody"] = LookBodyBox, ["lookLegs"] = LookLegsBox, ["lookFeet"] = LookFeetBox,
+                ["lookAddons"] = LookAddonsBox, ["lookMount"] = LookMountBox,
+            };
             PathText.Text = MonsterRegistry.LoadedFolder ?? "";
             BuildAppearanceLookups();
             if (MonsterRegistry.IsLoaded) RefreshList();
@@ -110,7 +127,23 @@ namespace Assets_Editor
             if (_current == null) { ErrorManager.ShowInfo("No monster selected."); return; }
             if (_current.ReadOnly)
             {
-                ErrorManager.ShowWarning($"{_current.Name} uses the revscript format (mType:...) of this server. The editor can only read it - saving would overwrite its loot, attacks and defenses. Edit the .lua file directly.");
+                ErrorManager.ShowWarning($"{_current.Name} can't be saved: {_current.ReadOnlyReason}. Edit the .lua file directly.");
+                return;
+            }
+            if (_current.Revscript != null && !string.IsNullOrEmpty(_current.SourcePath))
+            {
+                // Patch only the changed calls / loot blocks; the rest of the file stays byte-identical.
+                if (!RevscriptPatcher.HasPendingChanges(_current))
+                {
+                    StatusText.Text = $"{_current.Name}: no changes to save";
+                    return;
+                }
+                if (RevscriptPatcher.Save(_current, _current.SourcePath, out _, out string? error))
+                {
+                    StatusText.Text = $"Patched {_current.Name} → {_current.SourcePath} (original kept as {Path.GetFileName(_current.SourcePath)}-bak)  |  reload the server scripts to apply";
+                    PopulateDetail(_current);
+                }
+                else ErrorManager.ShowError($"Save failed: {error}");
                 return;
             }
             if (string.IsNullOrEmpty(_current.SourcePath))
@@ -133,7 +166,7 @@ namespace Assets_Editor
 
         private void SaveAll_Click(object? sender, RoutedEventArgs e)
         {
-            int ok = 0, fail = 0, readOnly = 0;
+            int ok = 0, fail = 0, readOnly = 0, unchanged = 0;
             foreach (var m in MonsterRegistry.Monsters)
             {
                 if (string.IsNullOrEmpty(m.SourcePath))
@@ -142,10 +175,14 @@ namespace Assets_Editor
                     continue;
                 }
                 if (m.ReadOnly) { readOnly++; continue; }
+                // Revscript files are only touched when something in them changed.
+                if (m.Revscript != null && !RevscriptPatcher.HasPendingChanges(m)) { unchanged++; continue; }
                 if (LuaMonsterGenerator.SaveToFile(m)) ok++; else fail++;
             }
-            StatusText.Text = (fail == 0 ? $"Saved {ok} monsters" : $"Saved {ok}, failed {fail}")
-                + (readOnly > 0 ? $", skipped {readOnly} read-only (mType:) monsters" : "");
+            StatusText.Text = (fail == 0 ? $"Saved {ok} monsters" : $"Saved {ok}, failed {fail} (see log)")
+                + (unchanged > 0 ? $", {unchanged} revscript monsters unchanged" : "")
+                + (readOnly > 0 ? $", skipped {readOnly} read-only monsters" : "");
+            if (_current != null) PopulateDetail(_current);
         }
 
         private void AddNew_Click(object? sender, RoutedEventArgs e)
@@ -288,7 +325,69 @@ namespace Assets_Editor
             RawLightBox.Text = ""; RawEventsBox.Text = "";
             RawChangeTargetBox.Text = ""; RawStrategiesBox.Text = ""; RawSummonBox.Text = "";
             PreviewBox.Text = "";
+            LootList.ItemsSource = null;
+            UpdateEditability(null);
             _suspend = false;
+        }
+
+        // Revscript monsters are saved by patching individual calls, so only the fields the
+        // patcher knows (and that parsed unambiguously) stay editable; everything else is
+        // disabled with the reason as tooltip. Canary-table and new monsters edit everything.
+        private void UpdateEditability(LuaMonsterData? d)
+        {
+            bool revscript = d != null && d.IsRevscript;
+            var src = d?.Revscript;
+            foreach (var (key, control) in _fieldControls)
+            {
+                string? reason = null;
+                if (d != null && d.ReadOnly) reason = $"Read-only: {d.ReadOnlyReason}";
+                else if (src != null && src.IsLocked(key)) reason = $"Not editable: {src.LockReason(key)}";
+                control.IsEnabled = reason == null;
+                ToolTip.SetTip(control, reason);
+            }
+            RaceIdBox.IsEnabled = !revscript;
+            RewardBossCb.IsEnabled = !revscript;
+            ToolTip.SetTip(RaceIdBox, revscript ? "TFS revscript monsters have no race id" : null);
+            BestiaryTab.IsEnabled = !revscript;
+            BosstiaryTab.IsEnabled = !revscript;
+            RawTab.IsEnabled = !revscript;
+
+            LootTab.IsEnabled = revscript;
+            bool lootEditable = src != null && !d!.ReadOnly && !src.LootLocked;
+            LootList.IsEnabled = lootEditable;
+            LootAddButton.IsEnabled = lootEditable;
+            LootHint.Text = d == null || !revscript ? ""
+                : d.ReadOnly ? $"Read-only: {d.ReadOnlyReason}"
+                : src!.LootLocked ? $"Loot is not editable: {src.LootLockReason}"
+                : "Chance is out of 100000. Only changed entries are rewritten; a changed id drops the old '-- item name' comment unless you edit it.";
+            if (DetailTabs.SelectedItem is TabItem { IsEnabled: false }) DetailTabs.SelectedIndex = 0;
+
+            FormatText.Text = d == null ? ""
+                : d.ReadOnly ? $"TFS revscript - read-only ({d.ReadOnlyReason})"
+                : revscript ? "TFS revscript - saving patches only the changed lines"
+                : "Canary table format";
+            GeneratedBadge.IsVisible = d != null && d.IsGenerated;
+            ToolTip.SetTip(GeneratedBadge, d?.GeneratedNote == null ? null
+                : d.GeneratedNote + "\n\nIf this file is regenerated by its tool, changes made here are lost - change the tool's source data too.");
+            PreviewHint.Text = revscript
+                ? "The file with your changes patched in (unchanged lines are kept byte-for-byte)."
+                : "Read-only view of what will be written to disk.";
+        }
+
+        private void LootAdd_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_current?.Revscript == null || _current.ReadOnly || _current.Revscript.LootLocked) return;
+            var entry = new MonsterLootEntry { IsNew = true, Id = 0, Chance = 1000, MaxCount = 1 };
+            _current.Loot.Add(entry);
+            LootList.SelectedItem = entry;
+            LootList.ScrollIntoView(entry);
+        }
+
+        private void LootDelete_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_current == null || (sender as Control)?.DataContext is not MonsterLootEntry entry) return;
+            _current.Loot.Remove(entry);
+            UpdatePreview();
         }
 
         private void PopulateDetail(LuaMonsterData d)
@@ -361,6 +460,9 @@ namespace Assets_Editor
             RawStrategiesBox.Text = d.RawStrategiesTarget ?? "";
             RawSummonBox.Text = d.RawSummon ?? "";
 
+            LootList.ItemsSource = d.Loot;
+            UpdateEditability(d);
+
             _suspend = false;
             UpdatePreview();
         }
@@ -385,7 +487,10 @@ namespace Assets_Editor
             _current.Speed = (uint)(SpeedBox.Value ?? 0);
             _current.Corpse = (uint)(CorpseBox.Value ?? 0);
             _current.ManaCost = (uint)(ManaCostBox.Value ?? 0);
-            if (RaceBox.SelectedItem is ComboBoxItem cbi) _current.Race = cbi.Content?.ToString() ?? "blood";
+            // Only take the combo's value when the user picked another entry, so a race the
+            // combo doesn't list isn't silently replaced by "blood".
+            if (RaceBox.SelectedItem is ComboBoxItem cbi && RaceBox.SelectedIndex != RaceOptionIndex(_current.Race))
+                _current.Race = cbi.Content?.ToString() ?? "blood";
 
             uint prevLookType = _current.LookType, prevLookEx = _current.LookTypeEx;
             _current.LookType = (uint)(LookTypeBox.Value ?? 0);
@@ -458,7 +563,12 @@ namespace Assets_Editor
         private void UpdatePreview()
         {
             if (_current == null) { PreviewBox.Text = ""; return; }
-            try { PreviewBox.Text = LuaMonsterGenerator.GenerateFullLua(_current); }
+            try
+            {
+                PreviewBox.Text = _current.Revscript != null ? RevscriptPatcher.PreviewText(_current)
+                    : _current.ReadOnly ? $"-- read-only: {_current.ReadOnlyReason}"
+                    : LuaMonsterGenerator.GenerateFullLua(_current);
+            }
             catch (Exception ex) { PreviewBox.Text = $"-- preview failed: {ex.Message}"; }
         }
 

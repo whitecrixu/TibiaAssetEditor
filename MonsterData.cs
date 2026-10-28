@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
@@ -82,10 +83,24 @@ namespace Assets_Editor
 
         public string? SourcePath { get; set; }
 
-        // true for files in the TFS revscript style (mType:health(...) calls, used by the NewEra server).
-        // Only a few fields are read from them; regenerating the file from this model would wipe the
-        // rest (loot, attacks, defenses, ...), so such monsters are never saved.
+        // TFS revscript monsters (mType:health(...) calls, used by the NewEra server) are never
+        // regenerated: Revscript keeps the original text and saving patches only the changed
+        // calls / loot blocks (RevscriptPatcher). Null for Canary-table and new monsters.
+        public RevscriptSource? Revscript { get; set; }
+        public bool IsRevscript => Revscript != null || ReadOnly;
+
+        // Loot of a revscript monster, one entry per `do local loot = Loot() ... end` block.
+        public ObservableCollection<MonsterLootEntry> Loot { get; } = new();
+
+        // true when a revscript file can't be patched safely at all (several monsters in one
+        // file, block comments, ...). Such monsters are shown but never saved.
         public bool ReadOnly { get; set; }
+        public string? ReadOnlyReason { get; set; }
+
+        // The file header says it was produced by a tool (tools/monster_convert,
+        // tools/arena_ultimate/make_monsters.py, ...); regenerating it overwrites edits.
+        public bool IsGenerated { get; set; }
+        public string? GeneratedNote { get; set; }
 
         // Bitmap derived from lookType (or lookTypeEx for item-based monsters).
         // Populated lazily by MonsterEditor; stays null if DAT isn't loaded.
@@ -111,8 +126,18 @@ namespace Assets_Editor
             if (!File.Exists(filePath)) return null;
             try
             {
-                string lua = File.ReadAllText(filePath);
-                var data = ParseLua(lua);
+                // Revscript files are patched in place, so they're parsed from the raw bytes
+                // (see RevscriptPatcher); Canary-table files are regenerated from the model.
+                byte[] bytes = File.ReadAllBytes(filePath);
+                string lua = Encoding.Latin1.GetString(bytes);
+                LuaMonsterData? data;
+                if (RevscriptPatcher.IsRevscript(lua))
+                {
+                    if (!Regex.IsMatch(lua, @"Game\.createMonsterType\(\s*""[^""]+""\s*\)")) return null;
+                    data = new LuaMonsterData();
+                    RevscriptPatcher.Attach(data, bytes);
+                }
+                else data = ParseLua(File.ReadAllText(filePath));
                 if (data != null) data.SourcePath = filePath;
                 return data;
             }
@@ -132,8 +157,11 @@ namespace Assets_Editor
 
             var d = new LuaMonsterData { Name = nameMatch.Groups[1].Value };
 
-            if (!Regex.IsMatch(lua, @"\bmonster\.(health|maxHealth|experience|outfit)\s*="))
-                return ParseRevscriptLua(lua, d);
+            if (RevscriptPatcher.IsRevscript(lua))
+            {
+                RevscriptPatcher.Attach(d, Encoding.UTF8.GetBytes(lua));
+                return d;
+            }
 
             d.Description = ExtStr(lua, @"monster\.description\s*=\s*""([^""]+)""");
             d.RaceId = ExtUint(lua, @"monster\.raceId\s*=\s*(\d+)");
@@ -216,43 +244,6 @@ namespace Assets_Editor
             d.RawSummon = ExtRawBlock(lua, @"monster\.summons?\s*=\s*\{");
             d.RawLight = ExtRawBlock(lua, @"monster\.light\s*=\s*\{");
 
-            return d;
-        }
-
-        // TFS 1.x revscript monsters: `local mType = Game.createMonsterType(..)` followed by mType:xxx(..) calls
-        private static LuaMonsterData ParseRevscriptLua(string lua, LuaMonsterData d)
-        {
-            d.ReadOnly = true;
-            d.Description = ExtStr(lua, @"mType:nameDescription\(\s*""([^""]+)""");
-            d.Experience = ExtUint(lua, @"mType:experience\(\s*(\d+)");
-            d.MaxHealth = ExtUint(lua, @"mType:maxHealth\(\s*(\d+)");
-            d.Health = ExtUint(lua, @"mType:health\(\s*(\d+)");
-            d.Speed = ExtUint(lua, @"mType:baseSpeed\(\s*(\d+)");
-            d.Corpse = ExtUint(lua, @"mType:corpseId\(\s*(\d+)");
-            d.Race = ExtStr(lua, @"mType:race\(\s*""([^""]+)""") ?? "blood";
-            d.ManaCost = ExtUint(lua, @"mType:manaCost\(\s*(\d+)");
-            d.RunHealth = ExtUint(lua, @"mType:runHealth\(\s*(\d+)");
-            d.TargetDistance = ExtUint(lua, @"mType:targetDistance\(\s*(\d+)");
-            d.StaticAttackChance = ExtUint(lua, @"mType:staticAttackChance\(\s*(\d+)");
-            d.Attackable = ExtBool(lua, @"mType:isAttackable\(\s*(true|false)", true);
-            d.Hostile = ExtBool(lua, @"mType:isHostile\(\s*(true|false)", true);
-            d.Summonable = ExtBool(lua, @"mType:isSummonable\(\s*(true|false)");
-            d.Convinceable = ExtBool(lua, @"mType:isConvinceable\(\s*(true|false)");
-            d.Illusionable = ExtBool(lua, @"mType:isIllusionable\(\s*(true|false)");
-            d.Pushable = ExtBool(lua, @"mType:isPushable\(\s*(true|false)");
-
-            string? outfit = ExtBlock(lua, @"mType:outfit\(\s*\{");
-            if (outfit != null)
-            {
-                d.LookType = ExtUint(outfit, @"lookType\s*=\s*(\d+)");
-                d.LookTypeEx = ExtUint(outfit, @"lookTypeEx\s*=\s*(\d+)");
-                d.LookHead = ExtUint(outfit, @"lookHead\s*=\s*(\d+)");
-                d.LookBody = ExtUint(outfit, @"lookBody\s*=\s*(\d+)");
-                d.LookLegs = ExtUint(outfit, @"lookLegs\s*=\s*(\d+)");
-                d.LookFeet = ExtUint(outfit, @"lookFeet\s*=\s*(\d+)");
-                d.LookAddons = ExtUint(outfit, @"lookAddons\s*=\s*(\d+)");
-                d.LookMount = ExtUint(outfit, @"lookMount\s*=\s*(\d+)");
-            }
             return d;
         }
 
@@ -572,7 +563,14 @@ namespace Assets_Editor
             if (string.IsNullOrEmpty(path)) return false;
             if (d.ReadOnly)
             {
-                MainWindow.Log($"SaveToFile({path}) refused: {d.Name} is a revscript (mType:) monster, which this editor can only read.");
+                MainWindow.Log($"SaveToFile({path}) refused: {d.Name} can't be patched safely ({d.ReadOnlyReason}).");
+                return false;
+            }
+            if (d.Revscript != null)
+            {
+                // Never regenerate a revscript file - patch the changed calls in place.
+                if (RevscriptPatcher.Save(d, path, out _, out string? error)) return true;
+                MainWindow.Log($"SaveToFile({path}) failed: {error}");
                 return false;
             }
             try
