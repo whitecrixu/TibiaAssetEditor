@@ -151,6 +151,12 @@
                                                     <ComboBox  Grid.Column="4" ItemsSource="{Binding DamageChoices}"
                                                                SelectedItem="{Binding SelectedDamageChoice, Mode=TwoWay}"
                                                                Height="28" IsVisible="{Binding ShowDamage}"/>
+                                                    <TextBlock Grid.Column="3" Text="Element"
+                                                               VerticalAlignment="Center" FontSize="11"
+                                                               IsVisible="{Binding ShowElement}"/>
+                                                    <ComboBox  Grid.Column="4" ItemsSource="{Binding DamageChoices}"
+                                                               SelectedItem="{Binding SelectedElementChoice, Mode=TwoWay}"
+                                                               Height="28" IsVisible="{Binding ShowElement}"/>
                                                 </Grid>
 
                                                 <Grid ColumnDefinitions="60,*,20,60,*"
@@ -175,6 +181,12 @@
                                                     <NumericUpDown Grid.Column="1" Value="{Binding BestiaryIdValue, Mode=TwoWay}"
                                                                    Minimum="0" Maximum="99999" FormatString="0"
                                                                    Height="28" IsVisible="{Binding ShowBestiary}"/>
+                                                    <TextBlock Grid.Column="3" Text="Name"
+                                                               VerticalAlignment="Center" FontSize="11"
+                                                               IsVisible="{Binding ShowBestiary}"/>
+                                                    <TextBox   Grid.Column="4" Text="{Binding BestiaryNameText, Mode=TwoWay}"
+                                                               Watermark="e.g. Lycanthrope (shown in the client)"
+                                                               Height="28" IsVisible="{Binding ShowBestiary}"/>
                                                     <TextBlock Grid.Column="3" Text="Range"
                                                                VerticalAlignment="Center" FontSize="11"
                                                                IsVisible="{Binding ShowRange}"/>

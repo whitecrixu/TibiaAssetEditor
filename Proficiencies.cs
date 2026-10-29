@@ -20,6 +20,7 @@ namespace Assets_Editor
         private int? _augmentType;
         private int? _spellId;
         private int? _bestiaryId;
+        private string? _bestiaryName;
         private int? _damageType;
         private int? _elementId;
         private int? _range;
@@ -30,12 +31,17 @@ namespace Assets_Editor
         public int?    AugmentType { get => _augmentType; set { _augmentType = value; On(nameof(AugmentType)); } }
         public int?    SpellId     { get => _spellId;     set { _spellId = value;     On(nameof(SpellId)); } }
         public int?    BestiaryId  { get => _bestiaryId;  set { _bestiaryId = value;  On(nameof(BestiaryId)); } }
+        public string? BestiaryName { get => _bestiaryName; set { _bestiaryName = value; On(nameof(BestiaryName)); } }
         public int?    DamageType  { get => _damageType;  set { _damageType = value;  On(nameof(DamageType)); } }
         public int?    ElementId   { get => _elementId;   set { _elementId = value;   On(nameof(ElementId)); } }
         public int?    Range       { get => _range;       set { _range = value;       On(nameof(Range)); } }
 
         // Preserve any unknown keys on round-trip.
         public Dictionary<string, JToken> Extra { get; set; } = new();
+
+        // "Value" exactly as read (keeps 1 vs 1.0), and whether the perk had none (e.g. type 32)
+        public JToken? SourceValue { get; set; }
+        public bool ValueMissing { get; set; }
 
         public string TypeLabel => ProficiencyEnums.PerkTypeName(_type);
 
@@ -45,9 +51,10 @@ namespace Assets_Editor
         public ProficiencyPerk Clone() => new()
         {
             Type = Type, Value = Value, SkillId = SkillId, AugmentType = AugmentType,
-            SpellId = SpellId, BestiaryId = BestiaryId, DamageType = DamageType,
-            ElementId = ElementId, Range = Range,
+            SpellId = SpellId, BestiaryId = BestiaryId, BestiaryName = BestiaryName,
+            DamageType = DamageType, ElementId = ElementId, Range = Range,
             Extra = new Dictionary<string, JToken>(Extra),
+            SourceValue = SourceValue, ValueMissing = ValueMissing,
         };
     }
 
@@ -168,14 +175,17 @@ namespace Assets_Editor
                 AugmentType = obj.TryGetValue("AugmentType", out var at) ? at.Value<int>() : null,
                 SpellId = obj.TryGetValue("SpellId", out var sp) ? sp.Value<int>() : null,
                 BestiaryId = obj.TryGetValue("BestiaryId", out var bi) ? bi.Value<int>() : null,
+                BestiaryName = obj.TryGetValue("BestiaryName", out var bn) ? bn.Value<string>() : null,
                 DamageType = obj.TryGetValue("DamageType", out var dt) ? dt.Value<int>() : null,
                 ElementId = obj.TryGetValue("ElementId", out var el) ? el.Value<int>() : null,
                 Range = obj.TryGetValue("Range", out var rg) ? rg.Value<int>() : null,
+                SourceValue = obj["Value"],
+                ValueMissing = obj["Value"] == null,
             };
             foreach (var prop in obj.Properties())
             {
                 if (prop.Name is "Type" or "Value" or "SkillId" or "AugmentType"
-                    or "SpellId" or "BestiaryId" or "DamageType" or "ElementId" or "Range") continue;
+                    or "SpellId" or "BestiaryId" or "BestiaryName" or "DamageType" or "ElementId" or "Range") continue;
                 p.Extra[prop.Name] = prop.Value;
             }
             return p;
@@ -203,8 +213,12 @@ namespace Assets_Editor
             foreach (var kv in e.Extra)
                 if (!obj.ContainsKey(kv.Key))
                     obj[kv.Key] = kv.Value;
-            return obj;
+            return SortedKeys(obj);
         }
+
+        // The game files keep every object's keys in ordinal order; unknown keys go in their place too.
+        private static JObject SortedKeys(JObject obj) =>
+            new(obj.Properties().OrderBy(p => p.Name, StringComparer.Ordinal).ToList());
 
         private static JObject WritePerk(ProficiencyPerk p)
         {
@@ -212,17 +226,22 @@ namespace Assets_Editor
             var obj = new JObject();
             if (p.AugmentType.HasValue) obj["AugmentType"] = p.AugmentType.Value;
             if (p.BestiaryId.HasValue)  obj["BestiaryId"]  = p.BestiaryId.Value;
+            if (p.BestiaryName != null) obj["BestiaryName"] = p.BestiaryName;
             if (p.DamageType.HasValue)  obj["DamageType"]  = p.DamageType.Value;
             if (p.ElementId.HasValue)   obj["ElementId"]   = p.ElementId.Value;
             if (p.Range.HasValue)       obj["Range"]       = p.Range.Value;
             if (p.SkillId.HasValue)     obj["SkillId"]     = p.SkillId.Value;
             if (p.SpellId.HasValue)     obj["SpellId"]     = p.SpellId.Value;
             obj["Type"] = p.Type;
-            obj["Value"] = p.Value;
+            if (p.SourceValue != null && p.SourceValue.Type is JTokenType.Integer or JTokenType.Float
+                && p.SourceValue.Value<double>() == p.Value)
+                obj["Value"] = p.SourceValue.DeepClone();
+            else if (!(p.ValueMissing && p.Value == 0))
+                obj["Value"] = p.Value;
             foreach (var kv in p.Extra)
                 if (!obj.ContainsKey(kv.Key))
                     obj[kv.Key] = kv.Value;
-            return obj;
+            return SortedKeys(obj);
         }
 
         public static ProficiencyEntry? FindById(uint id) =>
@@ -237,7 +256,8 @@ namespace Assets_Editor
     {
         public record Choice(int Value, string Label)
         {
-            public override string ToString() => $"{Value} — {Label}";
+            // int.MinValue marks the "field not written" entry of the editor's pickers
+            public override string ToString() => Value == int.MinValue ? Label : $"{Value} — {Label}";
         }
 
         public static readonly List<Choice> PerkTypes = new()
@@ -343,20 +363,22 @@ namespace Assets_Editor
             Bestiary = 1 << 3,
             Damage   = 1 << 4,
             Range    = 1 << 5,
+            Element  = 1 << 6,
         }
 
         public static readonly Dictionary<int, PerkField> TypeFields = new()
         {
             { 3,  PerkField.Skill },                                  // SKILLID_BONUS
             { 5,  PerkField.Augment | PerkField.Spell },              // AUGMENT_TYPE (per-spell)
-            { 6,  PerkField.Bestiary | PerkField.Damage },            // BESTIARY_DAMAGE
-            { 9,  PerkField.Damage },                                 // CRIT_CHANCE_ELEMENT
-            { 13, PerkField.Damage },                                 // CRIT_EXTRA_ELEMENT
+            { 4,  PerkField.Damage },                                 // SPECIAL_MAGIC_LEVEL (DamageType)
+            { 6,  PerkField.Bestiary },                               // BESTIARY_DAMAGE (BestiaryId + BestiaryName)
+            { 9,  PerkField.Element },                                // CRIT_CHANCE_ELEMENT (ElementId)
+            { 13, PerkField.Element },                                // CRIT_EXTRA_ELEMENT (ElementId)
             { 22, PerkField.Range },                                  // GAIN_DAMAGE_AT_RANGE
             { 25, PerkField.Skill },                                  // SKILLID_% EXTRA DMG autoattack
             { 26, PerkField.Skill },                                  // SKILLID_% EXTRA DMG spells
             { 27, PerkField.Skill },                                  // SKILLID_% EXTRA HEAL spells
-            { 31, PerkField.Damage },                                 // ELEMENTAL_PIERCE
+            { 31, PerkField.Element },                                // ELEMENTAL_PIERCE (ElementId)
         };
 
         public static PerkField FieldsFor(int perkType) =>
@@ -385,14 +407,17 @@ namespace Assets_Editor
         int? AugmentType = null,
         int? SpellId = null,
         int? BestiaryId = null,
+        string? BestiaryName = null,
         int? DamageType = null,
+        int? ElementId = null,
         int? Range = null)
     {
         public ProficiencyPerk ToPerk() => new()
         {
             Type = Type, Value = Value, SkillId = SkillId,
             AugmentType = AugmentType, SpellId = SpellId,
-            BestiaryId = BestiaryId, DamageType = DamageType, Range = Range,
+            BestiaryId = BestiaryId, BestiaryName = BestiaryName,
+            DamageType = DamageType, ElementId = ElementId, Range = Range,
         };
     }
 
@@ -440,10 +465,11 @@ namespace Assets_Editor
             new("Augment: Critical Extra Dmg +10% (spell id=0)",   5, 0.10, AugmentType: 16, SpellId: 0),
             new("Augment: Critical Hit Chance +5% (spell id=0)",   5, 0.05, AugmentType: 17, SpellId: 0),
 
-            new("Bestiary Damage +3% vs id=0 (Physical)",          6, 0.03, BestiaryId: 0, DamageType: 1),
-            new("Crit Chance Fire Spells +5%",                     9, 0.05, DamageType: 8),
-            new("Crit Extra Dmg Fire Spells +10%",                 13, 0.10, DamageType: 8),
-            new("Elemental Pierce Fire +5%",                       31, 0.05, DamageType: 8),
+            new("Bestiary Damage +3% vs Lycanthropes",             6, 0.03, BestiaryId: 12, BestiaryName: "Lycanthrope"),
+            new("Magic Level +1 for Fire",                         4, 1.0,  DamageType: 8),
+            new("Crit Chance Fire Spells +5%",                     9, 0.05, ElementId: 8),
+            new("Crit Extra Dmg Fire Spells +10%",                 13, 0.10, ElementId: 8),
+            new("Elemental Pierce Fire +5%",                       31, 0.05, ElementId: 8),
         };
     }
 

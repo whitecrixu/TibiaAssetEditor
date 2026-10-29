@@ -35,7 +35,7 @@ namespace Assets_Editor
                 .Concat(ProficiencyEnums.AugmentTypes).ToList();
 
             private static readonly List<ProficiencyEnums.Choice> _damageChoices =
-                new[] { new ProficiencyEnums.Choice(int.MinValue, "(unset)") }
+                new[] { new ProficiencyEnums.Choice(int.MinValue, "(not set)") }
                 .Concat(ProficiencyEnums.DamageTypes).ToList();
 
             public PerkVM(ProficiencyPerk model) { Model = model; }
@@ -54,8 +54,9 @@ namespace Assets_Editor
                     if ((fields & ProficiencyEnums.PerkField.Skill)    == 0) Model.SkillId    = null;
                     if ((fields & ProficiencyEnums.PerkField.Augment)  == 0) Model.AugmentType = null;
                     if ((fields & ProficiencyEnums.PerkField.Spell)    == 0) Model.SpellId    = null;
-                    if ((fields & ProficiencyEnums.PerkField.Bestiary) == 0) Model.BestiaryId = null;
+                    if ((fields & ProficiencyEnums.PerkField.Bestiary) == 0) { Model.BestiaryId = null; Model.BestiaryName = null; }
                     if ((fields & ProficiencyEnums.PerkField.Damage)   == 0) Model.DamageType = null;
+                    if ((fields & ProficiencyEnums.PerkField.Element)  == 0) Model.ElementId  = null;
                     if ((fields & ProficiencyEnums.PerkField.Range)    == 0) Model.Range      = null;
                     OnAll();
                 }
@@ -75,6 +76,7 @@ namespace Assets_Editor
             public bool ShowSpell    => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Spell)    != 0;
             public bool ShowBestiary => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Bestiary) != 0;
             public bool ShowDamage   => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Damage)   != 0;
+            public bool ShowElement  => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Element)  != 0;
             public bool ShowRange    => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Range)    != 0;
             public bool ShowAugmentOrSpell  => ShowAugment || ShowSpell;
             public bool ShowBestiaryOrRange => ShowBestiary || ShowRange;
@@ -118,6 +120,25 @@ namespace Assets_Editor
                 }
             }
 
+            public ProficiencyEnums.Choice? SelectedElementChoice
+            {
+                get => Model.ElementId.HasValue
+                    ? DamageChoices.FirstOrDefault(c => c.Value == Model.ElementId.Value) ?? DamageChoices[0]
+                    : DamageChoices[0];
+                set
+                {
+                    if (value == null) return;
+                    int? desired = value.Value == int.MinValue ? null : value.Value;
+                    if (Model.ElementId != desired) { Model.ElementId = desired; On(nameof(SelectedElementChoice)); }
+                }
+            }
+
+            public string BestiaryNameText
+            {
+                get => Model.BestiaryName ?? "";
+                set { Model.BestiaryName = string.IsNullOrWhiteSpace(value) ? null : value; On(nameof(BestiaryNameText)); }
+            }
+
             public decimal SpellIdValue
             {
                 get => (decimal)(Model.SpellId ?? 0);
@@ -143,10 +164,11 @@ namespace Assets_Editor
                 On(nameof(SelectedTypeChoice));
                 On(nameof(ValueHint));
                 On(nameof(ShowSkill));   On(nameof(ShowAugment)); On(nameof(ShowSpell));
-                On(nameof(ShowBestiary)); On(nameof(ShowDamage)); On(nameof(ShowRange));
+                On(nameof(ShowBestiary)); On(nameof(ShowDamage)); On(nameof(ShowElement)); On(nameof(ShowRange));
                 On(nameof(ShowAugmentOrSpell)); On(nameof(ShowBestiaryOrRange));
                 On(nameof(SelectedSkillChoice));   On(nameof(SelectedAugmentChoice));
-                On(nameof(SelectedDamageChoice));  On(nameof(SpellIdValue));
+                On(nameof(SelectedDamageChoice));  On(nameof(SelectedElementChoice)); On(nameof(SpellIdValue));
+                On(nameof(BestiaryNameText));
                 On(nameof(BestiaryIdValue));       On(nameof(RangeValue));
             }
         }
