@@ -4,6 +4,19 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.6.2 — Proficiencies fixes
+
+- Each perk type shows the field it really uses: *Element* (`ElementId`) for
+  the element perks 9 / 13 / 31, *DmgType* (`DamageType`) for Special Magic
+  Level (4), *Bestiary* + *Name* (`BestiaryId`, `BestiaryName`) for Bestiary
+  Damage (6). The presets write the same fields.
+- An empty picker shows "(not set)" instead of -2147483648.
+- An unedited `proficiencies.json` saves back byte-identical: perks without a
+  `Value` (type 32) no longer get `"Value": 0.0`, whole numbers stay `1`
+  instead of `1.0`, and unknown keys keep their place.
+
+---
+
 ## V2.6.1 — About window
 
 - The About window shows the full version (e.g. 2.6.1), the supported
