@@ -15,9 +15,9 @@
     <AssemblyName>TibiaMultiTool</AssemblyName>
     <ApplicationId>com.whitecrixu.tibiamultitool</ApplicationId>
     <ApplicationTitle>Tibia MultiTool</ApplicationTitle>
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.0-alpha</ApplicationDisplayVersion>
-    <Version>0.1.0</Version>
+    <ApplicationVersion>2</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.1-alpha</ApplicationDisplayVersion>
+    <Version>0.1.1</Version>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>

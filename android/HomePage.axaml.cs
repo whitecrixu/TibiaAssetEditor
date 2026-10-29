@@ -99,16 +99,12 @@ public partial class HomePage : UserControl, IPage
     private async Task LoadClient()
     {
         var progress = new Progress<int>(p => MainView.Current.ReportBusy(p, "Reading sprite table"));
-        Exception? error = await MainView.Current.RunBusy("Loading Tibia.dat / Tibia.spr…", () => Task.Run(() => Workspace.LoadClient(progress)));
-        if (error != null)
-            AppLog.Add("Client not loaded: " + error.Message);
+        await MainView.Current.RunBusy("Loading Tibia.dat / Tibia.spr…", () => Task.Run(() => Workspace.LoadClient(progress)));
     }
 
     private async Task LoadServer()
     {
-        Exception? error = await MainView.Current.RunBusy("Loading items.otb / items.xml…", () => Task.Run(Workspace.LoadServer));
-        if (error != null)
-            AppLog.Add("Server not loaded: " + error.Message);
+        await MainView.Current.RunBusy("Loading items.otb / items.xml…", () => Task.Run(Workspace.LoadServer));
     }
 
     private bool ConfirmDiscard()

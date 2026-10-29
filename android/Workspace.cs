@@ -104,26 +104,18 @@ public static class Workspace
         using (var r = new BinaryReader(File.OpenRead(dat)))
             signature = DatStructure.ReadAppearanceInfo(r).Signature;
 
-        bool known = KnownDatStructures.TryGetValue(signature, out int structure);
-        if (!known)
-            throw new InvalidDataException($"Tibia.dat signature 0x{signature:X8} is not supported by the Android alpha (8.60 only).");
+        // NewEra client layout when there is no otfi
+        PresetSettings first = File.Exists(otfi)
+            ? ReadOtfi(otfi)
+            : new PresetSettings { Extended = true, FrameDurations = true, FrameGroups = true };
 
-        var preset = new PresetSettings { Version = structure };
-        if (File.Exists(otfi))
-        {
-            preset = ReadOtfi(otfi);
-            preset.Version = structure;
-        }
-        else
-        {
-            // the NewEra client layout
-            preset.Extended = preset.FrameDurations = preset.FrameGroups = true;
-            AppLog.Add("No Tibia.otfi: using extended + frame durations + frame groups.");
-        }
+        var (legacy, preset) = DetectLayout(dat, signature, first)
+            ?? throw new InvalidDataException($"Tibia.dat (signature 0x{signature:X8}) does not match any known structure and layout flags.");
+        int structure = preset.Version;
+        if (!KnownDatStructures.ContainsKey(signature))
+            AppLog.Add($"Tibia.dat 0x{signature:X8}: detected {MainWindow.datStructure.GetVersionInfo(structure).Name}, " +
+                       $"extended={preset.Extended}, frame durations={preset.FrameDurations}, frame groups={preset.FrameGroups}.");
         MainWindow.Preset = preset;
-
-        var legacy = new LegacyAppearance();
-        legacy.ReadLegacyDat(dat, structure, preset);
 
         var storage = new SpriteStorage(spr, preset.Transparent, progress);
         storage.LoadSprites(preset.Extended);
@@ -137,6 +129,51 @@ public static class Workspace
         MainWindow.MainSprStorage = storage;
         DatDirty = false;
         AppLog.Add($"Client loaded: {Things.Object.Count} items, {Things.Outfit.Count} outfits, {Things.Effect.Count} effects, {Things.Missile.Count} missiles, {storage.SpriteCount} sprites.");
+    }
+
+    /// <summary>
+    /// Like the desktop loader: the known structure for the signature with the otfi flags first, then every
+    /// structure with those flags, then every combination of the three layout flags. A read must end exactly
+    /// at the end of the file, so a wrong guess is never accepted.
+    /// </summary>
+    private static (LegacyAppearance, PresetSettings)? DetectLayout(string dat, uint signature, PresetSettings flags)
+    {
+        var structures = MainWindow.datStructure.GetAllVersions().Select(v => v.Structure).Distinct()
+            .OrderBy(s => KnownDatStructures.TryGetValue(signature, out int known) && s == known ? 0 : 1)
+            .ThenByDescending(s => s == 5) // 8.60 next, then the rest
+            .ToList();
+
+        var combos = new List<(bool extended, bool durations, bool groups)> { (flags.Extended, flags.FrameDurations, flags.FrameGroups) };
+        for (int c = 0; c < 8; c++)
+        {
+            var combo = ((c & 1) != 0, (c & 2) != 0, (c & 4) != 0);
+            if (!combos.Contains(combo))
+                combos.Add(combo);
+        }
+
+        foreach (var (extended, durations, groups) in combos)
+            foreach (int structure in structures)
+            {
+                var preset = new PresetSettings
+                {
+                    Version = structure,
+                    Extended = extended,
+                    FrameDurations = durations,
+                    FrameGroups = groups,
+                    Transparent = flags.Transparent,
+                };
+                try
+                {
+                    var legacy = new LegacyAppearance();
+                    legacy.ReadLegacyDat(dat, structure, preset);
+                    return (legacy, preset);
+                }
+                catch
+                {
+                    // wrong guess, try the next one
+                }
+            }
+        return null;
     }
 
     // same keys as NewEraTools.ReadOtfi
