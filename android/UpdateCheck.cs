@@ -8,14 +8,13 @@ using System.Threading.Tasks;
 namespace Assets_Editor;
 
 /// <summary>
-/// Android releases are GitHub pre-releases tagged "android-vX.Y.Z[-label]" with a .apk asset. They are
-/// pre-releases so the desktop updater (releases/latest) never sees them. Installing is left to the
+/// Windows, Linux and Android share one version: a release "vX.Y.Z" carries the desktop archives and the
+/// .apk. Releases without an .apk (older desktop-only ones) are skipped. Installing is left to the
 /// system: the APK is opened in the browser and Android asks for confirmation.
 /// </summary>
 public static class UpdateCheck
 {
     private const string ReleasesUrl = "https://api.github.com/repos/whitecrixu/TibiaAssetEditor/releases?per_page=30";
-    public const string TagPrefix = "android-v";
 
     public sealed record Release(string Tag, string Name, string Notes, string DownloadUrl, Version Version);
 
@@ -27,9 +26,11 @@ public static class UpdateCheck
 
     public static Version? ParseTag(string tag)
     {
-        if (!tag.StartsWith(TagPrefix, StringComparison.OrdinalIgnoreCase))
+        // "v2.6.0", and the "android-v0.1.2-alpha" tags of the first Android builds
+        string text = tag.StartsWith("android-", StringComparison.OrdinalIgnoreCase) ? tag["android-".Length..] : tag;
+        if (!text.StartsWith('v') && !text.StartsWith('V'))
             return null;
-        string text = tag[TagPrefix.Length..].Split('-')[0];
+        text = text[1..].Split('-')[0];
         return Version.TryParse(text, out Version? v) ? new Version(v.Major, v.Minor, Math.Max(0, v.Build)) : null;
     }
 
@@ -56,8 +57,9 @@ public static class UpdateCheck
                 string? apk = r.GetProperty("assets").EnumerateArray()
                     .Select(a => a.GetProperty("browser_download_url").GetString())
                     .FirstOrDefault(u => u != null && u.EndsWith(".apk", StringComparison.OrdinalIgnoreCase));
-                best = new Release(tag, r.GetProperty("name").GetString() ?? tag, r.GetProperty("body").GetString() ?? "",
-                    apk ?? r.GetProperty("html_url").GetString() ?? "", version);
+                if (apk == null)
+                    continue;
+                best = new Release(tag, r.GetProperty("name").GetString() ?? tag, r.GetProperty("body").GetString() ?? "", apk, version);
             }
             return best;
         }

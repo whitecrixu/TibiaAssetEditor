@@ -4,6 +4,16 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.6 — One version for Windows, Linux and Android
+
+- Windows, Linux and Android now share one version number and are published in
+  a single release (desktop archives and the Android APK side by side).
+- Android: the update check follows the shared releases (`vX.Y.Z` with an APK).
+  The Android app is still in testing.
+- Android: dropped a log line that pointed to a server-side script.
+
+---
+
 ## V2.4 — Clearer interface
 
 - **Icons show on Linux**: the toolbars use emoji icons and most Linux systems
