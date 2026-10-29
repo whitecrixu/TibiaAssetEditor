@@ -4,6 +4,14 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.6.1 — About window
+
+- The About window shows the full version (e.g. 2.6.1), the supported
+  platforms, credits and a link to the GitHub releases.
+- README: download table for Windows, Linux and Android, Android app overview.
+
+---
+
 ## V2.6 — One version for Windows, Linux and Android
 
 - Windows, Linux and Android now share one version number and are published in
