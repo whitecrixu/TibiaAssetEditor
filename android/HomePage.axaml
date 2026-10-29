@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Assets_Editor.HomePage">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16" MaxWidth="720">
+
+            <!-- new version on GitHub -->
+            <Border x:Name="UpdateCard" Classes="card" IsVisible="False" BorderBrush="{DynamicResource SemiColorPrimary}">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="UpdateTitle" Classes="title" />
+                    <TextBlock x:Name="UpdateNotes" Classes="muted" MaxLines="6" TextTrimming="CharacterEllipsis" />
+                    <UniformGrid Columns="2">
+                        <Button Classes="Primary" Theme="{DynamicResource SolidButton}" Content="Download" Click="UpdateDownload_Click" Margin="0,0,6,0" />
+                        <Button Content="Skip this version" Click="UpdateSkip_Click" Margin="6,0,0,0" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- client -->
+            <Border Classes="card">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="title" Text="Client · Tibia.dat / Tibia.spr" />
+                    <TextBlock x:Name="ClientStatus" Classes="muted" Text="Not loaded." />
+                    <TextBlock x:Name="ClientFolder" Classes="muted" IsVisible="False" />
+                    <UniformGrid Columns="2">
+                        <Button Content="Choose folder…" Click="ChooseClient_Click" Margin="0,0,6,0" />
+                        <Button x:Name="ReloadClientButton" Content="Reload from folder" Click="ReloadClient_Click" Margin="6,0,0,0" IsEnabled="False" />
+                    </UniformGrid>
+                    <Button x:Name="BrowseButton" Classes="Primary" Theme="{DynamicResource SolidButton}"
+                            Content="Browse items, outfits, effects" Click="Browse_Click" IsEnabled="False" HorizontalAlignment="Stretch" />
+                </StackPanel>
+            </Border>
+
+            <!-- server -->
+            <Border Classes="card">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="title" Text="Server · items.otb / items.xml" />
+                    <TextBlock x:Name="ServerStatus" Classes="muted" Text="Not loaded. Names and server flags show up in the item pages once loaded." />
+                    <TextBlock x:Name="ServerFolder" Classes="muted" IsVisible="False" />
+                    <UniformGrid Columns="2">
+                        <Button Content="Choose folder…" Click="ChooseServer_Click" Margin="0,0,6,0" />
+                        <Button x:Name="ReloadServerButton" Content="Reload from folder" Click="ReloadServer_Click" Margin="6,0,0,0" IsEnabled="False" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- save -->
+            <Border Classes="card">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="title" Text="Changes" />
+                    <TextBlock x:Name="ChangesStatus" Classes="muted" Text="No changes." />
+                    <Button x:Name="SaveButton" Classes="Primary" Theme="{DynamicResource SolidButton}" Content="Save changes"
+                            Click="Save_Click" IsEnabled="False" HorizontalAlignment="Stretch" />
+                    <TextBlock Classes="muted" Text="Saving writes the changed files back into the chosen folders. The previous version of each file is kept next to it as “-bak”. Only the files you changed are written; unchanged files stay byte-identical." />
+                </StackPanel>
+            </Border>
+
+            <!-- log -->
+            <Border Classes="card">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="title" Text="Log" VerticalAlignment="Center" />
+                        <TextBlock x:Name="VersionText" Grid.Column="1" Classes="muted" VerticalAlignment="Center" />
+                    </Grid>
+                    <ItemsControl x:Name="LogList" MaxHeight="260">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <SelectableTextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" Margin="0,2"
+                                                     Foreground="{DynamicResource SemiColorText1}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="Check for updates" Click="CheckUpdates_Click" HorizontalAlignment="Stretch" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

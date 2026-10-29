@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Assets_Editor.MainView"
+             Background="{DynamicResource SemiColorBackground0}">
+    <Grid RowDefinitions="Auto,*">
+        <!-- app bar: back, title, page action -->
+        <Border Grid.Row="0" Background="{DynamicResource SemiColorBackground1}"
+                BorderBrush="{DynamicResource SemiColorBorder}" BorderThickness="0,0,0,1" Padding="8,6">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button x:Name="BackButton" Grid.Column="0" Content="‹ Back" Theme="{DynamicResource BorderlessButton}"
+                        IsVisible="False" Click="Back_Click" Margin="0,0,8,0" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                    <TextBlock x:Name="TitleText" Classes="title" Text="Tibia MultiTool" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="SubtitleText" Classes="muted" IsVisible="False" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+                <ContentControl x:Name="ActionHost" Grid.Column="2" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+        <ContentControl x:Name="PageHost" Grid.Row="1" />
+
+        <!-- busy overlay for imports and saves -->
+        <Border x:Name="BusyOverlay" Grid.Row="0" Grid.RowSpan="2" IsVisible="False" Background="#99000000">
+            <Border Classes="card" HorizontalAlignment="Center" VerticalAlignment="Center" MinWidth="260" Margin="24">
+                <StackPanel Spacing="10">
+                    <TextBlock x:Name="BusyText" Classes="title" TextWrapping="Wrap" />
+                    <ProgressBar x:Name="BusyProgress" Minimum="0" Maximum="100" Height="6" />
+                    <TextBlock x:Name="BusyDetail" Classes="muted" />
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

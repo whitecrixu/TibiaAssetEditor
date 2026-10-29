@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Assets_Editor.ThingsPage">
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+        <UniformGrid Grid.Row="0" Columns="4" Margin="12,12,12,6">
+            <RadioButton x:Name="ItemsTab" Theme="{DynamicResource ButtonRadioButton}" GroupName="kind" Content="Items" IsChecked="True" Click="Kind_Click" HorizontalAlignment="Stretch" />
+            <RadioButton x:Name="OutfitsTab" Theme="{DynamicResource ButtonRadioButton}" GroupName="kind" Content="Outfits" Click="Kind_Click" HorizontalAlignment="Stretch" />
+            <RadioButton x:Name="EffectsTab" Theme="{DynamicResource ButtonRadioButton}" GroupName="kind" Content="Effects" Click="Kind_Click" HorizontalAlignment="Stretch" />
+            <RadioButton x:Name="MissilesTab" Theme="{DynamicResource ButtonRadioButton}" GroupName="kind" Content="Missiles" Click="Kind_Click" HorizontalAlignment="Stretch" />
+        </UniformGrid>
+        <TextBox x:Name="SearchBox" Grid.Row="1" Margin="12,0,12,6" Watermark="Search by id or name (e.g. 2160, crystal coin, 100-200)" />
+        <TextBlock x:Name="CountText" Grid.Row="2" Classes="muted" Margin="16,0,16,6" />
+        <ListBox x:Name="List" Grid.Row="3" SelectionMode="Single" SelectionChanged="List_SelectionChanged"
+                 Background="Transparent">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.Styles>
+                <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="12,4" />
+                    <Setter Property="Height" Value="64" />
+                </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="56,*" Height="56">
+                        <Border Width="52" Height="52" CornerRadius="8" Background="{DynamicResource SemiColorFill0}">
+                            <Image Source="{Binding Image}" Width="48" Height="48" Stretch="Uniform"
+                                   RenderOptions.BitmapInterpolationMode="None" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Detail}" Classes="muted" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</UserControl>

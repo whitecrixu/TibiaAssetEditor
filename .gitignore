@@ -36,3 +36,5 @@ obj/Debug/net9.0/Appearances.cs
 
 # Local agent / scratch state — not for the repo
 .claude/
+android/bin/
+android/obj/

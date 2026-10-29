@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- launcher icon: a tile grid with one highlighted object -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+  <path android:fillColor="#1E293B" android:pathData="M18,10h72a8,8 0,0 1,8 8v72a8,8 0,0 1,-8 8h-72a8,8 0,0 1,-8 -8v-72a8,8 0,0 1,8 -8z" />
+  <path android:fillColor="#334155" android:pathData="M22,22h30v30h-30z M56,22h30v30h-30z M22,56h30v30h-30z" />
+  <path android:fillColor="#F59E0B" android:pathData="M56,56h30v30h-30z" />
+  <path android:fillColor="#FEF3C7" android:pathData="M64,64h14v14h-14z" />
+</vector>

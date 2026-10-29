@@ -64,6 +64,12 @@
     <AvaloniaResource Remove="tests/**" />
     <Compile Remove="Fonts/**" />
     <None Remove="Fonts/**" />
+    <!-- the Android app has its own csproj -->
+    <Compile Remove="android/**" />
+    <None Remove="android/**" />
+    <AvaloniaXaml Remove="android/**" />
+    <AvaloniaResource Remove="android/**" />
+    <EmbeddedResource Remove="android/**" />
   </ItemGroup>
 
   <ItemGroup>
