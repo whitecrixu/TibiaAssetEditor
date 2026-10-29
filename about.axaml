@@ -1,16 +1,23 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Assets_Editor.AboutWindow"
-        Title="About" Height="260" Width="440"
+        Title="About" Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" CanResize="False">
     <StackPanel Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
         <TextBlock Text="Tibia MultiTool Editor" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
         <TextBlock Text="By WhiteCrixu" FontSize="14" HorizontalAlignment="Center" Classes="dim"/>
-        <TextBlock x:Name="VersionText" Text="V1.0" FontSize="13"
+        <TextBlock x:Name="VersionText" Text="V2" FontSize="13"
                    HorizontalAlignment="Center" FontWeight="SemiBold" Margin="0,8,0,0"/>
+        <TextBlock Text="Windows · Linux · Android" FontSize="12" HorizontalAlignment="Center" Classes="dim"/>
         <Border Classes="card" Margin="0,12,0,0" Padding="12">
-            <TextBlock Text="Cross-platform Avalonia UI"
-                       HorizontalAlignment="Center" Classes="dim"/>
+            <StackPanel Spacing="6">
+                <TextBlock TextWrapping="Wrap" TextAlignment="Center"
+                           Text="Editor for Tibia client and server files: appearances, Tibia.dat / Tibia.spr, items.otb, items.xml, monsters and proficiencies."/>
+                <TextBlock TextWrapping="Wrap" TextAlignment="Center" Classes="dim" FontSize="11"
+                           Text=".NET 9 · Avalonia 11 · Semi.Avalonia · SkiaSharp. Client signatures from Object Builder (MIT); emoji font Noto Emoji (SIL OFL)."/>
+            </StackPanel>
         </Border>
+        <Button Content="Releases on GitHub" HorizontalAlignment="Center" Margin="0,8,0,0"
+                Click="Releases_Click"/>
     </StackPanel>
 </Window>

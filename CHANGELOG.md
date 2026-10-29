@@ -14,6 +14,28 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.5.1 — Project Wolf Server Tools
+
+- The server tools are now called **Project Wolf Server Tools** (main screen
+  tile and window title; consistency reports are named `consistency-<date>.tsv`).
+- The warning about editing the frozen `client/` tree appears whenever a live
+  `client-mehah` folder sits next to it, whatever the project folder is called.
+
+---
+
+## V2.5 — Every legacy client recognised
+
+- The dat signatures of the official clients 7.10 – 10.99 and 13.10 are built
+  in (`KnownClients.cs`). The loaded client is named on the main screen (e.g.
+  *Tibia 8.60 v1*) and its dat is read with the right structure at once.
+  Custom clients that keep their base version's signature are recognised the
+  same way; unknown signatures still go through automatic structure / flag
+  detection.
+- Signature list from Object Builder's `versions.xml` (MIT) plus 10.79 / 10.80
+  from ClientConverter. The Android app uses the same list.
+
+---
+
 ## V2.4 — Clearer interface
 
 - **Icons show on Linux**: the toolbars use emoji icons and most Linux systems

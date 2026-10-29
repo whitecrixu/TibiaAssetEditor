@@ -4,9 +4,48 @@ Cross-platform suite for **Tibia / Canary** server content — `appearances.dat`
 sprite sheets, `items.xml`, `items.otb`, **monsters** (`.lua`) and
 **proficiencies** (`proficiencies.json`). Formerly *Tibia Asset Editor*.
 
-Linux / macOS / Windows port of the original Windows WPF editor, rebuilt on
-**.NET 9.0 + Avalonia 11** with **Semi.Avalonia** theming, SkiaSharp for image
-work and Magick.NET for GIF/APNG handling.
+Windows / Linux desktop editor plus an Android app, rebuilt from the original
+Windows WPF editor on **.NET 9.0 + Avalonia 11** with **Semi.Avalonia**
+theming, SkiaSharp for image work and Magick.NET for GIF/APNG handling.
+
+## Download
+
+Every release ships Windows, Linux and Android together under one version:
+[latest release](https://github.com/whitecrixu/TibiaAssetEditor/releases/latest).
+
+| Platform | File | Notes |
+|---|---|---|
+| Windows x64 | `TibiaMultiToolEditor-vX-win-x64.zip` | unzip and run `Tibia MultiTool Editor.exe` |
+| Linux x64 | `TibiaMultiToolEditor-vX-linux-x64.tar.gz` | extract and run `Tibia MultiTool Editor` |
+| Android 8.0+ | `TibiaMultiToolEditor-vX-android.apk` | in testing; allow installs from the browser |
+
+The desktop editor and the Android app check GitHub for a newer version at
+startup. The desktop editor downloads, verifies (SHA-256) and installs it
+itself; on Android the APK is opened in the browser and installed by the system.
+
+## Android app (in testing)
+
+A touch version of the legacy (7.x – 10.x) editor for phones and tablets:
+
+- Choose the client folder (`Tibia.dat`, `Tibia.spr`, `Tibia.otfi`) and the
+  server folder (`items.otb`, `items.xml`); the app works on a copy and
+  writes changes back with a `-bak` of every file it replaces.
+- Browse items, outfits, effects and missiles with previews; search by id,
+  id range or name.
+- Edit dat flags, `items.otb` flags and the main `items.xml` attributes.
+- Same file-format code as the desktop editor: client detection by signature,
+  byte-identical round trips of unchanged files.
+
+## What's new in v2.6
+
+Windows, Linux and Android share one version number and are published in a
+single release. See [`CHANGELOG.md`](CHANGELOG.md).
+
+## What's new in v2.5
+
+Every official legacy client (7.10 – 10.99 and 13.10) is recognised by its dat
+signature and named on the main screen; the server tools are now called
+**Project Wolf Server Tools** (v2.5.1).
 
 ## What's new in v2.4
 
@@ -147,9 +186,22 @@ See the full entry and fix list in [`CHANGELOG.md`](CHANGELOG.md) or the
     /p:IncludeNativeLibrariesForSelfExtract=true -o publish/linux-x64
 ```
 
-Requires .NET 9.0 SDK. The project builds with **0 errors**; warnings come
-from a known vulnerability in `Magick.NET-Q8-AnyCPU` 14.9.1 (used for GIF
-import/export only).
+Requires .NET 9.0 SDK. The project builds with **0 errors**.
+
+```bash
+# Tests
+~/.dotnet/dotnet test tests/AssetsEditor.Tests
+
+# Android APK (needs the Android SDK and a JDK 21)
+cd android
+~/.dotnet/dotnet publish -c Release -f net9.0-android \
+    -p:AndroidSdkDirectory=$HOME/android-sdk -p:JavaSdkDirectory=<JDK 21>
+# -> bin/Release/net9.0-android/publish/com.whitecrixu.tibiamultitool-Signed.apk
+```
+
+When releasing, keep the version in `AssetsEditor.csproj` and in
+`android/TibiaMultiTool.Android.csproj` (`Version`, `ApplicationDisplayVersion`,
+`ApplicationVersion`) the same.
 
 ## Architecture
 
@@ -172,6 +224,11 @@ import/export only).
   `assets.json` + sha256 rewrite.
 - **`TemplateLibrary.cs`** — reusable appearance templates.
 - **`ItemsXml.cs`** — items.xml load/save with typed `ItemEntry` model.
+- **`KnownClients.cs`** — dat signatures of the official legacy clients and
+  their structure / layout flags (shared by desktop, Android and tests).
+- **`ServerTools.cs`** — Project Wolf Server Tools (consistency report,
+  things hashes, diff and export).
+- **`android/`** — the Android app; links the shared format files.
 - **`Resources/Theme.axaml`** — design tokens (spacing, radii, typography)
   + shared control classes (`card`, `appbar`, `statusbar`, `hero`,
   `spriteSlot`, `primary`, `tool`, `action`, `icon`).
