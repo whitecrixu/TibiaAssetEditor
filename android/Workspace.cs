@@ -25,14 +25,9 @@ public static class Workspace
     public static readonly string[] ClientFiles = ["Tibia.dat", "Tibia.spr", "Tibia.otfi"];
     public static readonly string[] ServerFiles = ["items.otb", "items.xml"];
 
-    // dat signature -> Appearances.xml structure (same table as the desktop MainWindow)
-    private static readonly Dictionary<uint, int> KnownDatStructures = new()
-    {
-        [0x4C2C7993] = 5, // 8.60 (NewEra / WolfOTS client, data/things/860)
-    };
-
     public static Appearances? Things { get; private set; }
     public static uint DatSignature { get; private set; }
+    public static KnownClients.ClientVersion? Client { get; private set; }
     public static int Structure { get; private set; } = 5;
     public static VersionInfo? Version { get; private set; }
     public static SpriteStorage? Sprites { get; private set; }
@@ -104,17 +99,18 @@ public static class Workspace
         using (var r = new BinaryReader(File.OpenRead(dat)))
             signature = DatStructure.ReadAppearanceInfo(r).Signature;
 
-        // NewEra client layout when there is no otfi
+        // the otfi describes the file exactly; without one, the official client's flags come first
+        // (the NewEra client keeps the 8.60 v2 signature but ships an otfi with all three flags)
+        KnownClients.ClientVersion? client = KnownClients.FromDat(signature);
         PresetSettings first = File.Exists(otfi)
             ? ReadOtfi(otfi)
-            : new PresetSettings { Extended = true, FrameDurations = true, FrameGroups = true };
+            : new PresetSettings { Extended = client?.Extended ?? true, FrameDurations = client?.FrameDurations ?? true, FrameGroups = client?.FrameGroups ?? true };
 
-        var (legacy, preset) = DetectLayout(dat, signature, first)
+        var (legacy, preset) = DetectLayout(dat, client?.Structure, first)
             ?? throw new InvalidDataException($"Tibia.dat (signature 0x{signature:X8}) does not match any known structure and layout flags.");
         int structure = preset.Version;
-        if (!KnownDatStructures.ContainsKey(signature))
-            AppLog.Add($"Tibia.dat 0x{signature:X8}: detected {MainWindow.datStructure.GetVersionInfo(structure).Name}, " +
-                       $"extended={preset.Extended}, frame durations={preset.FrameDurations}, frame groups={preset.FrameGroups}.");
+        AppLog.Add($"Tibia.dat 0x{signature:X8}: {(client != null ? "Tibia " + client.Name : "unknown client")}, read as {MainWindow.datStructure.GetVersionInfo(structure).Name}, " +
+                   $"extended={preset.Extended}, frame durations={preset.FrameDurations}, frame groups={preset.FrameGroups}.");
         MainWindow.Preset = preset;
 
         var storage = new SpriteStorage(spr, preset.Transparent, progress);
@@ -123,6 +119,7 @@ public static class Workspace
         Sprites?.CloseFile();
         Things = legacy.Appearances;
         DatSignature = legacy.Signature;
+        Client = client;
         Structure = structure;
         Version = MainWindow.datStructure.GetVersionInfo(structure);
         Sprites = storage;
@@ -136,10 +133,10 @@ public static class Workspace
     /// structure with those flags, then every combination of the three layout flags. A read must end exactly
     /// at the end of the file, so a wrong guess is never accepted.
     /// </summary>
-    private static (LegacyAppearance, PresetSettings)? DetectLayout(string dat, uint signature, PresetSettings flags)
+    private static (LegacyAppearance, PresetSettings)? DetectLayout(string dat, int? knownStructure, PresetSettings flags)
     {
         var structures = MainWindow.datStructure.GetAllVersions().Select(v => v.Structure).Distinct()
-            .OrderBy(s => KnownDatStructures.TryGetValue(signature, out int known) && s == known ? 0 : 1)
+            .OrderBy(s => s == knownStructure ? 0 : 1)
             .ThenByDescending(s => s == 5) // 8.60 next, then the rest
             .ToList();
 

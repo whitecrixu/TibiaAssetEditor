@@ -69,7 +69,7 @@ public partial class HomePage : UserControl, IPage
         {
             var t = Workspace.Things!;
             ClientStatus.Text = $"{t.Object.Count:N0} items · {t.Outfit.Count:N0} outfits · {t.Effect.Count:N0} effects · {t.Missile.Count:N0} missiles · {Workspace.Sprites!.SpriteCount:N0} sprites" +
-                                $"\nSignature 0x{Workspace.DatSignature:X8} · {Workspace.Version?.Name}" +
+                                $"\n{(Workspace.Client != null ? "Tibia " + Workspace.Client.Name + " · " : "")}signature 0x{Workspace.DatSignature:X8} · {Workspace.Version?.Name}" +
                                 $"{(MainWindow.Preset.Extended ? " · extended" : "")}{(MainWindow.Preset.FrameDurations ? " · frame durations" : "")}{(MainWindow.Preset.FrameGroups ? " · frame groups" : "")}";
         }
         else

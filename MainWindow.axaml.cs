@@ -382,12 +382,6 @@ public partial class MainWindow : Window
         UpdateAppearancesCount();
     }
 
-    // dat signature -> Appearances.xml structure
-    private static readonly Dictionary<uint, int> KnownDatStructures = new()
-    {
-        [0x4C2C7993] = 5, // 8.60 (NewEra / WolfOTS client, data/things/860)
-    };
-
     private void LoadLegacyDat()
     {
         using FileStream stream = File.OpenRead(_datPath);
@@ -396,9 +390,10 @@ public partial class MainWindow : Window
         DatSignature = info.Signature;
 
         // known signatures pick their dat structure, so the first load attempt uses the right flag table
-        if (currentPreset != null && KnownDatStructures.TryGetValue(info.Signature, out int structure))
+        // (the NewEra client keeps the 8.60 v2 signature)
+        if (currentPreset != null && KnownClients.FromDat(info.Signature) is { } client)
         {
-            currentPreset.Version = structure;
+            currentPreset.Version = client.Structure;
             RefreshUIToggles();
         }
 
@@ -1075,7 +1070,8 @@ public partial class MainWindow : Window
         }
 
         LoadAssets.IsEnabled = true;
-        SetVersionDescription($"DAT: 0x{DatSignature:X}\nSPR: 0x{SprSignature:X}");
+        string clientName = KnownClients.FromDat(DatSignature) is { } known ? $"Tibia {known.Name}\n" : "";
+        SetVersionDescription($"{clientName}DAT: 0x{DatSignature:X}\nSPR: 0x{SprSignature:X}");
 
         if (DatSignature == 0x0801930A)
         {

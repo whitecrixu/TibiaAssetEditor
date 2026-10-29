@@ -31,6 +31,7 @@
     <Compile Include="../../LockBitmap.cs" Link="Src/LockBitmap.cs" />
     <Compile Include="../../OTB/*.cs" LinkBase="Src/OTB" />
     <Compile Include="../../ItemsXml.cs" Link="Src/ItemsXml.cs" />
+    <Compile Include="../../KnownClients.cs" Link="Src/KnownClients.cs" />
     <Compile Include="../../AppPaths.cs" Link="Src/AppPaths.cs" />
     <Compile Include="../../UpdateService.cs" Link="Src/UpdateService.cs" />
     <Compile Include="../../MonsterData.cs" Link="Src/MonsterData.cs" />

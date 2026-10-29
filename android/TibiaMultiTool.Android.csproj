@@ -15,9 +15,9 @@
     <AssemblyName>TibiaMultiTool</AssemblyName>
     <ApplicationId>com.whitecrixu.tibiamultitool</ApplicationId>
     <ApplicationTitle>Tibia MultiTool</ApplicationTitle>
-    <ApplicationVersion>2</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.1-alpha</ApplicationDisplayVersion>
-    <Version>0.1.1</Version>
+    <ApplicationVersion>3</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.2-alpha</ApplicationDisplayVersion>
+    <Version>0.1.2</Version>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
@@ -46,6 +46,7 @@
     <Compile Include="../LockBitmap.cs" Link="Shared/LockBitmap.cs" />
     <Compile Include="../OTB/*.cs" LinkBase="Shared/OTB" />
     <Compile Include="../ItemsXml.cs" Link="Shared/ItemsXml.cs" />
+    <Compile Include="../KnownClients.cs" Link="Shared/KnownClients.cs" />
     <EmbeddedResource Include="../Appearances.xml" Link="Appearances.xml" LogicalName="Appearances.xml" />
   </ItemGroup>
 </Project>
