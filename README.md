@@ -30,7 +30,7 @@ Audit release — see [`CHANGELOG.md`](CHANGELOG.md) for the full list.
 - Modern editor: catalog written with lowercase keys again, many flag
   round-trip fixes, safe sprite deletion and publish.
 - Monster Editor edits TFS revscript (`mType:`) monsters in place.
-- New **NewEra Tools**: consistency report (dat / otb / items.xml / monsters),
+- New **Project Wolf Server Tools**: consistency report (dat / otb / items.xml / monsters),
   things hashes, diff and export for approval.
 - Tests: `dotnet test tests/AssetsEditor.Tests`.
 

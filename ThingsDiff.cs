@@ -101,16 +101,15 @@ namespace Assets_Editor
         }
 
         // The follow-up checklist from client-mehah/tools/wolfots/things860/README.md ("After a release that ships
-        // these files, regenerate what reads the client's things") and ~/audyt-newera/handoff/things860-regen.md /
-        // newitems.md, with only the steps that the changes need. thingsDir is the client-mehah things directory.
+        // these files, regenerate what reads the client's things"), with only the steps that the changes need. thingsDir is the client-mehah things directory.
         public List<ChecklistStep> Checklist(string thingsDir, string? serverRoot)
         {
             var steps = new List<ChecklistStep>();
             if (!HasChanges) return steps;
 
             string things = Path.GetFullPath(thingsDir);
-            if (NewEraTools.IsFrozenClientTree(things))
-                things = NewEraTools.MehahThingsFor(things) ?? things;
+            if (ServerTools.IsFrozenClientTree(things))
+                things = ServerTools.MehahThingsFor(things) ?? things;
             string dat = Path.Combine(things, "Tibia.dat");
             string? clientRoot = ClientRootOf(things);
             string client = clientRoot ?? "<client-mehah>";
@@ -228,7 +227,7 @@ namespace Assets_Editor
             {
                 Title = "Order of the release",
                 Why = "Client channel build and web bundle first, server files (items.otb/items.xml/outfits.xml + restart) second.",
-                Commands = ["# NewEra Tools > Export for approval writes the staging folder (server/data/..., client/Tibia.*, SHA256SUMS, README.txt)"],
+                Commands = ["# Project Wolf Server Tools > Export for approval writes the staging folder (server/data/..., client/Tibia.*, SHA256SUMS, README.txt)"],
             });
             return steps;
         }
@@ -269,9 +268,9 @@ namespace Assets_Editor
 
         private static string? GuessSiteRoot(string? clientRoot)
         {
-            // wolfaac/scripts/item_sprites.py defaults to ROOT.parent / "NewEra" / "client": the site is NewEra's sibling
-            string? newEra = clientRoot == null ? null : Path.GetDirectoryName(clientRoot);
-            string? parent = newEra == null ? null : Path.GetDirectoryName(newEra);
+            // wolfaac/scripts/item_sprites.py defaults to ROOT.parent / <project> / "client": the site is the project's sibling
+            string? project = clientRoot == null ? null : Path.GetDirectoryName(clientRoot);
+            string? parent = project == null ? null : Path.GetDirectoryName(project);
             if (parent == null) return null;
             string candidate = Path.Combine(parent, "wolfaac");
             return Directory.Exists(candidate) ? candidate : null;
@@ -296,7 +295,7 @@ namespace Assets_Editor
 
         public static ThingsDiffResult Compute(Appearances current, string originalDatPath, VersionInfo versionInfo, PresetSettings preset, IEnumerable<uint>? modifiedSprites = null)
         {
-            Appearances original = NewEraTools.ReadLegacyDat(originalDatPath, versionInfo, preset, out _);
+            Appearances original = ServerTools.ReadLegacyDat(originalDatPath, versionInfo, preset, out _);
             return Compare(original, current, originalDatPath, modifiedSprites);
         }
 

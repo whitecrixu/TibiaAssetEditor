@@ -83,7 +83,7 @@ namespace Assets_Editor
 
         public string? SourcePath { get; set; }
 
-        // TFS revscript monsters (mType:health(...) calls, used by the NewEra server) are never
+        // TFS revscript monsters (mType:health(...) calls, used by the Project Wolf server) are never
         // regenerated: Revscript keeps the original text and saving patches only the changed
         // calls / loot blocks (RevscriptPatcher). Null for Canary-table and new monsters.
         public RevscriptSource? Revscript { get; set; }

@@ -8,7 +8,7 @@ using static Assets_Editor.OTB;
 
 namespace Assets_Editor.Tests;
 
-// items.otb and items.xml as a TFS 1.x server (NewEra) reads them.
+// items.otb and items.xml as a TFS 1.x server (Project Wolf) reads them.
 public class ServerFormatTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("tae-tests-").FullName;

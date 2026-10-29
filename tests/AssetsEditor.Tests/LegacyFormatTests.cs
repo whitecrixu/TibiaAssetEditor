@@ -8,7 +8,7 @@ using Xunit;
 namespace Assets_Editor.Tests;
 
 // Round trips of the legacy 8.60 formats (structure 5, extended, frame durations, frame groups),
-// the layout of the NewEra / WolfOTS client.
+// the layout of the Project Wolf client.
 public class LegacyFormatTests : IDisposable
 {
     private const int Structure860 = 5;

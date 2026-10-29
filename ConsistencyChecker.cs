@@ -96,7 +96,7 @@ namespace Assets_Editor
 
         // Allow-lists copied EXACTLY from TFS-1.5-Downgrades-8.60/tools/items_otb/items_otb.py (KNOWN, KNOWN_USE).
         // The dat<->otb stack/use check below is a port of that script's `check --dat` (mismatches() and
-        // use_mismatches()): same keys (the node's server id, looked up as a client id - NewEra keeps them equal),
+        // use_mismatches()): same keys (the node's server id, looked up as a client id - the server keeps them equal),
         // same skips (no server id, group 14 deprecated, id not in the dat) and the same classes. Keep the two in sync.
         public static readonly IReadOnlyDictionary<uint, string> KnownStack = new Dictionary<uint, string>
         {
@@ -205,7 +205,7 @@ namespace Assets_Editor
 
                 if (node.ClientId != node.ServerId)
                     findings.Add(new Finding { Severity = Severity.Warning, Category = CatOtbIds, Id = node.ServerId,
-                        Message = $"server id {node.ServerId} has client id {node.ClientId} (NewEra keeps them equal)" });
+                        Message = $"server id {node.ServerId} has client id {node.ClientId} (they are expected to be equal)" });
                 if (!things.Items.ContainsKey(node.ClientId))
                     findings.Add(new Finding { Severity = Severity.Error, Category = CatOtbIds, Id = node.ServerId,
                         Message = $"client id {node.ClientId} is not an item of the loaded dat (last item {things.LastItemId})" });

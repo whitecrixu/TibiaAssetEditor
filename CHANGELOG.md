@@ -110,7 +110,7 @@ TFS 1.x / 8.60 servers. Round trips stay byte-identical; tests now guard them.
   in the list, items without a sprite hash can be written.
 - **items.xml editor**: Add New proposes an id that exists in items.otb.
 
-### New: NewEra Tools (legacy clients)
+### New: Project Wolf Server Tools (legacy clients)
 - **Consistency report**: dat ↔ items.otb (stack order, use flags; same results
   as `items_otb.py check --dat`), items.xml ↔ otb, monsters (corpse, lookType,
   loot) and outfits.xml ↔ dat, with filters and TSV export.

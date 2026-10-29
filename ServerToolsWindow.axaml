@@ -1,8 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:i="https://github.com/projektanker/icons.avalonia"
-        x:Class="Assets_Editor.NewEraToolsWindow"
-        Title="NewEra Tools"
+        x:Class="Assets_Editor.ServerToolsWindow"
+        Title="Project Wolf Server Tools"
         Width="1200" Height="820"
         WindowStartupLocation="CenterOwner">
     <Grid RowDefinitions="Auto,*,Auto">
@@ -165,7 +165,7 @@
                         <Button Classes="tool" i:Attached.Icon="fa-eraser" Content="Clear" Click="ClearServerFiles_Click"/>
                     </StackPanel>
                     <TextBlock Grid.Row="2" Classes="dim" TextWrapping="Wrap"
-                               Text="Only files under data/ with .lua .xml .otbm .otb .json .txt .png, at most 256 MB each, never config.lua / key*.pem / *.sql / data/logs / data/reports (newera-files checks.py)."/>
+                               Text="Only files under data/ with .lua .xml .otbm .otb .json .txt .png, at most 256 MB each, never config.lua / key*.pem / *.sql / data/logs / data/reports (same rules as the server's file checks)."/>
                     <Border Grid.Row="3" Classes="card" Padding="0" Margin="0,4,0,0">
                         <ListBox x:Name="ServerFileList" SelectionMode="Multiple"/>
                     </Border>

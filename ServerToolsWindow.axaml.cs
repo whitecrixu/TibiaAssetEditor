@@ -11,13 +11,13 @@ using Tibia.Protobuf.Appearances;
 
 namespace Assets_Editor
 {
-    // NewEra / WolfOTS tools for the legacy 8.60 client (client-mehah) and the TFS 1.5 server:
+    // Project Wolf Server Tools for the legacy 8.60 client (client-mehah) and the TFS 1.5 server:
     //   Consistency        dat <-> items.otb (items_otb.py check --dat), items.xml, monsters, outfits.xml
     //   Things guard       SHA-256 of the loaded things, frozen-tree warning, update channel manifest compare
     //   Things diff        edited things vs the original dat + the regeneration checklist
-    //   Export for approval  staging folder in the newera-files inbox layout + client things + SHA256SUMS + README
-    // Open with `new NewEraToolsWindow().Show(owner)` after a client is loaded.
-    public partial class NewEraToolsWindow : Window
+    //   Export for approval  staging folder in the server files inbox layout + client things + SHA256SUMS + README
+    // Open with `new ServerToolsWindow().Show(owner)` after a client is loaded.
+    public partial class ServerToolsWindow : Window
     {
         private static readonly Dictionary<Guid, string> LastFolders = [];
 
@@ -27,7 +27,7 @@ namespace Assets_Editor
         private string? _hashedDir;
         private Dictionary<string, string>? _hashes;
 
-        public NewEraToolsWindow()
+        public ServerToolsWindow()
         {
             InitializeComponent();
 
@@ -37,7 +37,7 @@ namespace Assets_Editor
                 : $"{dat}  ({MainWindow.appearances.Object.Count} items, {MainWindow.appearances.Outfit.Count} outfits)";
 
             string? thingsDir = dat.Length > 0 ? Path.GetDirectoryName(dat) : null;
-            string? mehahThings = thingsDir != null && NewEraTools.IsFrozenClientTree(dat) ? NewEraTools.MehahThingsFor(thingsDir) : null;
+            string? mehahThings = thingsDir != null && ServerTools.IsFrozenClientTree(dat) ? ServerTools.MehahThingsFor(thingsDir) : null;
             ThingsDirBox.Text = mehahThings ?? thingsDir ?? "";
 
             string? clientRoot = thingsDir == null ? null : ThingsDiffResult.ClientRootOf(mehahThings ?? thingsDir);
@@ -146,7 +146,7 @@ namespace Assets_Editor
 
         private async void BrowseServerRoot_Click(object? sender, RoutedEventArgs e)
         {
-            string? path = await PickFolder(Globals.GUID_NewEraTools_ServerRoot, "Server root (the folder that contains data/)", ServerRootBox.Text);
+            string? path = await PickFolder(Globals.GUID_ServerTools_ServerRoot, "Server root (the folder that contains data/)", ServerRootBox.Text);
             if (path == null) return;
             if (!Directory.Exists(Path.Combine(path, "data")) && Path.GetFileName(path) == "data")
                 path = Path.GetDirectoryName(path) ?? path;
@@ -202,7 +202,7 @@ namespace Assets_Editor
             catch (Exception ex)
             {
                 ErrorManager.ShowError($"Consistency check failed:\n{ex.Message}");
-                MainWindow.Log($"NewEra consistency check failed: {ex}", "Error");
+                MainWindow.Log($"Consistency check failed: {ex}", "Error");
             }
             finally
             {
@@ -253,18 +253,18 @@ namespace Assets_Editor
         {
             var selected = FindingList.SelectedItems?.OfType<Finding>().ToList() ?? [];
             var rows = selected.Count > 0 ? selected : FilteredFindings();
-            await CopyText(NewEraTools.ToTsv(rows), $"{rows.Count} finding(s)");
+            await CopyText(ServerTools.ToTsv(rows), $"{rows.Count} finding(s)");
         }
 
         private async void SaveFindings_Click(object? sender, RoutedEventArgs e)
         {
             if (_findings.Count == 0) { SetStatus("Run the check first."); return; }
-            string? path = await PickSave(Globals.GUID_NewEraTools_SaveReport, "Save consistency report", $"newera-consistency-{DateTime.Now:yyyyMMdd-HHmm}.tsv", "tsv", "TSV");
+            string? path = await PickSave(Globals.GUID_ServerTools_SaveReport, "Save consistency report", $"consistency-{DateTime.Now:yyyyMMdd-HHmm}.tsv", "tsv", "TSV");
             if (path == null) return;
             try
             {
                 var rows = FilteredFindings();
-                await File.WriteAllTextAsync(path, NewEraTools.ToTsv(rows));
+                await File.WriteAllTextAsync(path, ServerTools.ToTsv(rows));
                 SetStatus($"Saved {rows.Count} finding(s) to {path}");
             }
             catch (Exception ex)
@@ -290,7 +290,7 @@ namespace Assets_Editor
             {
                 string spr = string.IsNullOrEmpty(MainWindow._sprPath) ? Path.Combine(dir, "Tibia.spr") : MainWindow._sprPath;
                 var files = new List<(string name, string path)> { ("Tibia.dat", dat), ("Tibia.spr", spr), ("Tibia.otfi", Path.Combine(dir, "Tibia.otfi")) };
-                var hashes = await Task.Run(() => files.Where(f => File.Exists(f.path)).ToDictionary(f => f.name, f => NewEraTools.Sha256File(f.path)));
+                var hashes = await Task.Run(() => files.Where(f => File.Exists(f.path)).ToDictionary(f => f.name, f => ServerTools.Sha256File(f.path)));
                 _hashes = hashes;
                 _hashedDir = dir;
 
@@ -302,16 +302,16 @@ namespace Assets_Editor
                         : $"{"(missing)",-64}  {name}");
                 }
                 lines.Add("");
-                if (NewEraTools.IsFrozenClientTree(dat))
+                if (ServerTools.IsFrozenClientTree(dat))
                 {
-                    lines.Add("WARNING: these things are in NewEra/client/, the FROZEN OTCv8 tree. The live client is client-mehah;");
+                    lines.Add("WARNING: these things are in client/, the FROZEN OTCv8 tree. The live client is client-mehah;");
                     lines.Add("         edits here never reach the players and the regeneration tools must not read this tree.");
-                    string? mehah = NewEraTools.MehahThingsFor(dir);
+                    string? mehah = ServerTools.MehahThingsFor(dir);
                     if (mehah != null) lines.Add($"         Load {mehah} instead.");
                 }
                 else if (dir.Contains("client-mehah", StringComparison.OrdinalIgnoreCase))
                     lines.Add("OK: client-mehah things (the live client).");
-                var otfi = NewEraTools.ReadOtfi(Path.Combine(dir, "Tibia.otfi"));
+                var otfi = ServerTools.ReadOtfi(Path.Combine(dir, "Tibia.otfi"));
                 lines.Add($"Tibia.otfi: extended {otfi["extended"]}, frame-durations {otfi["frame-durations"]}, frame-groups {otfi["frame-groups"]}");
                 lines.Add("The hashes are of the files on disk: edits in the editor count only after Compile.");
                 GuardText.Text = string.Join("\n", lines);
@@ -331,7 +331,7 @@ namespace Assets_Editor
 
         private async void BrowseManifest_Click(object? sender, RoutedEventArgs e)
         {
-            var paths = await PickFiles(Globals.GUID_NewEraTools_Manifest, "Update channel manifest", ManifestBox.Text, false,
+            var paths = await PickFiles(Globals.GUID_ServerTools_Manifest, "Update channel manifest", ManifestBox.Text, false,
                 new FilePickerFileType("Manifest") { Patterns = ["*.json", "*.json.gz"] });
             if (paths.Count > 0) ManifestBox.Text = paths[0];
         }
@@ -349,7 +349,7 @@ namespace Assets_Editor
             try
             {
                 var cached = _hashedDir == dir ? _hashes : null;
-                var (rows, build) = await Task.Run(() => (NewEraTools.CompareWithManifest(dir, manifest, cached), NewEraTools.ManifestBuild(manifest)));
+                var (rows, build) = await Task.Run(() => (ServerTools.CompareWithManifest(dir, manifest, cached), ServerTools.ManifestBuild(manifest)));
                 var lines = new List<string> { "", $"Manifest {manifest} (build {build?.ToString() ?? "?"}):" };
                 foreach (var r in rows)
                     lines.Add($"  {r.Name,-11} {r.Status,-16} manifest {r.Expected ?? "-"}");
@@ -374,7 +374,7 @@ namespace Assets_Editor
 
         private async void BrowseOriginalDat_Click(object? sender, RoutedEventArgs e)
         {
-            var paths = await PickFiles(Globals.GUID_NewEraTools_OriginalDat, "Original Tibia.dat", OriginalDatBox.Text is { Length: > 0 } t ? t : MainWindow._datPath, false,
+            var paths = await PickFiles(Globals.GUID_ServerTools_OriginalDat, "Original Tibia.dat", OriginalDatBox.Text is { Length: > 0 } t ? t : MainWindow._datPath, false,
                 new FilePickerFileType("Tibia.dat") { Patterns = ["*.dat", "*.dat-bak", "*"] });
             if (paths.Count > 0) OriginalDatBox.Text = paths[0];
         }
@@ -429,7 +429,7 @@ namespace Assets_Editor
         {
             ErrorManager.ShowInfo("There is no Tibia.dat-bak next to the loaded dat (it is written by the first Compile). " +
                                   "Pick the original dat to compare with; until you compile, the Tibia.dat on disk is the original.");
-            var paths = await PickFiles(Globals.GUID_NewEraTools_OriginalDat, "Original Tibia.dat", MainWindow._datPath, false,
+            var paths = await PickFiles(Globals.GUID_ServerTools_OriginalDat, "Original Tibia.dat", MainWindow._datPath, false,
                 new FilePickerFileType("Tibia.dat") { Patterns = ["*.dat", "*.dat-bak", "*"] });
             if (paths.Count > 0) OriginalDatBox.Text = paths[0];
         }
@@ -461,7 +461,7 @@ namespace Assets_Editor
         {
             if (_diff == null) { SetStatus("Compare first."); return; }
             string ext = json ? "json" : "tsv";
-            string? path = await PickSave(Globals.GUID_NewEraTools_SaveDiff, "Export things diff", $"things-diff-{DateTime.Now:yyyyMMdd-HHmm}.{ext}", ext, ext.ToUpperInvariant());
+            string? path = await PickSave(Globals.GUID_ServerTools_SaveDiff, "Export things diff", $"things-diff-{DateTime.Now:yyyyMMdd-HHmm}.{ext}", ext, ext.ToUpperInvariant());
             if (path == null) return;
             try
             {
@@ -481,8 +481,8 @@ namespace Assets_Editor
         private async void AddServerFiles_Click(object? sender, RoutedEventArgs e)
         {
             string? server = ServerRoot();
-            var paths = await PickFiles(Globals.GUID_NewEraTools_ServerFiles, "Changed server files", server == null ? null : Path.Combine(server, "data", "monster"), true,
-                new FilePickerFileType("Server files") { Patterns = NewEraTools.AllowedExtensions.Select(x => "*" + x).ToArray() });
+            var paths = await PickFiles(Globals.GUID_ServerTools_ServerFiles, "Changed server files", server == null ? null : Path.Combine(server, "data", "monster"), true,
+                new FilePickerFileType("Server files") { Patterns = ServerTools.AllowedExtensions.Select(x => "*" + x).ToArray() });
             if (paths.Count == 0) return;
             var list = ServerFileList.Items.OfType<string>().ToList();
             foreach (string p in paths)
@@ -500,13 +500,13 @@ namespace Assets_Editor
 
         private async void BrowseThingsDir_Click(object? sender, RoutedEventArgs e)
         {
-            string? path = await PickFolder(Globals.GUID_NewEraTools_ThingsDir, "Client things (data/things/860)", ThingsDirBox.Text);
+            string? path = await PickFolder(Globals.GUID_ServerTools_ThingsDir, "Client things (data/things/860)", ThingsDirBox.Text);
             if (path != null) ThingsDirBox.Text = path;
         }
 
         private async void BrowseExportDir_Click(object? sender, RoutedEventArgs e)
         {
-            string? path = await PickFolder(Globals.GUID_NewEraTools_ExportDir, "Staging folder (new or empty)", ExportDirBox.Text);
+            string? path = await PickFolder(Globals.GUID_ServerTools_ExportDir, "Staging folder (new or empty)", ExportDirBox.Text);
             if (path != null) ExportDirBox.Text = path;
         }
 
@@ -531,13 +531,13 @@ namespace Assets_Editor
             string outDir = (ExportDirBox.Text ?? "").Trim();
             if (outDir.Length == 0) { ErrorManager.ShowWarning("Pick a new or empty staging folder."); return; }
 
-            var request = new NewEraTools.ExportRequest { ServerRoot = server ?? "", ServerFiles = files, ThingsDir = things, OutputDir = outDir };
+            var request = new ServerTools.ExportRequest { ServerRoot = server ?? "", ServerFiles = files, ThingsDir = things, OutputDir = outDir };
             ExportButton.IsEnabled = false;
             ExportLog.Text = "Exporting...";
             var progress = new Progress<string>(p => SetStatus($"Copied {p}"));
             try
             {
-                var result = await Task.Run(() => NewEraTools.ExportForApproval(request, progress));
+                var result = await Task.Run(() => ServerTools.ExportForApproval(request, progress));
                 if (!result.Ok)
                 {
                     ExportLog.Text = "Nothing was written:\n" + string.Join("\n", result.Refused.Select(r => "  " + r));
@@ -547,7 +547,7 @@ namespace Assets_Editor
                 string readme = await File.ReadAllTextAsync(Path.Combine(outDir, "README.txt"));
                 ExportLog.Text = $"{result.Copied} file(s) written to {outDir}\n\nSHA256SUMS:\n{string.Join("\n", result.Lines)}\n\n{readme}";
                 SetStatus($"Exported {result.Copied} file(s) to {outDir}");
-                MainWindow.Log($"NewEra export for approval: {result.Copied} file(s) in {outDir}");
+                MainWindow.Log($"Export for approval: {result.Copied} file(s) in {outDir}");
             }
             catch (Exception ex)
             {

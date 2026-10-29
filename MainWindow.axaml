@@ -276,12 +276,12 @@
                                 </Button>
             
                                 <!-- Requires a legacy (8.60) client loaded -->
-                                <Button Classes="hubTile" x:Name="OpenNewEraToolsTile" IsEnabled="False"
-                                        Click="OpenNewEraTools_Click" Margin="0,0,10,10">
+                                <Button Classes="hubTile" x:Name="OpenServerToolsTile" IsEnabled="False"
+                                        Click="OpenServerTools_Click" Margin="0,0,10,10">
                                     <StackPanel Spacing="4">
                                         <StackPanel Orientation="Horizontal" Spacing="10">
                                             <i:Icon Value="fa-clipboard-check"/>
-                                            <TextBlock Classes="tileTitle" Text="NewEra Tools"/>
+                                            <TextBlock Classes="tileTitle" Text="Project Wolf Server Tools"/>
                                         </StackPanel>
                                         <TextBlock Classes="dim"
                                                    Text="Consistency report (dat / otb / items.xml / monsters), things hashes, diff and export for approval."

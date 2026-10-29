@@ -107,7 +107,7 @@ namespace Assets_Editor
             try
             {
                 // the dat stores no ids: an object's id is its position. The server (items.otb maps
-                // client id -> server id 1:1 on NewEra) and the map reference these ids, so a gap
+                // client id -> server id 1:1 on Project Wolf) and the map reference these ids, so a gap
                 // would silently shift every later object. Refuse to write instead.
                 ValidateContiguousIds(appearances.Object, 100, "object");
                 ValidateContiguousIds(appearances.Outfit, 1, "outfit");

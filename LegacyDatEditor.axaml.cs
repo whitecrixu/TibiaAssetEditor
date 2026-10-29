@@ -1217,7 +1217,7 @@ namespace Assets_Editor
                             {
                                 var diff = ThingsDiff.Compute(MainWindow.appearances, datPath + "-bak", loadedVersion.Structure, preset);
                                 diffSummary = diff.HasChanges
-                                    ? $"\n\nChanges against the original ({Path.GetFileName(datPath)}-bak):\n{diff.Summary()}\n\nNewEra Tools > Things diff lists the follow-up steps."
+                                    ? $"\n\nChanges against the original ({Path.GetFileName(datPath)}-bak):\n{diff.Summary()}\n\nProject Wolf Server Tools > Things diff lists the follow-up steps."
                                     : "";
                             }
                             catch (Exception ex)

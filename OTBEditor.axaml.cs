@@ -133,7 +133,7 @@ namespace Assets_Editor
             uint maxCid = MainWindow.appearances.Object.Last().Id;
             lastServerId++;
 
-            // servers like NewEra map every client id to the same server id; keep that invariant for new items
+            // servers like Project Wolf map every client id to the same server id; keep that invariant for new items
             bool identity = OTBItems.All(x => x.ServerId == x.ClientId);
             var knownCids = OTBItems.Select(x => (int)x.ClientId).ToHashSet();
             var usedSids = OTBItems.Select(x => (int)x.ServerId).ToHashSet();
@@ -218,10 +218,10 @@ namespace Assets_Editor
 
         private async System.Threading.Tasks.Task WriteOtb(string path)
         {
-            // group 15 is unknown to TFS 1.x (NewEra): Items::loadFromOtb fails and the server does not start
+            // group 15 is unknown to TFS 1.x: Items::loadFromOtb fails and the server does not start
             int podiums = OTBItems.Count(x => x.Type == ServerItemType.Podium);
             if (podiums > 0 && !await ErrorManager.ConfirmAsync("Podium items",
-                    $"{podiums} item(s) have type Podium (group 15). TFS 1.x based servers such as NewEra refuse to load an items.otb containing it. Save anyway?"))
+                    $"{podiums} item(s) have type Podium (group 15). TFS 1.x based servers refuse to load an items.otb containing it. Save anyway?"))
                 return;
 
             try

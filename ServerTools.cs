@@ -11,7 +11,7 @@ using Tibia.Protobuf.Appearances;
 
 namespace Assets_Editor
 {
-    // Shared pieces of the NewEra / WolfOTS tools (NewEraToolsWindow): findings, hashes, reading a legacy dat
+    // Shared pieces of the Project Wolf Server Tools (ServerToolsWindow): findings, hashes, reading a legacy dat
     // with explicit flags, the things guard and the export for the owner's approval. Nothing in here touches
     // MainWindow statics or Avalonia, so the console self-test can run it without a UI.
 
@@ -30,7 +30,7 @@ namespace Assets_Editor
         public string ToTsvLine() => $"{Severity}\t{Category}\t{IdText}\t{Message.Replace('\t', ' ').Replace('\n', ' ')}";
     }
 
-    public static class NewEraTools
+    public static class ServerTools
     {
         public const string TsvHeader = "severity\tcategory\tid\tmessage";
 
@@ -109,18 +109,18 @@ namespace Assets_Editor
 
         public static readonly string[] ThingsFiles = ["Tibia.dat", "Tibia.spr", "Tibia.otfi"];
 
-        // NewEra/client is the frozen OTCv8 tree; the live client is NewEra/client-mehah (CLAUDE.md, things860 README)
-        private static readonly Regex FrozenClientTree = new(@"[/\\]NewEra[/\\]client[/\\]", RegexOptions.IgnoreCase);
+        // <project>/client is the frozen OTCv8 tree when a live <project>/client-mehah sits next to it
+        private static readonly Regex ClientTree = new(@"[/\\]client[/\\]", RegexOptions.IgnoreCase);
 
-        public static bool IsFrozenClientTree(string path) => FrozenClientTree.IsMatch(Path.GetFullPath(path));
+        public static bool IsFrozenClientTree(string path) => MehahThingsFor(path) != null;
 
         public static string? MehahThingsFor(string frozenPath)
         {
             string full = Path.GetFullPath(frozenPath);
-            var m = FrozenClientTree.Match(full);
+            var m = ClientTree.Match(full);
             if (!m.Success) return null;
             string sep = full[m.Index].ToString();
-            string candidate = full[..m.Index] + sep + "NewEra" + sep + "client-mehah" + sep + "data" + sep + "things" + sep + "860";
+            string candidate = full[..m.Index] + sep + "client-mehah" + sep + "data" + sep + "things" + sep + "860";
             return Directory.Exists(candidate) ? candidate : null;
         }
 
@@ -200,7 +200,7 @@ namespace Assets_Editor
             catch (Exception) { return null; }
         }
 
-        // ---- export for owner approval (newera-files inbox layout) -------------------------------------------
+        // ---- export for owner approval (server files inbox layout) -------------------------------------------
 
         // Port of TFS-1.5-Downgrades-8.60/tools/newera_files/newera_files/checks.py forbidden_reason(); the size
         // limit (256 MB) and the 2000-files-per-apply limit are from FILES_BRIEF.md / tools/newera_files/README.md.
@@ -371,8 +371,8 @@ namespace Assets_Editor
         private static string BuildReadme(List<(string src, string rel, string needs)> plan, List<string> client, ExportRequest req)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("NewEra files for the owner's approval");
-            sb.AppendLine($"Prepared {DateTime.Now:yyyy-MM-dd HH:mm} with Tibia MultiTool Editor (NewEra Tools).");
+            sb.AppendLine("Project Wolf server files for the owner's approval");
+            sb.AppendLine($"Prepared {DateTime.Now:yyyy-MM-dd HH:mm} with Tibia MultiTool Editor (Project Wolf Server Tools).");
             sb.AppendLine($"Server tree: {req.ServerRoot}");
             if (req.ThingsDir != null) sb.AppendLine($"Client things: {req.ThingsDir}");
             sb.AppendLine("Check the copies first: sha256sum -c SHA256SUMS");
@@ -389,7 +389,7 @@ namespace Assets_Editor
             }
             if (plan.Count > 0)
             {
-                sb.AppendLine($"{step++}. Then upload the server files: the CONTENT of server/ goes into the newera-files inbox/ with the");
+                sb.AppendLine($"{step++}. Then upload the server files: the CONTENT of server/ goes into the server files inbox/ with the");
                 sb.AppendLine("   same folders (inbox/data/items/items.otb, ...). Approve them in the admin panel.");
                 bool restart = plan.Any(p => p.needs == "restart");
                 if (restart)
