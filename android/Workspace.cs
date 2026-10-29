@@ -100,7 +100,6 @@ public static class Workspace
             signature = DatStructure.ReadAppearanceInfo(r).Signature;
 
         // the otfi describes the file exactly; without one, the official client's flags come first
-        // (the NewEra client keeps the 8.60 v2 signature but ships an otfi with all three flags)
         KnownClients.ClientVersion? client = KnownClients.FromDat(signature);
         PresetSettings first = File.Exists(otfi)
             ? ReadOtfi(otfi)
@@ -173,7 +172,7 @@ public static class Workspace
         return null;
     }
 
-    // same keys as NewEraTools.ReadOtfi
+    // the keys of a Tibia.otfi
     private static PresetSettings ReadOtfi(string path)
     {
         var preset = new PresetSettings();
@@ -223,7 +222,7 @@ public static class Workspace
     public static ServerItem? ServerItemFor(uint clientId) =>
         _byClientId.TryGetValue((ushort)clientId, out var item) ? item : null;
 
-    // NewEra keeps server id = client id; with an otb the mapping is taken from it
+    // without an otb, server id = client id; with one the mapping is taken from it
     public static ushort ServerIdFor(uint clientId) => ServerItemFor(clientId)?.ServerId ?? (ushort)clientId;
 
     public static string? ItemName(uint clientId) => ItemsXml.GetName(ServerIdFor(clientId));

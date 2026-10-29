@@ -19,7 +19,7 @@ public class KnownClientsTests
     }
 
     [Theory]
-    [InlineData(0x4C2C7993u, "8.60 v2", 5)]   // NewEra / WolfOTS client
+    [InlineData(0x4C2C7993u, "8.60 v2", 5)]
     [InlineData(0x4C28B721u, "8.60 v1", 5)]
     [InlineData(0x467FD7E6u, "8.00", 4)]
     [InlineData(0x439D5A33u, "7.60 / 7.70", 3)]

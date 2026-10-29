@@ -11,7 +11,7 @@ namespace Assets_Editor;
 /// Source: Object Builder's versions.xml (MIT; github.com/ottools/ObjectBuilder, extended in
 /// github.com/punkice3407/ObjectBuilder) plus 10.79 / 10.80 from github.com/ottools/ClientConverter.
 /// A few signatures belong to two versions (7.60 / 7.70, 8.50 v2 / 8.52, ...); they always share a structure.
-/// Custom clients (NewEra and other OTS) usually keep the signature of the version they are based on.
+/// Custom OTS clients usually keep the signature of the version they are based on.
 /// </summary>
 public static class KnownClients
 {

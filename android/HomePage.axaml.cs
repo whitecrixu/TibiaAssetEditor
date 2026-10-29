@@ -266,8 +266,6 @@ public partial class HomePage : UserControl, IPage
                 : $"Saved {names} in the app workspace, but writing to {target.Name} failed: {copyError.Message}");
         }
 
-        if (written.Any(w => w.name == "Tibia.dat"))
-            AppLog.Add("Tibia.dat changed: the game client needs a new update build to pick it up (check_things_manifest.py).");
         Refresh();
     }
 

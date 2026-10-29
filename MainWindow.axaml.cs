@@ -390,7 +390,6 @@ public partial class MainWindow : Window
         DatSignature = info.Signature;
 
         // known signatures pick their dat structure, so the first load attempt uses the right flag table
-        // (the NewEra client keeps the 8.60 v2 signature)
         if (currentPreset != null && KnownClients.FromDat(info.Signature) is { } client)
         {
             currentPreset.Version = client.Structure;
