@@ -37,6 +37,8 @@
                         Content="New From Template ▾" Click="NewFromTemplate_Click"/>
                 <Button Classes="tool" i:Attached.Icon="fa-clone" Content="Duplicate" Click="Duplicate_Click"/>
                 <Button Classes="tool" i:Attached.Icon="fa-trash" Content="Delete"    Click="Delete_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-broom" Content="Engine fix" Click="RemoveEnginePerks_Click"
+                        ToolTip.Tip="Remove the perks Crystal Server / Canary cannot load (type 32 or no Value). Nothing is written until you Save."/>
                 <Separator Width="1" Margin="4,0"/>
                 <TextBlock x:Name="PathText" VerticalAlignment="Center" Classes="dim"/>
             </StackPanel>

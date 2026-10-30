@@ -254,7 +254,7 @@ namespace Assets_Editor
             {
                 PathText.Text = path;
                 StatusText.Text = $"Loaded {Proficiencies.Entries.Count} proficiencies";
-                if (Proficiencies.CrystalServerWarning() is { } warning)
+                if (Proficiencies.EngineWarning() is { } warning)
                 {
                     StatusText.Text += " · " + warning;
                     MainWindow.Log(warning, "Warning");
@@ -343,6 +343,21 @@ namespace Assets_Editor
             RefreshList();
             List.SelectedItem = _filtered.FirstOrDefault(x => x.ProficiencyId == newId);
             StatusText.Text = $"Duplicated as {newId}";
+        }
+
+        private void RemoveEnginePerks_Click(object? sender, RoutedEventArgs e)
+        {
+            int removed = Proficiencies.RemoveEnginePerks();
+            if (removed == 0)
+            {
+                StatusText.Text = "No perks Crystal Server / Canary cannot load";
+                return;
+            }
+            StatusText.Text = $"Removed {removed} perks Crystal Server / Canary cannot load; Save to write the file";
+            MainWindow.Log(StatusText.Text);
+            var current = _current;
+            RefreshList();
+            List.SelectedItem = current;
         }
 
         private void Delete_Click(object? sender, RoutedEventArgs e)

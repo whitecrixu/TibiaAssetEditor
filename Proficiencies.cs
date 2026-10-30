@@ -245,17 +245,33 @@ namespace Assets_Editor
         }
 
         /// <summary>
-        /// Crystal Server reads "Value" from every perk and knows perk types 0-31; a file with other perks
-        /// stops its proficiency loader. Returns a one-line warning, or null when the file is fine.
+        /// Crystal Server and Canary read "Value" from every perk and know perk types 0-31; one perk outside
+        /// that stops their proficiency loader (Canary does not start at all).
         /// </summary>
-        public static string? CrystalServerWarning()
+        public static bool EngineCannotLoad(ProficiencyPerk p) =>
+            p.Type > ProficiencyEnums.LastEnginePerkType || (p.ValueMissing && p.Value == 0);
+
+        /// <summary>A one-line warning naming the proficiencies with such perks, or null when the file is fine.</summary>
+        public static string? EngineWarning()
         {
-            var ids = Entries.Where(e => e.Levels.Any(l => l.Perks.Any(p =>
-                    p.Type > ProficiencyEnums.LastCrystalPerkType || (p.ValueMissing && p.Value == 0))))
+            var ids = Entries.Where(e => e.Levels.Any(l => l.Perks.Any(EngineCannotLoad)))
                 .Select(e => e.ProficiencyId).ToList();
             if (ids.Count == 0) return null;
             string list = string.Join(", ", ids.Take(8)) + (ids.Count > 8 ? ", …" : "");
-            return $"{ids.Count} proficiencies ({list}) have perks Crystal Server cannot load (type 32 / no Value)";
+            return $"{ids.Count} proficiencies ({list}) have perks Crystal Server / Canary cannot load (type 32 / no Value)";
+        }
+
+        /// <summary>Removes the perks <see cref="EngineCannotLoad"/> flags; returns how many were removed.</summary>
+        public static int RemoveEnginePerks()
+        {
+            int removed = 0;
+            foreach (var level in Entries.SelectMany(e => e.Levels))
+                foreach (var perk in level.Perks.Where(EngineCannotLoad).ToList())
+                {
+                    level.Perks.Remove(perk);
+                    removed++;
+                }
+            return removed;
         }
 
         public static ProficiencyEntry? FindById(uint id) =>
@@ -308,12 +324,12 @@ namespace Assets_Editor
             new(29, "Omega Strike Extra Damage"),
             new(30, "Armor Penetration"),
             new(31, "Elemental Pierce"),
-            // newer game data (Moonsilver weapons) only: no Value, fires a missile; Crystal Server's enum ends at 31
-            new(MissileProcType, "Missile Proc (not in Crystal)"),
+            // newer game data (Moonsilver weapons) only: no Value, fires a missile; Crystal Server's and Canary's enums end at 31
+            new(MissileProcType, "Missile Proc (not in Crystal/Canary)"),
         };
 
         public const int MissileProcType = 32;
-        public const int LastCrystalPerkType = 31;
+        public const int LastEnginePerkType = 31;
 
         public static readonly List<Choice> Skills = new()
         {

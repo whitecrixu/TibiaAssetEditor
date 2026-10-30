@@ -4,6 +4,16 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## Unreleased
+
+- Proficiencies: the warning about perks the server cannot load now names
+  both Crystal Server and Canary (both read `Value` from every perk and know
+  perk types 0–31; Canary does not start with such a file).
+- Proficiencies: new *Engine fix* button removes those perks (type 32 / no
+  `Value`); nothing is written until you save.
+
+---
+
 ## V2.6.3 — Proficiencies type 32, release-signed Android app
 
 - Proficiencies: perk type 32 (the missile proc of the Moonsilver weapons in

@@ -84,19 +84,21 @@ public class ProficienciesTests
     }
 
     [Fact]
-    public void Crystal_server_warning_names_type_32_entries_only()
+    public void Engine_warning_names_type_32_entries_only()
     {
         string source = WriteGameFile(Sample);
         try
         {
             Assert.True(Proficiencies.Load(source));
-            string? warning = Proficiencies.CrystalServerWarning();
+            string? warning = Proficiencies.EngineWarning();
             Assert.NotNull(warning);
             Assert.Contains("475", warning);
             Assert.DoesNotContain("142", warning);
 
-            Proficiencies.Entries.RemoveAll(e => e.ProficiencyId == 475);
-            Assert.Null(Proficiencies.CrystalServerWarning());
+            Assert.Equal(1, Proficiencies.RemoveEnginePerks());
+            Assert.Null(Proficiencies.EngineWarning());
+            Assert.Empty(Proficiencies.FindById(475)!.Levels[0].Perks);
+            Assert.Equal(2, Proficiencies.FindById(142)!.Levels[0].Perks.Count);
         }
         finally
         {
