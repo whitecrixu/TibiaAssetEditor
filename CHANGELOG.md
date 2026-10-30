@@ -4,7 +4,7 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
-## Unreleased
+## V2.6.5 — NPC Editor
 
 - **NPC Editor** for revscript NPCs in both layouts:
   - TFS 1.x (`NpcType("…")`): shops as NpcSystem `shop_buyable` /
