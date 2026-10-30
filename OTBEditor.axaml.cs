@@ -114,13 +114,19 @@ namespace Assets_Editor
             I_MaxReadWriteChars.Value = item.MaxReadWriteChars;
             I_MaxReadChars.Value = item.MaxReadChars;
 
-            _editor.ObjectMenu.SelectedIndex = 1;
-            foreach (ShowList showlist in _editor.ObjListView.Items)
+            // follow the selection in the dat editor that opened this window; opened from the main window
+            // there is no item list to follow
+            if (_editor is Window owner && owner.FindControl<ComboBox>("ObjectMenu") is { } menu
+                && owner.FindControl<ListBox>("ObjListView") is { } list)
             {
-                if (showlist.Id == item.ClientId)
+                menu.SelectedIndex = 1;
+                foreach (ShowList showlist in list.Items)
                 {
-                    _editor.ObjListView.SelectedItem = showlist;
-                    break;
+                    if (showlist.Id == item.ClientId)
+                    {
+                        list.SelectedItem = showlist;
+                        break;
+                    }
                 }
             }
         }

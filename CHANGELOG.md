@@ -4,6 +4,16 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## Unreleased
+
+- Monster and NPC lists show the whole creature in its outfit colours (legacy
+  clients) instead of one uncoloured 32×32 piece.
+- OTB editor opened from the main screen: selecting an item raised
+  "'MainWindow' does not contain a definition for 'ObjectMenu'"; it now follows
+  the selection only when a dat editor opened it.
+
+---
+
 ## V2.6.5 — NPC Editor
 
 - **NPC Editor** for revscript NPCs in both layouts:

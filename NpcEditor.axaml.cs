@@ -9,7 +9,6 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
-using SkiaSharp;
 using Tibia.Protobuf.Appearances;
 
 namespace Assets_Editor
@@ -372,57 +371,14 @@ namespace Assets_Editor
             if (!ClientMatches(npc))
                 return null;
             if (npc.OutfitValue("lookType") is > 0 and var type && _outfitById.TryGetValue(type, out var outfit))
-                return ColouredOutfit(outfit, npc) ?? FirstSprite(outfit);
+                return OutfitPreview.Outfit(outfit, npc.OutfitValue("lookHead"), npc.OutfitValue("lookBody"),
+                    npc.OutfitValue("lookLegs"), npc.OutfitValue("lookFeet"));
             if (npc.OutfitValue("lookTypeEx") is > 0 and var ex && _itemById.TryGetValue(ex, out var item))
-                return FirstSprite(item);
+                return OutfitPreview.Item(item);
             return null;
         }
 
-        // legacy clients: the whole figure facing south, its colour mask (layer 1) painted in the NPC's colours
-        private static Bitmap? ColouredOutfit(Appearance outfit, NpcScript npc)
-        {
-            if (!MainWindow.LegacyClient || MainWindow.MainSprStorage == null || outfit.FrameGroup.Count == 0)
-                return null;
-            try
-            {
-                var info = outfit.FrameGroup[0].SpriteInfo;
-                // legacy sprite info: PatternX = directions, PatternLayers = base + colour mask
-                int south = info.PatternX > 0 ? (int)(2 % info.PatternX) : 0;
-                using var figure = SKBitmap.Decode(LegacyAppearance.GetObjectImage(outfit, MainWindow.MainSprStorage, 0, south, 0, 0, 0, 0).ToArray());
-                if (figure == null)
-                    return null;
-                if (info.PatternLayers > 1)
-                {
-                    using var mask = SKBitmap.Decode(LegacyAppearance.GetObjectImage(outfit, MainWindow.MainSprStorage, 0, south, 0, 0, 0, 1).ToArray());
-                    if (mask != null)
-                        Utils.ColorizeOutfit(mask, figure,
-                            Utils.GetOutfitColor(npc.OutfitValue("lookHead")), Utils.GetOutfitColor(npc.OutfitValue("lookBody")),
-                            Utils.GetOutfitColor(npc.OutfitValue("lookLegs")), Utils.GetOutfitColor(npc.OutfitValue("lookFeet")));
-                }
-                using var image = SKImage.FromBitmap(figure);
-                using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-                return new Bitmap(png.AsStream());
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private Bitmap? ItemImage(int id) => _itemById.TryGetValue(id, out var a) ? FirstSprite(a) : null;
-
-        private static Bitmap? FirstSprite(Appearance? a)
-        {
-            try
-            {
-                if (a == null || a.FrameGroup.Count == 0 || a.FrameGroup[0].SpriteInfo.SpriteId.Count == 0) return null;
-                return Utils.MemoryStreamToBitmap(MainWindow.getSpriteStream((int)a.FrameGroup[0].SpriteInfo.SpriteId[0]));
-            }
-            catch
-            {
-                return null;
-            }
-        }
+        private Bitmap? ItemImage(int id) => _itemById.TryGetValue(id, out var a) ? OutfitPreview.FirstSprite(a) : null;
 
         protected override async void OnClosing(WindowClosingEventArgs e)
         {

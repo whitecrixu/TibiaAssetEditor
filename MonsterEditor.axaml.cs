@@ -72,17 +72,12 @@ namespace Assets_Editor
             if (m.Image != null) return;
             try
             {
-                Appearance? a = null;
-                // Creature outfit first; fall back to lookTypeEx (item-based
-                // monsters like decoration "mimic" style mobs) if lookType is 0.
-                if (m.LookType > 0) _outfitById.TryGetValue(m.LookType, out a);
-                if (a == null && m.LookTypeEx > 0) _itemById.TryGetValue(m.LookTypeEx, out a);
-                if (a == null || a.FrameGroup.Count == 0) return;
-
-                var info = a.FrameGroup[0].SpriteInfo;
-                if (info.SpriteId.Count == 0) return;
-                var stream = MainWindow.getSpriteStream((int)info.SpriteId[0]);
-                if (stream != null) m.Image = Utils.MemoryStreamToBitmap(stream);
+                // Creature outfit first (whole figure in its colours); fall back to lookTypeEx
+                // (item-based monsters like decoration "mimic" style mobs) if lookType is 0.
+                if (m.LookType > 0 && _outfitById.TryGetValue(m.LookType, out var outfit))
+                    m.Image = OutfitPreview.Outfit(outfit, (int)m.LookHead, (int)m.LookBody, (int)m.LookLegs, (int)m.LookFeet);
+                else if (m.LookTypeEx > 0 && _itemById.TryGetValue(m.LookTypeEx, out var item))
+                    m.Image = OutfitPreview.Item(item);
             }
             catch { /* best-effort */ }
         }
