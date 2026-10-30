@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Newtonsoft.Json.Linq;
 using Avalonia.Platform.Storage;
 
 namespace Assets_Editor
@@ -57,6 +58,11 @@ namespace Assets_Editor
                     if ((fields & ProficiencyEnums.PerkField.Bestiary) == 0) { Model.BestiaryId = null; Model.BestiaryName = null; }
                     if ((fields & ProficiencyEnums.PerkField.Damage)   == 0) Model.DamageType = null;
                     if ((fields & ProficiencyEnums.PerkField.Element)  == 0) Model.ElementId  = null;
+                    if ((fields & ProficiencyEnums.PerkField.Missile)  == 0)
+                        foreach (string key in MissileKeys) Model.Extra.Remove(key);
+                    // the missile proc has no Value in the game data
+                    Model.ValueMissing = Model.Type == ProficiencyEnums.MissileProcType;
+                    if (Model.ValueMissing) Model.Value = 0;
                     if ((fields & ProficiencyEnums.PerkField.Range)    == 0) Model.Range      = null;
                     OnAll();
                 }
@@ -77,6 +83,7 @@ namespace Assets_Editor
             public bool ShowBestiary => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Bestiary) != 0;
             public bool ShowDamage   => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Damage)   != 0;
             public bool ShowElement  => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Element)  != 0;
+            public bool ShowMissile  => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Missile)  != 0;
             public bool ShowRange    => (ProficiencyEnums.FieldsFor(Model.Type) & ProficiencyEnums.PerkField.Range)    != 0;
             public bool ShowAugmentOrSpell  => ShowAugment || ShowSpell;
             public bool ShowBestiaryOrRange => ShowBestiary || ShowRange;
@@ -133,6 +140,36 @@ namespace Assets_Editor
                 }
             }
 
+            // the missile proc fields stay in Extra, so untouched numbers keep their exact form
+            private static readonly string[] MissileKeys = { "MissileId", "Multiplier", "Probability" };
+
+            private double ExtraNumber(string key) =>
+                Model.Extra.TryGetValue(key, out var t) && t.Type is JTokenType.Integer or JTokenType.Float ? t.Value<double>() : 0;
+
+            private void SetExtra(string key, JToken value, string property)
+            {
+                Model.Extra[key] = value;
+                On(property);
+            }
+
+            public decimal MissileIdValue
+            {
+                get => (decimal)ExtraNumber("MissileId");
+                set { if ((double)value != ExtraNumber("MissileId")) SetExtra("MissileId", (int)value, nameof(MissileIdValue)); }
+            }
+
+            public double MultiplierValue
+            {
+                get => ExtraNumber("Multiplier");
+                set { if (value != ExtraNumber("Multiplier")) SetExtra("Multiplier", value, nameof(MultiplierValue)); }
+            }
+
+            public double ProbabilityValue
+            {
+                get => ExtraNumber("Probability");
+                set { if (value != ExtraNumber("Probability")) SetExtra("Probability", value, nameof(ProbabilityValue)); }
+            }
+
             public string BestiaryNameText
             {
                 get => Model.BestiaryName ?? "";
@@ -164,11 +201,13 @@ namespace Assets_Editor
                 On(nameof(SelectedTypeChoice));
                 On(nameof(ValueHint));
                 On(nameof(ShowSkill));   On(nameof(ShowAugment)); On(nameof(ShowSpell));
-                On(nameof(ShowBestiary)); On(nameof(ShowDamage)); On(nameof(ShowElement)); On(nameof(ShowRange));
+                On(nameof(ShowBestiary)); On(nameof(ShowDamage)); On(nameof(ShowElement)); On(nameof(ShowMissile)); On(nameof(ShowRange));
                 On(nameof(ShowAugmentOrSpell)); On(nameof(ShowBestiaryOrRange));
                 On(nameof(SelectedSkillChoice));   On(nameof(SelectedAugmentChoice));
                 On(nameof(SelectedDamageChoice));  On(nameof(SelectedElementChoice)); On(nameof(SpellIdValue));
                 On(nameof(BestiaryNameText));
+                On(nameof(MissileIdValue)); On(nameof(MultiplierValue)); On(nameof(ProbabilityValue));
+                On(nameof(Value));
                 On(nameof(BestiaryIdValue));       On(nameof(RangeValue));
             }
         }
@@ -215,6 +254,11 @@ namespace Assets_Editor
             {
                 PathText.Text = path;
                 StatusText.Text = $"Loaded {Proficiencies.Entries.Count} proficiencies";
+                if (Proficiencies.CrystalServerWarning() is { } warning)
+                {
+                    StatusText.Text += " · " + warning;
+                    MainWindow.Log(warning, "Warning");
+                }
                 MainWindow.AddRecentProficiencies(path);
                 RefreshList();
             }

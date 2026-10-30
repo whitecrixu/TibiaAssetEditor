@@ -244,6 +244,20 @@ namespace Assets_Editor
             return SortedKeys(obj);
         }
 
+        /// <summary>
+        /// Crystal Server reads "Value" from every perk and knows perk types 0-31; a file with other perks
+        /// stops its proficiency loader. Returns a one-line warning, or null when the file is fine.
+        /// </summary>
+        public static string? CrystalServerWarning()
+        {
+            var ids = Entries.Where(e => e.Levels.Any(l => l.Perks.Any(p =>
+                    p.Type > ProficiencyEnums.LastCrystalPerkType || (p.ValueMissing && p.Value == 0))))
+                .Select(e => e.ProficiencyId).ToList();
+            if (ids.Count == 0) return null;
+            string list = string.Join(", ", ids.Take(8)) + (ids.Count > 8 ? ", …" : "");
+            return $"{ids.Count} proficiencies ({list}) have perks Crystal Server cannot load (type 32 / no Value)";
+        }
+
         public static ProficiencyEntry? FindById(uint id) =>
             Entries.FirstOrDefault(e => e.ProficiencyId == id);
 
@@ -294,7 +308,12 @@ namespace Assets_Editor
             new(29, "Omega Strike Extra Damage"),
             new(30, "Armor Penetration"),
             new(31, "Elemental Pierce"),
+            // newer game data (Moonsilver weapons) only: no Value, fires a missile; Crystal Server's enum ends at 31
+            new(MissileProcType, "Missile Proc (not in Crystal)"),
         };
+
+        public const int MissileProcType = 32;
+        public const int LastCrystalPerkType = 31;
 
         public static readonly List<Choice> Skills = new()
         {
@@ -364,6 +383,7 @@ namespace Assets_Editor
             Damage   = 1 << 4,
             Range    = 1 << 5,
             Element  = 1 << 6,
+            Missile  = 1 << 7,
         }
 
         public static readonly Dictionary<int, PerkField> TypeFields = new()
@@ -379,6 +399,7 @@ namespace Assets_Editor
             { 26, PerkField.Skill },                                  // SKILLID_% EXTRA DMG spells
             { 27, PerkField.Skill },                                  // SKILLID_% EXTRA HEAL spells
             { 31, PerkField.Element },                                // ELEMENTAL_PIERCE (ElementId)
+            { 32, PerkField.Element | PerkField.Missile },            // missile proc: ElementId, MissileId, Multiplier, Probability
         };
 
         public static PerkField FieldsFor(int perkType) =>
@@ -392,6 +413,7 @@ namespace Assets_Editor
             0 or 1 or 2 or 24 or 28 or 29 => "flat, e.g. 1",
             3 or 4                        => "integer, e.g. 1",
             22                            => "% gain, e.g. 0.05 = 5%",
+            MissileProcType               => "not written: uses Probability and Multiplier",
             _                             => "% fraction, e.g. 0.05 = 5%",
         };
     }

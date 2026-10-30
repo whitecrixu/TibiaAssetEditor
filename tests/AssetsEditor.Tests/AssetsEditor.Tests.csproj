@@ -20,6 +20,7 @@
     <PackageReference Include="Google.Protobuf" Version="3.21.4" />
     <PackageReference Include="Grpc.Tools" Version="2.60.0" PrivateAssets="All" />
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
   </ItemGroup>
 
@@ -32,6 +33,7 @@
     <Compile Include="../../OTB/*.cs" LinkBase="Src/OTB" />
     <Compile Include="../../ItemsXml.cs" Link="Src/ItemsXml.cs" />
     <Compile Include="../../KnownClients.cs" Link="Src/KnownClients.cs" />
+    <Compile Include="../../Proficiencies.cs" Link="Src/Proficiencies.cs" />
     <Compile Include="../../AppPaths.cs" Link="Src/AppPaths.cs" />
     <Compile Include="../../UpdateService.cs" Link="Src/UpdateService.cs" />
     <Compile Include="../../MonsterData.cs" Link="Src/MonsterData.cs" />

@@ -197,6 +197,8 @@ cd android
 ~/.dotnet/dotnet publish -c Release -f net9.0-android \
     -p:AndroidSdkDirectory=$HOME/android-sdk -p:JavaSdkDirectory=<JDK 21>
 # -> bin/Release/net9.0-android/publish/com.whitecrixu.tibiamultitool-Signed.apk
+# Release APKs: set TMT_ANDROID_SIGNING_DIR to the folder with the release keystore
+# (see the comment in android/TibiaMultiTool.Android.csproj); without it the debug key is used.
 ```
 
 When releasing, keep the version in `AssetsEditor.csproj` and in

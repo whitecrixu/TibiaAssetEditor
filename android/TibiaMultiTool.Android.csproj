@@ -15,14 +15,27 @@
     <AssemblyName>TibiaMultiTool</AssemblyName>
     <ApplicationId>com.whitecrixu.tibiamultitool</ApplicationId>
     <ApplicationTitle>Tibia MultiTool</ApplicationTitle>
-    <ApplicationVersion>262</ApplicationVersion>
-    <ApplicationDisplayVersion>2.6.2</ApplicationDisplayVersion>
-    <Version>2.6.2</Version>
+    <ApplicationVersion>263</ApplicationVersion>
+    <ApplicationDisplayVersion>2.6.3</ApplicationDisplayVersion>
+    <Version>2.6.3</Version>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8625;CS0618;CS0168;CS0219;CA1416;CA1422</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Release signing: point TMT_ANDROID_SIGNING_DIR at the folder holding tibiamultitool-release.keystore,
+    storepass.txt and keypass.txt (kept outside the repo; apksigner reads one password per file). Without it
+    the APK is signed with the machine's debug key, which Android treats as a different app.
+  -->
+  <PropertyGroup Condition="'$(TMT_ANDROID_SIGNING_DIR)' != '' And Exists('$(TMT_ANDROID_SIGNING_DIR)/tibiamultitool-release.keystore')">
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(TMT_ANDROID_SIGNING_DIR)/tibiamultitool-release.keystore</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias>tibiamultitool</AndroidSigningKeyAlias>
+    <AndroidSigningStorePass>file:$(TMT_ANDROID_SIGNING_DIR)/storepass.txt</AndroidSigningStorePass>
+    <AndroidSigningKeyPass>file:$(TMT_ANDROID_SIGNING_DIR)/keypass.txt</AndroidSigningKeyPass>
   </PropertyGroup>
 
   <ItemGroup>

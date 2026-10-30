@@ -4,6 +4,21 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## V2.6.3 — Proficiencies type 32, release-signed Android app
+
+- Proficiencies: perk type 32 (the missile proc of the Moonsilver weapons in
+  newer game data) is named and its Element, Missile, Multiplier and
+  Probability can be edited. Changing a perk to type 32 drops its Value, as in
+  the game data.
+- Proficiencies: opening a file with perks Crystal Server cannot load (type 32
+  or a perk without Value) shows a warning with the affected ids.
+- Android: the APK is signed with a permanent release key. **Uninstall the
+  previous Android version once** before installing this one (it was signed
+  with a temporary key); later updates install over it.
+- Tests for the proficiencies file (byte-identical round trip, per-type fields).
+
+---
+
 ## V2.6.2 — Proficiencies fixes
 
 - Each perk type shows the field it really uses: *Element* (`ElementId`) for
