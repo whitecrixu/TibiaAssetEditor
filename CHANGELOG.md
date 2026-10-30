@@ -4,6 +4,22 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
+## Unreleased
+
+- **NPC Editor** for TFS 1.x revscript NPCs (`NpcType("…")`): outfit with a
+  coloured preview from the loaded client, health and movement, shop lists
+  (NpcSystem `shop_buyable` / `shop_sellable` strings and `{"name", id, price}`
+  Lua tables) with item pictures and items.xml names, greeting / farewell
+  messages and plain-text keyword answers. Saving changes only the edited
+  values; the rest of each script stays byte-identical and the previous
+  version is kept as `<file>.lua-bak`. Shops and answers built by code stay
+  read-only; a file changed on disk since loading is not overwritten.
+- **Shop check** across all NPCs: items one NPC sells for less than another
+  buys them for (free gold), the same item at different prices, ids missing
+  from the client and names that differ from items.xml.
+
+---
+
 ## V2.6.4 — Halloween theme
 
 - 🎃 **Halloween theme**: night purple surfaces, pumpkin orange accents and a

@@ -243,6 +243,18 @@
                                     </StackPanel>
                                 </Button>
             
+                                <Button Classes="hubTile" Click="OpenNpcEditor_Click" Margin="0,0,10,10">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <i:Icon Value="fa-store"/>
+                                            <TextBlock Classes="tileTitle" Text="NPC Editor"/>
+                                        </StackPanel>
+                                        <TextBlock Classes="dim"
+                                                   Text="TFS 1.x revscript NPCs: outfit, shops, messages and answers, plus a check of all shop prices."
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+
                                 <Button Classes="hubTile" Click="OpenProficienciesEditor_Click" Margin="0,0,10,10">
                                     <StackPanel Spacing="4">
                                         <StackPanel Orientation="Horizontal" Spacing="10">

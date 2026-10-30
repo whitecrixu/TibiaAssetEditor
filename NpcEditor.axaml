@@ -1,0 +1,259 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="https://github.com/projektanker/icons.avalonia"
+        x:Class="Assets_Editor.NpcEditor"
+        Title="NPC Editor"
+        Width="1300" Height="840"
+        WindowStartupLocation="CenterOwner"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="-1">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Classes="appbar">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Classes="tool" i:Attached.Icon="fa-folder-open" Content="Load folder…" Click="LoadFolder_Click"
+                        ToolTip.Tip="The folder with the NPC scripts, e.g. data/scripts/npcs"/>
+                <Button Classes="tool" i:Attached.Icon="fa-arrows-rotate" Content="Reload" Click="Reload_Click"/>
+                <Button Classes="tool primary" i:Attached.Icon="fa-floppy-disk" Content="Save current" Click="SaveCurrent_Click"/>
+                <Button Classes="tool" i:Attached.Icon="fa-floppy-disk" Content="Save all" Click="SaveAll_Click"/>
+                <Separator Width="1" Margin="4,0"/>
+                <TextBlock x:Name="PathText" VerticalAlignment="Center" Classes="dim"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" ColumnDefinitions="320,*">
+            <!-- List -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
+                <TextBox Grid.Row="0" x:Name="SearchBox" Watermark="Search by name, file or item sold…"
+                         Margin="6" TextChanged="SearchBox_TextChanged"/>
+                <CheckBox Grid.Row="1" x:Name="ShopsOnly" Content="Only NPCs with a shop" Margin="8,0,6,4"
+                          IsCheckedChanged="ShopsOnly_Changed"/>
+                <ListBox Grid.Row="2" x:Name="NpcList" Margin="6,0,6,6"
+                         SelectionChanged="NpcList_SelectionChanged"
+                         ContainerPrepared="NpcList_ContainerPrepared">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="2,4">
+                                <Border Classes="spriteSlot" Width="40" Height="40">
+                                    <Image Source="{Binding Image}" Width="38" Height="38"
+                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                </Border>
+                                <StackPanel Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontSize="13"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="230"/>
+                                    <TextBlock Text="{Binding Hint}" FontSize="11" Opacity="0.6"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="230"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+
+            <!-- Detail -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="8">
+                <Border Grid.Row="0" Classes="hero">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border Classes="spriteSlot" Width="80" Height="80">
+                            <Image x:Name="HeaderImage" Width="76" Height="76"
+                                   RenderOptions.BitmapInterpolationMode="None"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                            <TextBlock x:Name="HeaderText" Text="No selection" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock x:Name="HeaderHint" Classes="dim"
+                                       Text="Load the NPC folder (e.g. data/scripts/npcs). Outfit and item pictures need a loaded client."/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TabControl x:Name="DetailTabs" Grid.Row="1" Margin="0,8,0,0">
+                    <!-- General -->
+                    <TabItem Header="General">
+                        <ScrollViewer>
+                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                <Border Classes="card">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="sectionTitle" Text="Outfit"/>
+                                        <ItemsControl x:Name="OutfitFields">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,16,8">
+                                                        <TextBlock Text="{Binding Label}" Width="80" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Value="{Binding Value, Mode=TwoWay}" Width="130"
+                                                                       Minimum="0" Maximum="100000" FormatString="0"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <Border Classes="card">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="sectionTitle" Text="Health and movement"/>
+                                        <ItemsControl x:Name="StatFields">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,16,8">
+                                                        <TextBlock Text="{Binding Label}" Width="100" VerticalAlignment="Center"/>
+                                                        <NumericUpDown Value="{Binding Value, Mode=TwoWay}" Width="130"
+                                                                       Minimum="0" Maximum="1000000" FormatString="0"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Classes="dim" TextWrapping="Wrap"
+                                                   Text="The NPC name is not editable here: the map places NPCs by name."/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Shop -->
+                    <TabItem Header="Shop">
+                        <Grid RowDefinitions="Auto,*,*" Margin="0,8,0,0">
+                            <TextBlock x:Name="ShopNoteText" Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,8" IsVisible="False"/>
+                            <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,0,0,8">
+                                <DockPanel Grid.Row="0" Margin="0,0,0,4">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                                        <Button Classes="tool" i:Attached.Icon="fa-plus" Content="Add" Tag="buyable" Click="AddShopRow_Click"/>
+                                        <Button Classes="tool" i:Attached.Icon="fa-trash" Content="Remove" Tag="buyable" Click="RemoveShopRow_Click"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="BuyableTitle" Classes="sectionTitle" VerticalAlignment="Center"
+                                               Text="NPC sells (shop_buyable: the player buys)"/>
+                                </DockPanel>
+                                <DataGrid Grid.Row="1" x:Name="BuyableGrid" AutoGenerateColumns="False" CanUserSortColumns="False"
+                                          GridLinesVisibility="Horizontal" CellEditEnded="ShopGrid_CellEditEnded">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="" Width="40" IsReadOnly="True">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Image Source="{Binding Image}" Width="32" Height="32"
+                                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*"/>
+                                        <DataGridTextColumn Header="Item id" Binding="{Binding ItemId}" Width="90"/>
+                                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="110"/>
+                                        <DataGridTextColumn Header="Charges / extra" Binding="{Binding Extra}" Width="120"/>
+                                        <DataGridTextColumn Header="items.xml" Binding="{Binding Check}" Width="2*" IsReadOnly="True"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                            <Grid Grid.Row="2" RowDefinitions="Auto,*">
+                                <DockPanel Grid.Row="0" Margin="0,0,0,4">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                                        <Button Classes="tool" i:Attached.Icon="fa-plus" Content="Add" Tag="sellable" Click="AddShopRow_Click"/>
+                                        <Button Classes="tool" i:Attached.Icon="fa-trash" Content="Remove" Tag="sellable" Click="RemoveShopRow_Click"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="SellableTitle" Classes="sectionTitle" VerticalAlignment="Center"
+                                               Text="NPC buys (shop_sellable: the player sells)"/>
+                                </DockPanel>
+                                <DataGrid Grid.Row="1" x:Name="SellableGrid" AutoGenerateColumns="False" CanUserSortColumns="False"
+                                          GridLinesVisibility="Horizontal" CellEditEnded="ShopGrid_CellEditEnded">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="" Width="40" IsReadOnly="True">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Image Source="{Binding Image}" Width="32" Height="32"
+                                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*"/>
+                                        <DataGridTextColumn Header="Item id" Binding="{Binding ItemId}" Width="90"/>
+                                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="110"/>
+                                        <DataGridTextColumn Header="Charges / extra" Binding="{Binding Extra}" Width="120"/>
+                                        <DataGridTextColumn Header="items.xml" Binding="{Binding Check}" Width="2*" IsReadOnly="True"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Dialog -->
+                    <TabItem Header="Dialog">
+                        <ScrollViewer>
+                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                <Border Classes="card">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="sectionTitle" Text="Messages"/>
+                                        <ItemsControl x:Name="MessageFields">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="150,*" Margin="0,0,0,6">
+                                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                        <TextBox Grid.Column="1" Text="{Binding Text, Mode=TwoWay}" TextWrapping="Wrap"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <Border Classes="card">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="sectionTitle" Text="Keyword answers"/>
+                                        <TextBlock Classes="dim" TextWrapping="Wrap"
+                                                   Text="Answers written as plain text in the script. Answers put together by code are left out; edit those in the .lua file. |PLAYERNAME| and {word} work as in the game."/>
+                                        <ItemsControl x:Name="DialogFields">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="150,*" Margin="0,0,0,6">
+                                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Top" Margin="0,6,8,0"
+                                                                   TextWrapping="Wrap" ToolTip.Tip="{Binding Tip}"/>
+                                                        <TextBox Grid.Column="1" Text="{Binding Text, Mode=TwoWay}" TextWrapping="Wrap"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Shop check across all NPCs -->
+                    <TabItem Header="Shop check">
+                        <Grid RowDefinitions="Auto,Auto,*" Margin="0,8,0,0">
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                                <Button Classes="tool primary" i:Attached.Icon="fa-magnifying-glass-dollar" Content="Check all shops"
+                                        Click="CheckShops_Click"/>
+                                <ComboBox x:Name="CheckFilter" Width="220" SelectionChanged="CheckFilter_Changed">
+                                    <ComboBoxItem Content="All findings"/>
+                                    <ComboBoxItem Content="Free gold"/>
+                                    <ComboBoxItem Content="Unknown item id"/>
+                                    <ComboBoxItem Content="Different prices"/>
+                                    <ComboBoxItem Content="Name differs from items.xml"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1" x:Name="CheckSummary" Classes="dim" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Text="Compares the shops of all loaded NPCs: items one NPC sells for less than another buys them for (free gold), the same item at different prices, ids missing from the client and names that differ from items.xml. Double-click a row to open its first NPC."/>
+                            <DataGrid Grid.Row="2" x:Name="CheckGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                                      GridLinesVisibility="Horizontal" DoubleTapped="CheckGrid_DoubleTapped">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Finding" Binding="{Binding Category}" Width="170"/>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding ItemId}" Width="70"/>
+                                    <DataGridTextColumn Header="Item" Binding="{Binding Item}" Width="160"/>
+                                    <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="2*"/>
+                                    <DataGridTextColumn Header="NPCs (price)" Binding="{Binding Npcs}" Width="2*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2" Classes="statusbar">
+            <TextBlock x:Name="StatusText" Classes="dim" Text="Ready"/>
+        </Border>
+    </Grid>
+</Window>

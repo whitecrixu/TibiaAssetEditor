@@ -184,6 +184,7 @@ public partial class MainWindow : Window
         public List<string> RecentItemsXml        { get; set; } = [];
         public List<string> RecentProficiencies   { get; set; } = [];
         public List<string> RecentMonsterFolders  { get; set; } = [];
+        public string? LastNpcFolder { get; set; }
         public int AutoSaveIntervalMinutes { get; set; } = 5;
         public bool AutoSaveEnabled { get; set; } = true;
         public int DefaultPreviewFps { get; set; } = 5;
@@ -814,6 +815,11 @@ public partial class MainWindow : Window
     private void OpenMonsterEditor_Click(object? sender, RoutedEventArgs e)
     {
         new MonsterEditor().Show();
+    }
+
+    private void OpenNpcEditor_Click(object? sender, RoutedEventArgs e)
+    {
+        new NpcEditor().Show();
     }
 
     private void OpenProficienciesEditor_Click(object? sender, RoutedEventArgs e)

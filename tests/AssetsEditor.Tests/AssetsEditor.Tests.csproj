@@ -34,6 +34,7 @@
     <Compile Include="../../ItemsXml.cs" Link="Src/ItemsXml.cs" />
     <Compile Include="../../KnownClients.cs" Link="Src/KnownClients.cs" />
     <Compile Include="../../Proficiencies.cs" Link="Src/Proficiencies.cs" />
+    <Compile Include="../../NpcScripts.cs" Link="Src/NpcScripts.cs" />
     <Compile Include="../../AppPaths.cs" Link="Src/AppPaths.cs" />
     <Compile Include="../../UpdateService.cs" Link="Src/UpdateService.cs" />
     <Compile Include="../../MonsterData.cs" Link="Src/MonsterData.cs" />
