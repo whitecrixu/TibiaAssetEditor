@@ -5,8 +5,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Assets_Editor</RootNamespace>
     <AssemblyName>Tibia MultiTool Editor</AssemblyName>
-    <FileVersion>2.6.3</FileVersion>
-    <AssemblyVersion>2.6.3</AssemblyVersion>
+    <FileVersion>2.6.4</FileVersion>
+    <AssemblyVersion>2.6.4</AssemblyVersion>
     <Product>Tibia MultiTool Editor By WhiteCrixu</Product>
     <Description>Cross-platform Tibia MultiTool Editor</Description>
     <Nullable>enable</Nullable>

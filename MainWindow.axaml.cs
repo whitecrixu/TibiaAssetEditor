@@ -105,6 +105,7 @@ public partial class MainWindow : Window
         VersionLabel.Text = $"v{UpdateService.CurrentVersion}";
         Opened += async (_, _) =>
         {
+            await ShowHalloweenGreeting();
             if (SettingsList.CheckForUpdates)
                 await CheckForUpdatesAsync(manual: false);
         };
@@ -165,9 +166,15 @@ public partial class MainWindow : Window
 
     public enum UiDensity { Comfortable = 0, Cozy = 1, Compact = 2 }
 
+    public enum UiTheme { Light = 0, Dark = 1, Halloween = 2 }
+
     public class Settings
     {
         public bool DarkMode { get; set; }
+        // a theme picked in the main window; null follows DarkMode, with Halloween as the seasonal default
+        public UiTheme? Theme { get; set; }
+        // year the "Happy Halloween" window was turned off in
+        public int HalloweenGreetingHiddenYear { get; set; }
         public int LastPresetChoice { get; set; }
         public UiDensity Density { get; set; } = UiDensity.Cozy;
         public ObservableCollection<PresetSettings> Presets { get; set; } = [];
@@ -340,7 +347,18 @@ public partial class MainWindow : Window
             LoadDefaultSettings();
         }
 
-        DarkModeToggle.IsChecked = SettingsList.DarkMode;
+        _applyingTheme = true;
+        ThemeDropdown.SelectedIndex = (int)CurrentTheme;
+        _applyingTheme = false;
+        App.SetTheme(CurrentTheme);
+        UpdateHalloweenBadge();
+        ThemeChanged += () =>
+        {
+            _applyingTheme = true;
+            ThemeDropdown.SelectedIndex = (int)CurrentTheme;
+            _applyingTheme = false;
+            UpdateHalloweenBadge();
+        };
         DensityDropdown.SelectedIndex = (int)SettingsList.Density;
         App.SetDensity(SettingsList.Density);
         CreateSettingsChoices();
@@ -1256,18 +1274,64 @@ public partial class MainWindow : Window
         logView.AddLogEntry(entry);
     }
 
-    public static void SetCurrentTheme(bool isDarkMode)
+    // Halloween is the default theme from 20 October to 3 November, unless a theme was picked by hand
+    public static bool IsHalloweenSeason(DateTime day) =>
+        (day.Month == 10 && day.Day >= 20) || (day.Month == 11 && day.Day <= 3);
+
+    public static UiTheme CurrentTheme =>
+        SettingsList.Theme ?? (IsHalloweenSeason(DateTime.Today) ? UiTheme.Halloween
+                               : SettingsList.DarkMode ? UiTheme.Dark : UiTheme.Light);
+
+    public static event Action? ThemeChanged;
+    private bool _applyingTheme;
+
+    public static void SetCurrentTheme(UiTheme theme)
     {
-        App.SetTheme(isDarkMode);
-        SettingsList.DarkMode = isDarkMode;
+        App.SetTheme(theme);
+        SettingsList.Theme = theme;
+        if (theme != UiTheme.Halloween)
+            SettingsList.DarkMode = theme == UiTheme.Dark;
         SaveEditorSettings();
+        ThemeChanged?.Invoke();
     }
 
-    public static bool IsDarkModeSet() => SettingsList.DarkMode;
-
-    private void DarkModeToggle_Changed(object? sender, RoutedEventArgs e)
+    // the editors' light/dark switches
+    // (they also fire when a window opens, so the Halloween theme counts as dark and is kept)
+    public static void SetCurrentTheme(bool isDarkMode)
     {
-        SetCurrentTheme(DarkModeToggle.IsChecked ?? false);
+        if (isDarkMode != IsDarkModeSet())
+            SetCurrentTheme(isDarkMode ? UiTheme.Dark : UiTheme.Light);
+    }
+
+    public static bool IsDarkModeSet() => CurrentTheme != UiTheme.Light;
+
+    private void ThemeDropdown_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_applyingTheme || ThemeDropdown.SelectedIndex < 0)
+            return;
+        SetCurrentTheme((UiTheme)ThemeDropdown.SelectedIndex);
+        UpdateHalloweenBadge();
+    }
+
+    private async Task ShowHalloweenGreeting()
+    {
+        if (CurrentTheme != UiTheme.Halloween || !IsHalloweenSeason(DateTime.Today)
+            || SettingsList.HalloweenGreetingHiddenYear == DateTime.Today.Year)
+            return;
+        var greeting = new HalloweenWindow();
+        await greeting.ShowDialog(this);
+        if (greeting.HideThisYear)
+        {
+            SettingsList.HalloweenGreetingHiddenYear = DateTime.Today.Year;
+            SaveEditorSettings();
+        }
+    }
+
+    private void UpdateHalloweenBadge()
+    {
+        bool halloween = CurrentTheme == UiTheme.Halloween;
+        HalloweenBadge.IsVisible = halloween;
+        AppIcon.IsVisible = !halloween;
     }
 
     private void DensityDropdown_Changed(object? sender, SelectionChangedEventArgs e)

@@ -69,7 +69,9 @@
                 <!-- ═════  Header: name, version, updates  ═════ -->
                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <i:Icon Value="fa-cube" FontSize="28" Foreground="{DynamicResource SemiColorPrimary}"/>
+                        <i:Icon x:Name="AppIcon" Value="fa-cube" FontSize="28" Foreground="{DynamicResource SemiColorPrimary}"/>
+                        <TextBlock x:Name="HalloweenBadge" Text="🎃" FontSize="30" IsVisible="False" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SemiColorPrimary}" ToolTip.Tip="Happy Halloween!"/>
                         <StackPanel>
                             <TextBlock Text="Tibia MultiTool Editor" FontSize="{StaticResource Font.H1}" FontWeight="Bold"/>
                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -96,10 +98,12 @@
                             <ComboBoxItem Content="Cozy"/>
                             <ComboBoxItem Content="Compact"/>
                         </ComboBox>
-                        <TextBlock Text="Light" Classes="dim" VerticalAlignment="Center"/>
-                        <ToggleSwitch x:Name="DarkModeToggle" OnContent="" OffContent=""
-                                      IsCheckedChanged="DarkModeToggle_Changed"/>
-                        <TextBlock Text="Dark" Classes="dim" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="ThemeDropdown" Width="160" SelectionChanged="ThemeDropdown_Changed"
+                                  ToolTip.Tip="Colour theme">
+                            <ComboBoxItem Content="Light"/>
+                            <ComboBoxItem Content="Dark"/>
+                            <ComboBoxItem Content="🎃 Halloween"/>
+                        </ComboBox>
                     </StackPanel>
                 </Grid>
 

@@ -1,6 +1,10 @@
+using System.Collections.Generic;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 
@@ -25,6 +29,8 @@ public partial class App : Application
             e.Handled = true;
         };
 
+        AddHalloweenAccents();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();
@@ -33,11 +39,73 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    public static void SetTheme(bool isDark)
+    // dark based; Resources/Theme.axaml overrides the Semi colors for it
+    public static readonly ThemeVariant Halloween = new("Halloween", ThemeVariant.Dark);
+
+    // Semi copies its primary blue and its backgrounds into ~120 control brushes when it loads (check boxes,
+    // selected rows, outline buttons, window background, ...), so overriding the SemiColor* keys alone leaves
+    // them as they were. Every dark brush that carries one of these shades gets a Halloween twin.
+    private static readonly Dictionary<Color, Color> HalloweenShades = new()
+    {
+        [Color.Parse("#54A9FF")] = Color.Parse("#FF7A1A"),
+        [Color.Parse("#7FC1FF")] = Color.Parse("#FF9A4D"),
+        [Color.Parse("#A9D7FF")] = Color.Parse("#FFB877"),
+        [Color.Parse("#135CB8")] = Color.Parse("#8A3F0D"),
+        [Color.Parse("#16161A")] = Color.Parse("#140C18"),
+        [Color.Parse("#232429")] = Color.Parse("#1F1326"),
+        [Color.Parse("#35363C")] = Color.Parse("#2C1C35"),
+        [Color.Parse("#43444A")] = Color.Parse("#382443"),
+        [Color.Parse("#4F5159")] = Color.Parse("#462D53"),
+    };
+
+    private void AddHalloweenAccents()
+    {
+        var keys = new HashSet<string>();
+        void Collect(object? provider, int depth)
+        {
+            if (provider == null || depth > 16) return;
+            switch (provider)
+            {
+                case ResourceInclude include: Collect(include.Loaded, depth + 1); break;
+                case ResourceDictionary dictionary:
+                    foreach (object key in dictionary.Keys)
+                        if (key is string name) keys.Add(name);
+                    foreach (var theme in dictionary.ThemeDictionaries)
+                        if (theme.Key == ThemeVariant.Dark) Collect(theme.Value, depth + 1);
+                    foreach (var merged in dictionary.MergedDictionaries) Collect(merged, depth + 1);
+                    break;
+                case StyleInclude style: Collect(style.Loaded, depth + 1); break;
+                case Styles styles:
+                    Collect(styles.Resources, depth + 1);
+                    foreach (var child in styles) Collect(child, depth + 1);
+                    break;
+            }
+        }
+        Collect(Styles, 0);
+
+        var halloween = new ResourceDictionary();
+        foreach (string key in keys)
+        {
+            if (key.StartsWith("SemiColor") || !TryGetResource(key, ThemeVariant.Dark, out object? value))
+                continue;
+            if (value is ISolidColorBrush brush && HalloweenShades.TryGetValue(Color.FromRgb(brush.Color.R, brush.Color.G, brush.Color.B), out Color shade))
+                halloween[key] = new SolidColorBrush(Color.FromArgb(brush.Color.A, shade.R, shade.G, shade.B), brush.Opacity);
+            else if (value is Color color && HalloweenShades.TryGetValue(Color.FromRgb(color.R, color.G, color.B), out shade))
+                halloween[key] = Color.FromArgb(color.A, shade.R, shade.G, shade.B);
+        }
+        Resources.ThemeDictionaries[Halloween] = halloween;
+    }
+
+    public static void SetTheme(MainWindow.UiTheme theme)
     {
         if (Current != null)
         {
-            Current.RequestedThemeVariant = isDark ? ThemeVariant.Dark : ThemeVariant.Light;
+            Current.RequestedThemeVariant = theme switch
+            {
+                MainWindow.UiTheme.Light => ThemeVariant.Light,
+                MainWindow.UiTheme.Halloween => Halloween,
+                _ => ThemeVariant.Dark,
+            };
         }
     }
 

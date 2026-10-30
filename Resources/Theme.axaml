@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Assets_Editor">
     <!--
         Design tokens + global control styles. Pulled in from App.axaml after
         Semi.Avalonia so these selectors win. The goal is a single place where
@@ -7,30 +8,64 @@
         windows should use the tokens/classes rather than re-specifying values.
     -->
     <Styles.Resources>
-        <!-- Spacing scale (4-point grid) -->
-        <x:Double x:Key="Spacing.Xs">4</x:Double>
-        <x:Double x:Key="Spacing.Sm">8</x:Double>
-        <x:Double x:Key="Spacing.Md">12</x:Double>
-        <x:Double x:Key="Spacing.Lg">16</x:Double>
-        <x:Double x:Key="Spacing.Xl">24</x:Double>
+        <ResourceDictionary>
+            <!-- Spacing scale (4-point grid) -->
+            <x:Double x:Key="Spacing.Xs">4</x:Double>
+            <x:Double x:Key="Spacing.Sm">8</x:Double>
+            <x:Double x:Key="Spacing.Md">12</x:Double>
+            <x:Double x:Key="Spacing.Lg">16</x:Double>
+            <x:Double x:Key="Spacing.Xl">24</x:Double>
 
-        <!-- Corner radii -->
-        <CornerRadius x:Key="Radius.Sm">4</CornerRadius>
-        <CornerRadius x:Key="Radius.Md">8</CornerRadius>
-        <CornerRadius x:Key="Radius.Lg">12</CornerRadius>
+            <!-- Corner radii -->
+            <CornerRadius x:Key="Radius.Sm">4</CornerRadius>
+            <CornerRadius x:Key="Radius.Md">8</CornerRadius>
+            <CornerRadius x:Key="Radius.Lg">12</CornerRadius>
 
-        <!-- Thicknesses built from spacing tokens, used as defaults -->
-        <Thickness x:Key="Inset.Sm">8</Thickness>
-        <Thickness x:Key="Inset.Md">12</Thickness>
-        <Thickness x:Key="Inset.Lg">16</Thickness>
+            <!-- Thicknesses built from spacing tokens, used as defaults -->
+            <Thickness x:Key="Inset.Sm">8</Thickness>
+            <Thickness x:Key="Inset.Md">12</Thickness>
+            <Thickness x:Key="Inset.Lg">16</Thickness>
 
-        <!-- Typography sizes -->
-        <x:Double x:Key="Font.Xs">11</x:Double>
-        <x:Double x:Key="Font.Sm">12</x:Double>
-        <x:Double x:Key="Font.Md">13</x:Double>
-        <x:Double x:Key="Font.Lg">15</x:Double>
-        <x:Double x:Key="Font.Xl">18</x:Double>
-        <x:Double x:Key="Font.H1">22</x:Double>
+            <!-- Typography sizes -->
+            <x:Double x:Key="Font.Xs">11</x:Double>
+            <x:Double x:Key="Font.Sm">12</x:Double>
+            <x:Double x:Key="Font.Md">13</x:Double>
+            <x:Double x:Key="Font.Lg">15</x:Double>
+            <x:Double x:Key="Font.Xl">18</x:Double>
+            <x:Double x:Key="Font.H1">22</x:Double>
+
+            <!-- Halloween theme (App.Halloween, based on dark): night purple surfaces, pumpkin accent,
+                 bone text. Everything not listed falls back to Semi's dark colours. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="{x:Static local:App.Halloween}">
+                    <SolidColorBrush x:Key="SemiColorBackground0" Color="#140C18"/>
+                    <SolidColorBrush x:Key="SemiColorBackground1" Color="#1F1326"/>
+                    <SolidColorBrush x:Key="SemiColorBackground2" Color="#2C1C35"/>
+                    <SolidColorBrush x:Key="SemiColorBackground3" Color="#382443"/>
+                    <SolidColorBrush x:Key="SemiColorBackground4" Color="#462D53"/>
+                    <SolidColorBrush x:Key="SemiColorOverlayBackground" Color="#140C18"/>
+
+                    <SolidColorBrush x:Key="SemiColorPrimary" Color="#FF7A1A"/>
+                    <SolidColorBrush x:Key="SemiColorPrimaryPointerover" Color="#FF9A4D"/>
+                    <SolidColorBrush x:Key="SemiColorPrimaryActive" Color="#FFB877"/>
+                    <SolidColorBrush x:Key="SemiColorPrimaryDisabled" Color="#8A3F0D"/>
+                    <SolidColorBrush x:Key="SemiColorPrimaryLight" Color="#33FF7A1A"/>
+                    <SolidColorBrush x:Key="SemiColorPrimaryLightPointerover" Color="#4DFF7A1A"/>
+                    <SolidColorBrush x:Key="SemiColorLink" Color="#FF9A4D"/>
+                    <SolidColorBrush x:Key="SemiColorFocusBorder" Color="#FF7A1A"/>
+
+                    <SolidColorBrush x:Key="SemiColorText0" Color="#F6EBDC"/>
+                    <SolidColorBrush x:Key="SemiColorText1" Color="#E6D6C2"/>
+                    <SolidColorBrush x:Key="SemiColorText2" Color="#B3A08C"/>
+                    <SolidColorBrush x:Key="SemiColorText3" Color="#85766A"/>
+
+                    <SolidColorBrush x:Key="SemiColorFill0" Color="#1FB07CD9"/>
+                    <SolidColorBrush x:Key="SemiColorFill1" Color="#2EB07CD9"/>
+                    <SolidColorBrush x:Key="SemiColorFill2" Color="#3DB07CD9"/>
+                    <SolidColorBrush x:Key="SemiColorBorder" Color="#40B07CD9"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </Styles.Resources>
 
     <!-- ═════════════  Global typography  ═════════════ -->

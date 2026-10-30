@@ -4,8 +4,14 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
-## Unreleased
+## V2.6.4 — Halloween theme
 
+- 🎃 **Halloween theme**: night purple surfaces, pumpkin orange accents and a
+  pumpkin next to the title. It is the default from 20 October to 3 November;
+  the main screen's theme list (Light / Dark / Halloween) keeps a theme you
+  pick by hand. The editors' light/dark switches keep it as a dark theme.
+- A *Happy Halloween* window with a jack-o'-lantern greets you at startup
+  while the Halloween theme is on (can be turned off for the rest of the year).
 - Proficiencies: the warning about perks the server cannot load now names
   both Crystal Server and Canary (both read `Value` from every perk and know
   perk types 0–31; Canary does not start with such a file).
