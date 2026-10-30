@@ -4,7 +4,7 @@ All notable changes to **Tibia MultiTool Editor By WhiteCrixu** (formerly *Tibia
 
 ---
 
-## Unreleased
+## V2.6.6 — Creature pictures, OTB editor fix
 
 - Monster and NPC lists show the whole creature in its outfit colours (legacy
   clients) instead of one uncoloured 32×32 piece.
