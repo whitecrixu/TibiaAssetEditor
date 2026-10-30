@@ -9,11 +9,14 @@ using System.Text.RegularExpressions;
 
 namespace Assets_Editor
 {
+    public enum NpcFormat { Tfs, Canary }
+
     /// <summary>
-    /// TFS 1.x revscript NPCs (<c>local npcType = NpcType("Name")</c>, NpcSystem keyword handlers, shops in
-    /// <c>npcType:parameters</c>). Only values that are plain literals are editable; each one remembers where it
-    /// sits in the file, and saving replaces just the changed ones, so the rest of the script stays byte-identical.
-    /// Shops built by code (ShopModule calls, function results) and texts built by concatenation stay read-only.
+    /// Revscript NPCs in two layouts: TFS 1.x (<c>local npcType = NpcType("Name")</c>, shops in
+    /// <c>npcType:parameters</c>) and Canary / Crystal Server (<c>Game.createNpcType(...)</c> with an
+    /// <c>npcConfig</c> table and <c>npcConfig.shop</c> rows). Only values that are plain literals are editable; each
+    /// one remembers where it sits in the file, and saving replaces just the changed ones, so the rest of the script
+    /// stays byte-identical. Shops built by code and texts built by concatenation stay read-only.
     /// </summary>
     public class NpcScript
     {
@@ -32,6 +35,9 @@ namespace Assets_Editor
         public List<NpcDialog> Dialogs { get; } = new();
         public NpcShop? Buyable { get; private set; }
         public NpcShop? Sellable { get; private set; }
+        /// <summary>Canary / Crystal: npcConfig.shop, one row per item with a buy and/or sell price.</summary>
+        public CanaryShop? CanaryShop { get; private set; }
+        public NpcFormat Format { get; private set; }
         /// <summary>Why the shop cannot be edited here (built by code), or null.</summary>
         public string? ShopNote { get; private set; }
 
@@ -48,10 +54,21 @@ namespace Assets_Editor
         public static NpcScript Load(string path) => new(path, File.ReadAllText(path, FileEncoding));
 
         public bool IsNpc => Name.Length > 0;
-        public bool HasShop => Buyable != null || Sellable != null;
+        public bool HasShop => Buyable != null || Sellable != null || CanaryShop != null;
 
         public bool Modified =>
-            AllTokens().Any(t => t.Modified) || (Buyable?.Modified ?? false) || (Sellable?.Modified ?? false);
+            AllTokens().Any(t => t.Modified) || (Buyable?.Modified ?? false) || (Sellable?.Modified ?? false)
+            || (CanaryShop?.Modified ?? false);
+
+        /// <summary>What the player can buy from the NPC (the NPC's selling prices).</summary>
+        public IEnumerable<ShopItem> SoldItems() =>
+            (Buyable?.Items ?? []).Concat(CanaryShop?.Items.Where(i => i.Buy != null)
+                .Select(i => new ShopItem { Name = i.Name.Length > 0 ? i.Name : $"#{i.ClientId}", ItemId = i.ClientId, Price = i.Buy!.Value }) ?? []);
+
+        /// <summary>What the player can sell to the NPC (the NPC's buying prices).</summary>
+        public IEnumerable<ShopItem> BoughtItems() =>
+            (Sellable?.Items ?? []).Concat(CanaryShop?.Items.Where(i => i.Sell != null)
+                .Select(i => new ShopItem { Name = i.Name.Length > 0 ? i.Name : $"#{i.ClientId}", ItemId = i.ClientId, Price = i.Sell!.Value }) ?? []);
 
         public int OutfitValue(string key) =>
             Outfit.FirstOrDefault(t => t.Key == key)?.IntValue ?? 0;
@@ -67,8 +84,17 @@ namespace Assets_Editor
 
         // ── parsing ───────────────────────────────────────────────────────
 
-        private static readonly Regex NpcTypeRx = new(@"NpcType\(\s*(?<q>[""'])(?<name>(?:\\.|(?!\k<q>).)*)\k<q>\s*\)");
-        private static readonly Regex OutfitRx = new(@"npcType:outfit\(\s*\{(?<body>[^}]*)\}");
+        private static readonly Regex NpcTypeRx = new(@"(?<![\w.:])NpcType\(\s*(?<q>[""'])(?<name>(?:\\.|(?!\k<q>).)*)\k<q>\s*\)");
+        private static readonly Regex CanaryTypeRx = new(@"Game\.createNpcType\(\s*(?:(?<q>[""'])(?<name>(?:\\.|(?!\k<q>).)*)\k<q>|(?<var>[A-Za-z_]\w*))\s*\)");
+        private static readonly Regex OutfitRx = new(@"(?:npcType:outfit\(|npcConfig\.outfit\s*=)\s*\{(?<body>[^}]*)\}");
+        // npcConfig.x = <number>, only when the number is the whole value (not "npcConfig.health" or an expression)
+        private static Regex ConfigNumberRx(string key) =>
+            new(@"^[ \t]*npcConfig\." + key + @"[ \t]*=[ \t]*(?<v>\d+)[ \t]*(?:--[^\n]*)?\r?$", RegexOptions.Multiline);
+        private static readonly Regex ConfigHealthRx = ConfigNumberRx("health");
+        private static readonly Regex ConfigMaxHealthRx = ConfigNumberRx("maxHealth");
+        private static readonly Regex ConfigWalkIntervalRx = ConfigNumberRx("walkInterval");
+        private static readonly Regex ConfigWalkRadiusRx = ConfigNumberRx("walkRadius");
+        private static readonly Regex ConfigBlockRx = new(@"^[ \t]*npcConfig\.(?<key>shop|voices)[ \t]*=[ \t]*", RegexOptions.Multiline);
         private static readonly Regex OutfitPairRx = new(@"(?<key>look[A-Za-z]+)\s*=\s*(?<value>-?\d+)");
         private static readonly Regex HealthRx = new(@"npcType:health\(\s*(?<now>\d+)\s*,\s*(?<max>\d+)\s*\)");
         private static readonly Regex WalkIntervalRx = new(@"npcType:walkInterval\(\s*(?<v>\d+)\s*\)");
@@ -80,10 +106,21 @@ namespace Assets_Editor
 
         private void Parse()
         {
-            Match m = NpcTypeRx.Match(Text);
-            if (!m.Success)
+            if (NpcTypeRx.Match(Text) is { Success: true } tfs)
+            {
+                Name = LuaString.Unescape(tfs.Groups["name"].Value);
+                Format = NpcFormat.Tfs;
+            }
+            else if (CanaryTypeRx.Match(Text) is { Success: true } canary)
+            {
+                Format = NpcFormat.Canary;
+                if (canary.Groups["name"].Success)
+                    Name = LuaString.Unescape(canary.Groups["name"].Value);
+                else if (Regex.Match(Text, @"local\s+" + Regex.Escape(canary.Groups["var"].Value) + @"\s*=\s*(?<q>[""'])(?<name>(?:\\.|(?!\k<q>).)*)\k<q>") is { Success: true } local)
+                    Name = LuaString.Unescape(local.Groups["name"].Value);
+            }
+            if (Name.Length == 0)
                 return;
-            Name = LuaString.Unescape(m.Groups["name"].Value);
 
             Match outfit = OutfitRx.Match(Text);
             if (outfit.Success)
@@ -102,6 +139,8 @@ namespace Assets_Editor
                 WalkInterval = Number(interval.Groups["v"], "walkInterval");
             if (WalkRadiusRx.Match(Text) is { Success: true } radius)
                 WalkRadius = Number(radius.Groups["v"], "walkRadius");
+            if (Format == NpcFormat.Canary)
+                ParseConfig();
 
             foreach (Match msg in MessageRx.Matches(Text))
                 if (!IsInComment(msg.Index) && LuaString.At(Text, msg.Index + msg.Length) is { } token)
@@ -141,6 +180,41 @@ namespace Assets_Editor
         }
 
         private LuaToken Number(Group g, string key) => new(g.Index, g.Value, LuaTokenKind.Number, key);
+
+        private void ParseConfig()
+        {
+            if (ConfigHealthRx.Match(Text) is { Success: true } health) HealthNow = Number(health.Groups["v"], "health");
+            if (ConfigMaxHealthRx.Match(Text) is { Success: true } max) HealthMax = Number(max.Groups["v"], "maxHealth");
+            if (ConfigWalkIntervalRx.Match(Text) is { Success: true } interval) WalkInterval = Number(interval.Groups["v"], "walkInterval");
+            if (ConfigWalkRadiusRx.Match(Text) is { Success: true } radius) WalkRadius = Number(radius.Groups["v"], "walkRadius");
+
+            foreach (Match block in ConfigBlockRx.Matches(Text))
+            {
+                int at = block.Index + block.Length;
+                bool table = at < Text.Length && Text[at] == '{';
+                int close = table ? LuaString.MatchingBrace(Text, at) : -1;
+                if (block.Groups["key"].Value == "shop")
+                {
+                    CanaryShop = close > 0 ? CanaryShop.Parse(Text, at, close) : null;
+                    if (CanaryShop == null)
+                        ShopNote = "The shop is built by script code; edit the .lua file.";
+                }
+                else if (close > 0)
+                {
+                    // npcConfig.voices = { interval = …, chance = …, { text = "…" }, … }
+                    for (int i = at + 1; i < close; i++)
+                    {
+                        if (Text[i] == '"' || Text[i] == '\'') { i = LuaString.End(Text, i) - 1; if (i < 0) break; continue; }
+                        if (Regex.Match(Text[i..Math.Min(close, i + 12)], @"^text\s*=\s*") is { Success: true } key
+                            && !char.IsLetterOrDigit(Text[i - 1]) && LuaString.At(Text, i + key.Length) is { } voice)
+                        {
+                            Messages.Add(new NpcMessage("VOICE", voice));
+                            i = voice.Start + voice.Length - 1;
+                        }
+                    }
+                }
+            }
+        }
 
         // addKeyword(keys, X.say, { ..., text = "..." }): the text is the first `text =` inside the parameter table
         private LuaToken? DialogText(int at)
@@ -184,6 +258,7 @@ namespace Assets_Editor
             var edits = AllTokens().Where(t => t.Modified).Select(t => (t.Start, t.Length, t.Source))
                 .Concat(Buyable?.Edits() ?? [])
                 .Concat(Sellable?.Edits() ?? [])
+                .Concat(CanaryShop?.Edits() ?? [])
                 .OrderByDescending(e => e.Start).ToList();
             var sb = new StringBuilder(Text);
             int previous = int.MaxValue;
@@ -224,6 +299,7 @@ namespace Assets_Editor
             Dialogs.Clear();
             HealthNow = HealthMax = WalkInterval = WalkRadius = null;
             Buyable = Sellable = null;
+            CanaryShop = null;
             ShopNote = null;
             Parse();
         }
@@ -330,7 +406,7 @@ namespace Assets_Editor
             Match head = Regex.Match(text, @"local\s+" + Regex.Escape(table) + @"\s*=\s*\{");
             if (!head.Success)
                 return null;
-            int open = head.Index + head.Length - 1, close = MatchingBrace(text, open);
+            int open = head.Index + head.Length - 1, close = LuaString.MatchingBrace(text, open);
             if (close < 0)
                 return null;
             var shop = new NpcShop { TableName = table, _tableStart = open + 1, _tableLength = close - open - 1 };
@@ -382,8 +458,160 @@ namespace Assets_Editor
                 yield return (_tableStart, _tableLength, sb.ToString());
             }
         }
+    }
 
-        private static int MatchingBrace(string text, int open)
+    public class CanaryShopItem
+    {
+        public string Name { get; set; } = "";
+        public int ClientId { get; set; }
+        /// <summary>Price the player pays (the NPC sells), or null.</summary>
+        public int? Buy { get; set; }
+        /// <summary>Price the NPC pays (the player sells), or null.</summary>
+        public int? Sell { get; set; }
+        /// <summary>The row's other fields (count, subType, storageKey, …) as written, e.g. "count = 1".</summary>
+        public string Extra { get; set; } = "";
+        /// <summary>Index of the row in the file, -1 for an added one.</summary>
+        public int Origin { get; init; } = -1;
+        // the engine accepts itemName / itemname and clientId / clientid; a row keeps its spelling. The name is
+        // optional (the engine then uses the item's own name): null key = not written.
+        public string? NameKey { get; init; } = "itemName";
+        public string IdKey { get; init; } = "clientId";
+
+        public CanaryShopItem Clone() => (CanaryShopItem)MemberwiseClone();
+        public bool SameAs(CanaryShopItem o) =>
+            Name == o.Name && ClientId == o.ClientId && Buy == o.Buy && Sell == o.Sell && Extra == o.Extra;
+    }
+
+    /// <summary>
+    /// <c>npcConfig.shop = { { itemName = "…", clientId = …, buy = …, sell = …, count = … }, … }</c>. Saving rewrites
+    /// only the rows that changed, drops the lines of removed rows and adds new rows after the last one, so comments
+    /// and the layout around the rows are kept.
+    /// </summary>
+    public class CanaryShop
+    {
+        // Delete*: what removing the row takes out (its whole line, or the row and its comma)
+        private record Row(int Start, int Length, int DeleteStart, int DeleteLength, CanaryShopItem Original);
+
+        public List<CanaryShopItem> Items { get; } = new();
+
+        private readonly List<Row> _rows = new();
+        private int _insertAt;
+        private string _indent = "\t";
+        private string _newline = "\n";
+
+        public bool Modified =>
+            Items.Count != _rows.Count || Items.Any(i => i.Origin < 0 || !i.SameAs(_rows[i.Origin].Original));
+
+        private static readonly Regex PairRx = new(@"(?<key>[A-Za-z_]\w*)\s*=\s*(?<value>(?<q>[""'])(?:\\.|(?!\k<q>).)*\k<q>|[^,}]+?)\s*(?:,|$)");
+
+        /// <summary>The shop table between <paramref name="open"/> and <paramref name="close"/>, or null when a row is
+        /// not a plain literal row (then the shop is left to the script).</summary>
+        public static CanaryShop? Parse(string text, int open, int close)
+        {
+            var shop = new CanaryShop { _newline = text.Contains("\r\n") ? "\r\n" : "\n" };
+            int i = open + 1;
+            while (i < close)
+            {
+                char c = text[i];
+                if (c == '-' && i + 1 < close && text[i + 1] == '-')
+                {
+                    int nl = text.IndexOf('\n', i);
+                    i = nl < 0 ? close : nl + 1;
+                    continue;
+                }
+                if (c == '"' || c == '\'')
+                    return null;
+                if (c != '{') { i++; continue; }
+
+                int end = LuaString.MatchingBrace(text, i);
+                if (end < 0 || end > close)
+                    return null;
+                var item = ParseRow(text.Substring(i + 1, end - i - 1), shop._rows.Count);
+                if (item == null)
+                    return null;
+                int lineStart = text.LastIndexOf('\n', i) + 1;
+                int lineEnd = text.IndexOf('\n', end);
+                if (lineEnd < 0) lineEnd = text.Length;
+                string before = text[lineStart..i], after = text[(end + 1)..lineEnd].TrimEnd('\r');
+                bool alone = before.Trim().Length == 0 && Regex.IsMatch(after, @"^\s*,?\s*(--.*)?$");
+                if (shop._rows.Count == 0 && before.Trim().Length == 0)
+                    shop._indent = before;
+                int deleteEnd = alone ? Math.Min(lineEnd + 1, text.Length)
+                              : end + 1 + Regex.Match(text[(end + 1)..close], @"^\s*,?[ \t]*").Length;
+                int deleteStart = alone ? lineStart : i;
+                shop._rows.Add(new Row(i, end - i + 1, deleteStart, deleteEnd - deleteStart, item));
+                shop.Items.Add(item.Clone());
+                shop._insertAt = alone ? Math.Min(lineEnd + 1, text.Length) : end + 1;
+                i = end + 1;
+            }
+            if (shop._rows.Count == 0)
+            {
+                // empty table: new rows go before the closing brace
+                shop._insertAt = close;
+                shop._indent = "\t";
+            }
+            return shop;
+        }
+
+        private static CanaryShopItem? ParseRow(string body, int index)
+        {
+            string? name = null, nameKey = null, idKey = null;
+            int? id = null, buy = null, sell = null;
+            var extra = new List<string>();
+            foreach (Match pair in PairRx.Matches(body))
+            {
+                string key = pair.Groups["key"].Value, value = pair.Groups["value"].Value.Trim();
+                bool number = int.TryParse(value, out int n);
+                switch (key)
+                {
+                    case "itemName" or "itemname" when value.Length >= 2 && (value[0] == '"' || value[0] == '\''):
+                        name = LuaString.Unescape(value[1..^1]); nameKey = key; break;
+                    case "clientId" or "clientid" when number: id = n; idKey = key; break;
+                    case "buy" when number: buy = n; break;
+                    case "sell" when number: sell = n; break;
+                    case "itemName" or "itemname" or "clientId" or "clientid" or "buy" or "sell": return null;
+                    default: extra.Add($"{key} = {value}"); break;
+                }
+            }
+            if (id == null)
+                return null;
+            return new CanaryShopItem
+            {
+                Name = name ?? "", ClientId = id.Value, Buy = buy, Sell = sell, Extra = string.Join(", ", extra),
+                Origin = index, NameKey = nameKey, IdKey = idKey!,
+            };
+        }
+
+        private static string Format(CanaryShopItem i) =>
+            "{ " + (i.Name.Length > 0 || i.NameKey != null ? (i.NameKey ?? "itemName") + " = " + LuaString.Quote(i.Name, '"') + ", " : "")
+            + i.IdKey + " = " + i.ClientId
+            + (i.Buy is { } b ? ", buy = " + b : "") + (i.Sell is { } s ? ", sell = " + s : "")
+            + (i.Extra.Trim().Length > 0 ? ", " + i.Extra.Trim() : "") + " }";
+
+        internal IEnumerable<(int Start, int Length, string Text)> Edits()
+        {
+            if (!Modified)
+                yield break;
+            var kept = Items.Where(i => i.Origin >= 0).ToDictionary(i => i.Origin);
+            for (int r = 0; r < _rows.Count; r++)
+            {
+                Row row = _rows[r];
+                if (!kept.TryGetValue(r, out var item))
+                    yield return (row.DeleteStart, row.DeleteLength, "");
+                else if (!item.SameAs(row.Original))
+                    yield return (row.Start, row.Length, Format(item));
+            }
+            var added = Items.Where(i => i.Origin < 0).ToList();
+            if (added.Count > 0)
+                yield return (_insertAt, 0, string.Concat(added.Select(i => _indent + Format(i) + "," + _newline)));
+        }
+    }
+
+    /// <summary>Lua short strings ("..." / '...'): finding, unescaping and quoting.</summary>
+    public static class LuaString
+    {
+        /// <summary>The index of the brace closing the one at <paramref name="open"/>, skipping strings and comments.</summary>
+        public static int MatchingBrace(string text, int open)
         {
             int depth = 0;
             for (int i = open; i < text.Length; i++)
@@ -391,7 +619,7 @@ namespace Assets_Editor
                 char c = text[i];
                 if (c == '"' || c == '\'')
                 {
-                    i = LuaString.End(text, i) - 1;
+                    i = End(text, i) - 1;
                     if (i < 0) return -1;
                 }
                 else if (c == '-' && i + 1 < text.Length && text[i + 1] == '-')
@@ -401,11 +629,7 @@ namespace Assets_Editor
             }
             return -1;
         }
-    }
 
-    /// <summary>Lua short strings ("..." / '...'): finding, unescaping and quoting.</summary>
-    public static class LuaString
-    {
         /// <summary>The string literal starting at <paramref name="index"/> (after optional spaces), or null.</summary>
         public static LuaToken? At(string text, int index)
         {
@@ -533,11 +757,10 @@ namespace Assets_Editor
         public static Dictionary<int, string>? LoadItemNames(string folder, out string? path)
         {
             path = null;
-            for (var dir = new DirectoryInfo(folder); dir != null; dir = dir.Parent)
-            {
-                string candidate = System.IO.Path.Combine(dir.FullName, "items", "items.xml");
-                if (File.Exists(candidate)) { path = candidate; break; }
-            }
+            // TFS: data/scripts/npcs → data/items; Canary / Crystal: data-<world>/npc → <root>/data/items
+            for (var dir = new DirectoryInfo(folder); dir != null && path == null; dir = dir.Parent)
+                foreach (string candidate in new[] { System.IO.Path.Combine(dir.FullName, "items", "items.xml"), System.IO.Path.Combine(dir.FullName, "data", "items", "items.xml") })
+                    if (File.Exists(candidate)) { path = candidate; break; }
             if (path == null)
                 return null;
             var names = new Dictionary<int, string>();
@@ -569,9 +792,9 @@ namespace Assets_Editor
             var bought = new Dictionary<int, List<(NpcScript Npc, ShopItem Item)>>(); // player sells to the NPC
             foreach (var npc in scripts)
             {
-                foreach (var item in npc.Buyable?.Items ?? [])
+                foreach (var item in npc.SoldItems())
                     (sold.TryGetValue(item.ItemId, out var l) ? l : sold[item.ItemId] = new()).Add((npc, item));
-                foreach (var item in npc.Sellable?.Items ?? [])
+                foreach (var item in npc.BoughtItems())
                     (bought.TryGetValue(item.ItemId, out var l) ? l : bought[item.ItemId] = new()).Add((npc, item));
             }
 
@@ -605,7 +828,7 @@ namespace Assets_Editor
                     findings.Add(new Finding("Unknown item id", id, list[0].Item.Name, "not in the loaded client", Names(list)));
                 else if (itemName?.Invoke(id) is { } name)
                 {
-                    var wrong = list.Where(r => !string.Equals(r.Item.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var wrong = list.Where(r => !r.Item.Name.StartsWith('#') && !string.Equals(r.Item.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)).ToList();
                     if (wrong.Count > 0)
                         findings.Add(new Finding("Name differs from items.xml", id, name,
                             "shop says " + string.Join(" / ", wrong.Select(r => $"\"{r.Item.Name}\"").Distinct()), Names(wrong)));

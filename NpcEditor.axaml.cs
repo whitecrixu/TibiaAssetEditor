@@ -15,7 +15,8 @@ using Tibia.Protobuf.Appearances;
 namespace Assets_Editor
 {
     /// <summary>
-    /// Editor for TFS 1.x revscript NPCs (see <see cref="NpcScript"/>): outfit, health, movement, shop lists and
+    /// Editor for revscript NPCs, TFS 1.x and Canary / Crystal Server (see <see cref="NpcScript"/>): outfit, health,
+    /// movement, shop lists and
     /// the plain-text messages / keyword answers, plus a shop check across all loaded NPCs.
     /// </summary>
     public partial class NpcEditor : Window
@@ -126,13 +127,14 @@ namespace Assets_Editor
                 HeaderText.Text = "No selection";
                 HeaderImage.Source = null;
                 OutfitFields.ItemsSource = StatFields.ItemsSource = MessageFields.ItemsSource = DialogFields.ItemsSource = null;
-                BuyableGrid.ItemsSource = SellableGrid.ItemsSource = null;
+                BuyableGrid.ItemsSource = SellableGrid.ItemsSource = CanaryGrid.ItemsSource = null;
                 return;
             }
 
             HeaderText.Text = npc.Name;
             HeaderHint.Text = Path.GetRelativePath(NpcRegistry.Folder!, npc.Path)
-                              + (npc.HasShop ? $" · sells {npc.Buyable?.Items.Count ?? 0}, buys {npc.Sellable?.Items.Count ?? 0} items" : "");
+                              + (npc.Format == NpcFormat.Canary ? " · Canary / Crystal format" : " · TFS 1.x format")
+                              + (npc.HasShop ? $" · sells {npc.SoldItems().Count()}, buys {npc.BoughtItems().Count()} items" : "");
             HeaderImage.Source = OutfitImage(npc);
 
             OutfitFields.ItemsSource = npc.Outfit.Select(t => new NumberField(t.Key.Replace("look", ""), t, OutfitChanged)).ToList();
@@ -148,6 +150,11 @@ namespace Assets_Editor
 
             ShopNoteText.Text = npc.ShopNote ?? "";
             ShopNoteText.IsVisible = npc.ShopNote != null;
+            bool canary = npc.Format == NpcFormat.Canary;
+            CanaryShopPanel.IsVisible = canary;
+            BuyablePanel.IsVisible = SellablePanel.IsVisible = !canary;
+            CanaryGrid.ItemsSource = npc.CanaryShop == null ? null
+                : new ObservableCollection<CanaryRow>(npc.CanaryShop.Items.Select(i => { var r = new CanaryRow(i); RefreshRow(r); return r; }));
             BuyableGrid.ItemsSource = npc.Buyable == null ? null : Rows(npc.Buyable);
             SellableGrid.ItemsSource = npc.Sellable == null ? null : Rows(npc.Sellable);
             BuyableTitle.Text = "NPC sells (the player buys)" + (npc.Buyable?.TableName is { } b ? $" · table {b}" : npc.Buyable == null ? " · none" : "");
@@ -160,6 +167,7 @@ namespace Assets_Editor
             "FAREWELL" => "Farewell",
             "WALKAWAY" => "Walk away",
             "SENDTRADE" => "Trade window",
+            "VOICE" => "Voice",
             var other => other.ToLowerInvariant(),
         };
 
@@ -173,13 +181,20 @@ namespace Assets_Editor
             return row;
         }
 
-        private void RefreshRow(ShopRow row)
+        // Canary / Crystal shops use the ids of 13.x+ clients: an 8.60 client loaded in the main window has other
+        // things under those ids, so its pictures and id checks would be wrong
+        private bool ClientMatches(NpcScript? npc) =>
+            _itemById.Count > 0 && !(npc?.Format == NpcFormat.Canary && MainWindow.LegacyClient);
+
+        private void RefreshRow(IShopRow row)
         {
-            row.Image = ItemImage(row.ItemId);
+            bool client = ClientMatches(_current?.Script);
+            row.Image = client ? ItemImage(row.ItemId) : null;
             string? xmlName = _itemNames != null && _itemNames.TryGetValue(row.ItemId, out var n) ? n : null;
-            row.Check = _itemById.Count > 0 && !_itemById.ContainsKey(row.ItemId) ? "⚠ id not in the loaded client"
+            row.Check = client && !_itemById.ContainsKey(row.ItemId) ? "⚠ id not in the loaded client"
                       : _itemNames == null ? ""
                       : xmlName == null ? "⚠ no items.xml entry"
+                      : row.Name.Trim().Length == 0 ? "uses its name: " + xmlName
                       : string.Equals(xmlName, row.Name.Trim(), StringComparison.OrdinalIgnoreCase) ? "✓ " + xmlName
                       : "≠ " + xmlName;
         }
@@ -198,7 +213,7 @@ namespace Assets_Editor
 
         private void ShopGrid_CellEditEnded(object? sender, DataGridCellEditEndedEventArgs e)
         {
-            if (e.Row.DataContext is ShopRow row)
+            if (e.Row.DataContext is IShopRow row)
                 RefreshRow(row);
             UpdateStatus();
         }
@@ -211,6 +226,23 @@ namespace Assets_Editor
 
         private void AddShopRow_Click(object? sender, RoutedEventArgs e)
         {
+            if ((sender as Control)?.Tag as string == "canary")
+            {
+                if (_current?.Script.CanaryShop is not { } canaryShop)
+                {
+                    StatusText.Text = _current == null ? "Select an NPC first." : "This NPC has no npcConfig.shop table; add it in the .lua file first.";
+                    return;
+                }
+                var added = new CanaryShopItem { Name = "new item", Buy = 0 };
+                canaryShop.Items.Add(added);
+                var canaryRow = new CanaryRow(added);
+                RefreshRow(canaryRow);
+                ((ObservableCollection<CanaryRow>)CanaryGrid.ItemsSource!).Add(canaryRow);
+                CanaryGrid.SelectedItem = canaryRow;
+                CanaryGrid.ScrollIntoView(canaryRow, null);
+                UpdateStatus();
+                return;
+            }
             NpcShop? shop = ShopFor(sender);
             if (shop == null)
             {
@@ -230,6 +262,16 @@ namespace Assets_Editor
 
         private void RemoveShopRow_Click(object? sender, RoutedEventArgs e)
         {
+            if ((sender as Control)?.Tag as string == "canary")
+            {
+                if (_current?.Script.CanaryShop is { } canaryShop && CanaryGrid.SelectedItem is CanaryRow canaryRow)
+                {
+                    canaryShop.Items.Remove(canaryRow.Item);
+                    ((ObservableCollection<CanaryRow>)CanaryGrid.ItemsSource!).Remove(canaryRow);
+                    UpdateStatus();
+                }
+                return;
+            }
             NpcShop? shop = ShopFor(sender);
             var grid = GridFor(sender);
             if (shop == null || grid.SelectedItem is not ShopRow row) return;
@@ -289,12 +331,13 @@ namespace Assets_Editor
         {
             if (NpcRegistry.Scripts.Count == 0) { CheckSummary.Text = "Load the NPC folder first."; return; }
             _findings = NpcRegistry.CheckShops(NpcRegistry.Scripts,
-                _itemById.Count > 0 ? id => _itemById.ContainsKey(id) : null,
+                ClientMatches(NpcRegistry.Scripts.FirstOrDefault()) ? id => _itemById.ContainsKey(id) : null,
                 _itemNames != null ? id => _itemNames.TryGetValue(id, out var n) ? n : null : null);
             var counts = _findings.GroupBy(f => f.Category).Select(g => $"{g.Key}: {g.Count()}");
             CheckSummary.Text = _findings.Count == 0 ? "No problems found."
                 : string.Join(" · ", counts)
-                  + (_itemById.Count == 0 ? " · load a client in the main window to check item ids" : "")
+                  + (_itemById.Count == 0 ? " · load a client in the main window to check item ids"
+                     : !ClientMatches(NpcRegistry.Scripts.FirstOrDefault()) ? " · item ids not checked: the loaded client is a legacy one, these NPCs use 13.x+ ids" : "")
                   + (_itemNames == null ? " · no items.xml found above the NPC folder" : "");
             ApplyCheckFilter();
         }
@@ -326,6 +369,8 @@ namespace Assets_Editor
 
         private Bitmap? OutfitImage(NpcScript npc)
         {
+            if (!ClientMatches(npc))
+                return null;
             if (npc.OutfitValue("lookType") is > 0 and var type && _outfitById.TryGetValue(type, out var outfit))
                 return ColouredOutfit(outfit, npc) ?? FirstSprite(outfit);
             if (npc.OutfitValue("lookTypeEx") is > 0 and var ex && _itemById.TryGetValue(ex, out var item))
@@ -404,7 +449,7 @@ namespace Assets_Editor
         {
             Script = script;
             string dir = Path.GetDirectoryName(Path.GetRelativePath(folder, script.Path)) ?? "";
-            int sells = script.Buyable?.Items.Count ?? 0, buys = script.Sellable?.Items.Count ?? 0;
+            int sells = script.SoldItems().Count(), buys = script.BoughtItems().Count();
             Hint = (dir.Length > 0 ? dir + " · " : "") + (script.HasShop ? $"shop {sells} / {buys}" : script.ShopNote != null ? "shop by code" : "no shop");
         }
 
@@ -421,7 +466,7 @@ namespace Assets_Editor
         public bool Matches(string filter) =>
             Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
             || Path.GetFileName(Script.Path).Contains(filter, StringComparison.OrdinalIgnoreCase)
-            || (Script.Buyable?.Items ?? []).Concat(Script.Sellable?.Items ?? []).Any(i => i.Name.Contains(filter, StringComparison.OrdinalIgnoreCase));
+            || Script.SoldItems().Concat(Script.BoughtItems()).Any(i => i.Name.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
         public event PropertyChangedEventHandler? PropertyChanged;
     }
@@ -481,7 +526,41 @@ namespace Assets_Editor
         }
     }
 
-    public class ShopRow : INotifyPropertyChanged
+    public interface IShopRow
+    {
+        string Name { get; }
+        int ItemId { get; }
+        Bitmap? Image { get; set; }
+        string Check { get; set; }
+    }
+
+    /// <summary>A Canary / Crystal shop row; empty Buy / Sell means the item does not go that way.</summary>
+    public class CanaryRow : IShopRow, INotifyPropertyChanged
+    {
+        private Bitmap? _image;
+        private string _check = "";
+
+        public CanaryRow(CanaryShopItem item) => Item = item;
+
+        public CanaryShopItem Item { get; }
+
+        public string Name { get => Item.Name; set { Item.Name = value ?? ""; On(nameof(Name)); } }
+        public int ItemId { get => Item.ClientId; set { Item.ClientId = Math.Max(0, value); On(nameof(ItemId)); } }
+        public string Buy { get => Item.Buy?.ToString() ?? ""; set { Item.Buy = Price(value); On(nameof(Buy)); } }
+        public string Sell { get => Item.Sell?.ToString() ?? ""; set { Item.Sell = Price(value); On(nameof(Sell)); } }
+        public string Extra { get => Item.Extra; set { Item.Extra = (value ?? "").Trim().Trim(','); On(nameof(Extra)); } }
+
+        public Bitmap? Image { get => _image; set { _image = value; On(nameof(Image)); } }
+        public string Check { get => _check; set { _check = value; On(nameof(Check)); } }
+
+        private static int? Price(string? text) =>
+            int.TryParse(text?.Trim(), out int v) && v >= 0 ? v : null;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void On(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
+    }
+
+    public class ShopRow : IShopRow, INotifyPropertyChanged
     {
         private Bitmap? _image;
         private string _check = "";

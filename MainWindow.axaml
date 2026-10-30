@@ -250,7 +250,7 @@
                                             <TextBlock Classes="tileTitle" Text="NPC Editor"/>
                                         </StackPanel>
                                         <TextBlock Classes="dim"
-                                                   Text="TFS 1.x revscript NPCs: outfit, shops, messages and answers, plus a check of all shop prices."
+                                                   Text="TFS 1.x, Canary and Crystal NPCs: outfit, shops, messages and answers, plus a check of all shop prices."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Button>

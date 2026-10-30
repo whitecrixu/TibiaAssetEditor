@@ -128,7 +128,7 @@ See the full entry and fix list in [`CHANGELOG.md`](CHANGELOG.md) or the
 - **Sprite editor** — sheet viewer with grid overlay, drag-and-drop tile
   import, batch downscale, range export.
 - **OTB editor** — server-side item database (read/write).
-- **NPC editor** — TFS 1.x revscript NPCs: outfit, shops, messages and
+- **NPC editor** — revscript NPCs (TFS 1.x and Canary / Crystal Server): outfit, shops, messages and
   keyword answers, edited in place; shop check across all NPCs (free gold,
   price differences, unknown ids, names that differ from items.xml).
 - **Lua scripting** via MoonSharp + AvaloniaEdit syntax highlighting.
@@ -220,7 +220,7 @@ When releasing, keep the version in `AssetsEditor.csproj` and in
 - **`ItemsXmlEditor`** — OpenTibia `items.xml` editor.
 - **`MonsterEditor`** + **`MonsterData.cs`** — Canary monster `.lua` folder
   loader, typed editor, Lua generator, auto-fill Bestiary/Bosstiary.
-- **`NpcEditor`** + **`NpcScripts.cs`** — TFS 1.x revscript NPC reader /
+- **`NpcEditor`** + **`NpcScripts.cs`** — TFS 1.x and Canary / Crystal revscript NPC reader /
   in-place writer and the cross-NPC shop check.
 - **`ProficienciesEditor`** + **`Proficiencies.cs`** — Canary
   `proficiencies.json` editor with typed perks, presets and templates.
